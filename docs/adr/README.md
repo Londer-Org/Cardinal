@@ -18,6 +18,8 @@ isn't finished.
 | [0006](0006-ssh-certificates-for-host-access.md) | Linux host access uses short-lived SSH certificates | Accepted |
 | [0007](0007-no-saml.md) | Cardinal will not implement SAML | Accepted |
 | [0008](0008-single-binary-go-and-embedded-react.md) | One Go binary with an embedded React UI | Accepted |
+| [0009](0009-recovery-and-break-glass.md) | Account recovery and break-glass | Accepted |
+| [0010](0010-personal-data-and-erasure.md) | Personal data never enters the audit journal | Accepted |
 
 ## Conventions
 
@@ -33,11 +35,11 @@ isn't finished.
 
 These need ADRs before the phases that depend on them:
 
-- **GDPR erasure vs. the append-only hash chain** (blocks production use).
-  Append-only plus hash chaining means erasure cannot simply delete rows.
-  Personal data in event payloads must be pseudonymised or stored by reference
-  so the referenced record can be redacted while the chain stays intact. This
-  constrains payload design — decide before Phase 1 writes many event types.
-- **Break-glass mechanism** (blocks Phase 1). Must work with the database down.
 - **Secret and key management** — where the SSH CA private key and attribute
-  encryption keys live (file, KMS, HSM, Vault). Blocks Phase 4.
+  encryption keys live (file, KMS, HSM, Vault). Blocks Phase 4. Note ADR 0009
+  already fixes the break-glass *public* key in configuration rather than the
+  database; this question is about the rest.
+- **Shamir splitting for the break-glass key** — k-of-n sharing versus n
+  independent keys. Deferred within ADR 0009 until the implementation exists.
+- **Session revocation propagation** — `NOTIFY` is a hint, never a guarantee
+  (ADR 0004). The read-time enforcement path needs specifying before Phase 2.

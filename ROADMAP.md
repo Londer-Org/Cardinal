@@ -18,7 +18,7 @@ Living document. Updated as work lands, not as it's planned.
 | ✅ | PostgreSQL 19 beta 2 dev environment | Port **5433** (5432 is taken by another project) |
 | ✅ | **PG19 feature verification** | All temporal features confirmed working — see below |
 | ✅ | Foundation migration | entities, schema registry, temporal membership, event log, sessions |
-| ✅ | ADRs 0001–0008 | [docs/adr](docs/adr/) |
+| ✅ | ADRs 0001–0010 | [docs/adr](docs/adr/) |
 | ✅ | Entity engine (Go) | UUIDv7 identity, typed entities, soft delete |
 | ✅ | Temporal membership + recursive-CTE resolver | Cycle-safe; expired links break inheritance |
 | ✅ | Hash-chained event log (Go) | Length-prefixed encoding; tampering + deletion both detected |
@@ -26,10 +26,10 @@ Living document. Updated as work lands, not as it's planned.
 | ✅ | `cardinal` admin CLI | **Phase 0 deliverable — working end to end** |
 | ✅ | CI pipeline | lint · vet · gofumpt · govulncheck · tidy check · PG matrix |
 | ⬜ | Schema registry enforcement (Go) | Table exists; validation logic not yet wired |
-| ⬜ | Threat model document | |
 | ✅ | Backup + restore verification | `make restore-drill` — verified tampering is caught in a restored dump |
-| ❓ | **Break-glass design** | Blocks Phase 1. Must work with the database down |
-| ❓ | **GDPR erasure vs. append-only chain** | Constrains event payload design — decide early |
+| ✅ | **Break-glass design** | [ADR 0009](docs/adr/0009-recovery-and-break-glass.md) — offline key, public half in config not the DB |
+| ✅ | **GDPR erasure vs. append-only chain** | [ADR 0010](docs/adr/0010-personal-data-and-erasure.md) — enforced in code, `cardinal redact` works |
+| ⬜ | Threat model document | |
 
 ### Verified against `postgres:19beta2` (2026-08-05)
 
@@ -62,16 +62,19 @@ The core thesis was tested before any Go was written:
 
 | | Item |
 |---|---|
-| 🚧 | WebAuthn registration and login — *blocked on break-glass design* |
+| ⬜ | WebAuthn registration and login — *unblocked; ADR 0009 decided* |
+| ⬜ | Break-glass keypair, bootstrap ceremony, quarterly drill |
+| ⬜ | TOTP (migration aid + second factor; never for admin actions) |
 | ⬜ | Session management + CSRF |
 | ⬜ | Recovery codes, ≥2 passkeys enforced |
 | ⬜ | Dual-control admin recovery |
 | ⬜ | Frontend stack (React 19, Vite, Tailwind v4, shadcn/ui, TanStack, generated zod, strict-TS CI gates) |
 | ⬜ | `embed.FS` release build + first container image |
 
-> **Blocker:** don't build authentication before deciding how to recover from
-> it. Passwordless plus self-hosted is exactly the setup where people lock
-> themselves out of their own directory.
+> **Resolved.** [ADR 0009](docs/adr/0009-recovery-and-break-glass.md) settles
+> recovery before authentication is built. Recovery email was considered and
+> **rejected**: Cardinal is meant to be the SSO provider for email, so
+> "Cardinal is down" would imply "recovery channel unreachable".
 
 ---
 

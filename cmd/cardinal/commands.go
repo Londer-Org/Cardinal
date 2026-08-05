@@ -423,6 +423,58 @@ func runHistory(ctx context.Context, args []string) error {
 	return w.Flush()
 }
 
+// runRedact erases an entity's personal data for a GDPR Article 17 request.
+func runRedact(ctx context.Context, args []string) error {
+	fs := flag.NewFlagSet("redact", flag.ContinueOnError)
+	yes := fs.Bool("yes", false, "skip the confirmation prompt")
+	dsnFlag := fs.String("dsn", "", "PostgreSQL connection string")
+	pos, err := parse(fs, args)
+	if err != nil {
+		return errUsage
+	}
+	if len(pos) != 2 {
+		return fmt.Errorf("%w: cardinal redact <type> <name>", errUsage)
+	}
+
+	s, err := open(ctx, *dsnFlag)
+	if err != nil {
+		return err
+	}
+	defer s.Close()
+
+	e, err := s.LookupEntity(ctx, cliType(pos[0]), pos[1])
+	if err != nil {
+		return err
+	}
+
+	if !*yes {
+		// Irreversible by design — a reversible erasure is not an erasure — so
+		// the operator states the name back rather than pressing y.
+		fmt.Printf("This permanently erases the personal data of %s %s (%s).\n",
+			e.Type, e.Name, e.ID)
+		fmt.Printf("Name, display name and attributes are destroyed; grant\n")
+		fmt.Printf("justifications are cleared; sessions are deleted. Membership\n")
+		fmt.Printf("periods and the audit chain are preserved, but will no longer\n")
+		fmt.Printf("be attributable to anyone. This cannot be undone.\n\n")
+		fmt.Printf("Type the name %q to confirm: ", e.Name)
+
+		var typed string
+		if _, err := fmt.Scanln(&typed); err != nil || typed != e.Name {
+			fmt.Println("aborted")
+			return nil
+		}
+	}
+
+	if err := s.RedactEntity(ctx, e.ID, nil); err != nil {
+		return err
+	}
+
+	fmt.Printf("erased personal data for %s\n", e.ID)
+	fmt.Printf("  membership history and the audit chain are intact\n")
+	fmt.Printf("  verify with `cardinal audit verify`\n")
+	return nil
+}
+
 func runAudit(ctx context.Context, args []string) error {
 	if len(args) == 0 || args[0] != "verify" {
 		return fmt.Errorf("%w: cardinal audit verify", errUsage)

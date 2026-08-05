@@ -12,7 +12,7 @@ import (
 )
 
 const entityColumns = `id, type, name, coalesce(display_name, ''), attrs,
-                       created_at, updated_at, disabled_at`
+                       created_at, updated_at, disabled_at, redacted_at`
 
 // CreateEntity persists a new entity and its audit event atomically.
 //
@@ -35,9 +35,12 @@ func (s *Store) CreateEntity(ctx context.Context, e *directory.Entity, actorID *
 			return fmt.Errorf("store: creating entity: %w", err)
 		}
 
+		// No "name" here: a username identifies a person, and the journal is
+		// append-only, so it could never be erased. The entity_id carried by
+		// the event resolves to the name via the entities table, which *is*
+		// redactable. See ADR 0010.
 		ev, err := event.New(event.ActionEntityCreated, &e.ID, actorID, map[string]any{
 			"type": string(e.Type),
-			"name": e.Name,
 		})
 		if err != nil {
 			return err
@@ -139,7 +142,7 @@ func scanEntity(row scanner) (*directory.Entity, error) {
 		typeStr string
 	)
 	err := row.Scan(&e.ID, &typeStr, &e.Name, &e.DisplayName, &e.Attrs,
-		&e.CreatedAt, &e.UpdatedAt, &e.DisabledAt)
+		&e.CreatedAt, &e.UpdatedAt, &e.DisabledAt, &e.RedactedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, directory.ErrNotFound
 	}

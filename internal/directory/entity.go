@@ -72,11 +72,18 @@ type Entity struct {
 	CreatedAt time.Time
 	UpdatedAt time.Time
 
+	// RedactedAt records GDPR erasure. The row survives so audit references
+	// still resolve, but every personal field has been tombstoned. See ADR 0010.
+	RedactedAt *time.Time
+
 	// DisabledAt implements soft deletion. Entities are never hard-deleted:
 	// audit history must keep resolving, and a departed employee's past grants
 	// still need to be explicable.
 	DisabledAt *time.Time
 }
+
+// Redacted reports whether this entity's personal data has been erased.
+func (e *Entity) Redacted() bool { return e.RedactedAt != nil }
 
 // Active reports whether the entity may be used as a principal. Callers must
 // check this; the database deliberately does not filter disabled entities out

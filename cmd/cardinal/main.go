@@ -69,6 +69,8 @@ func run(ctx context.Context, args []string) error {
 		return runMemberships(ctx, rest)
 	case "history":
 		return runHistory(ctx, rest)
+	case "redact":
+		return runRedact(ctx, rest)
 	case "audit":
 		return runAudit(ctx, rest)
 	case "help", "-h", "--help":
@@ -103,6 +105,11 @@ MEMBERSHIP
   members <group> [-at <RFC3339>]          Who is in a group, now or at an instant
   memberships <user> [-at <RFC3339>]       Which groups someone is in, transitively
   history <group> <member>                 Every grant ever, including expired
+
+PRIVACY
+  redact <type> <name> [-yes]              Erase personal data (GDPR Art. 17).
+                                           Membership history and the audit
+                                           chain survive; attribution does not.
 
 AUDIT
   audit verify                             Verify the event log's hash chain

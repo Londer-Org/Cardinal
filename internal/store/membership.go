@@ -51,12 +51,15 @@ func (s *Store) Grant(ctx context.Context, g temporal.Grant, actorID *uuid.UUID)
 			return fmt.Errorf("store: granting membership: %w", err)
 		}
 
+		// The justification is deliberately absent: free text reliably ends up
+		// containing personal data, and the journal cannot be edited. It lives
+		// in group_members.reason, which is redactable, and the temporal model
+		// preserves it there across revocation anyway. See ADR 0010.
 		ev, err := event.New(event.ActionMembershipGranted, &g.MemberID, actorID,
 			map[string]any{
-				"group_id": g.GroupID.String(),
+				"group_id": g.GroupID,
 				"from":     g.Period.From,
 				"until":    g.Period.Until,
-				"reason":   g.Reason,
 			})
 		if err != nil {
 			return err
@@ -92,7 +95,7 @@ func (s *Store) Revoke(ctx context.Context, groupID, memberID uuid.UUID, at time
 
 		ev, err := event.New(event.ActionMembershipRevoked, &memberID, actorID,
 			map[string]any{
-				"group_id":   groupID.String(),
+				"group_id":   groupID,
 				"revoked_at": at,
 			})
 		if err != nil {

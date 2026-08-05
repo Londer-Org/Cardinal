@@ -26,6 +26,7 @@ const (
 	ActionEntityUpdated  = "entity.updated"
 	ActionEntityDisabled = "entity.disabled"
 	ActionEntityEnabled  = "entity.enabled"
+	ActionEntityRedacted = "entity.redacted"
 
 	ActionMembershipGranted = "membership.granted"
 	ActionMembershipRevoked = "membership.revoked"
@@ -56,10 +57,11 @@ type Event struct {
 
 	// Payload carries event-specific detail.
 	//
-	// Keep personal data out of here, or store it by reference. Append-only
-	// plus hash chaining means rows cannot be deleted, so anything embedded
-	// here is effectively permanent — which collides with GDPR erasure. Store
-	// an entity ID and let the referenced record be redacted instead.
+	// It may contain only identifiers, timestamps, booleans and registered
+	// enumerations — never personal data or free-form text. This is enforced
+	// by validatePayload, not left to convention, because the journal is
+	// append-only: anything written here cannot later be deleted to satisfy an
+	// erasure request. See ADR 0010 and payload.go.
 	Payload map[string]any
 
 	PrevHash []byte
@@ -77,6 +79,12 @@ func New(action string, entityID, actorID *uuid.UUID, payload map[string]any) (*
 	}
 	if payload == nil {
 		payload = map[string]any{}
+	}
+	// Fail here rather than writing an unsafe record. Once an event is in the
+	// chain it cannot be deleted, so this is the last point at which a
+	// personal-data mistake is still cheap to fix.
+	if err := validatePayload(payload); err != nil {
+		return nil, err
 	}
 	return &Event{
 		ID: id,
