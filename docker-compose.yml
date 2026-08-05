@@ -1,0 +1,43 @@
+# Cardinal development database.
+#
+# Pinned to PostgreSQL 19 beta 2 deliberately: the temporal model depends on
+# FOR PORTION OF, whose behaviour changed between beta 1 and beta 2. Do not
+# float this tag. Re-run the full temporal suite when 19 GA lands.
+#
+# Port 5433: 5432 is commonly already taken by another project's Postgres.
+services:
+  postgres:
+    image: postgres:19beta2
+    container_name: cardinal-postgres
+    environment:
+      POSTGRES_USER: cardinal
+      POSTGRES_PASSWORD: cardinal
+      POSTGRES_DB: cardinal
+      # Checksums on from the start; cheap here, painful to add later.
+      POSTGRES_INITDB_ARGS: "--data-checksums"
+    ports:
+      - "5433:5432"
+    volumes:
+      # PG18+ images want the mount at /var/lib/postgresql, NOT .../data.
+      # Data then lives in a subdirectory, so `pg_upgrade --link` doesn't have
+      # to cross a mount-point boundary. Mounting .../data fails to start.
+      - cardinal-pgdata:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cardinal -d cardinal"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    command:
+      - postgres
+      # JIT is off by default in 19 (costing judged unreliable upstream).
+      # Keep it off: auth paths want predictable latency, not peak throughput.
+      - -c
+      - jit=off
+      - -c
+      - log_lock_waits=on
+      # Surfaces contention on the temporal tables during development.
+      - -c
+      - log_min_duration_statement=200
+
+volumes:
+  cardinal-pgdata:
