@@ -52,3 +52,26 @@ lint: ## Run linters and vulnerability scanning
 .PHONY: build
 build: ## Build the cardinal binary
 	go build -o bin/cardinal ./cmd/cardinal
+
+.PHONY: restore-drill
+restore-drill: build ## Back up, restore to a scratch DB, and verify the audit chain
+	@echo "==> backing up"
+	@docker exec cardinal-postgres pg_dump -U cardinal -d cardinal -Fc -f /tmp/cardinal.dump
+	@echo "==> restoring into a scratch database"
+	@docker exec cardinal-postgres psql -U cardinal -d postgres -q \
+		-c "DROP DATABASE IF EXISTS cardinal_restore_drill" 2>/dev/null
+	@docker exec cardinal-postgres psql -U cardinal -d postgres -q \
+		-c "CREATE DATABASE cardinal_restore_drill"
+	@docker exec cardinal-postgres pg_restore -U cardinal \
+		-d cardinal_restore_drill /tmp/cardinal.dump
+	@echo "==> verifying the restored audit chain"
+	@CARDINAL_DSN="postgres://cardinal:cardinal@localhost:5433/cardinal_restore_drill?sslmode=disable" \
+		./bin/cardinal audit verify
+	@docker exec cardinal-postgres psql -U cardinal -d postgres -q \
+		-c "DROP DATABASE cardinal_restore_drill"
+	@echo "==> restore drill passed"
+
+# An untested backup is not a backup. This drill belongs on a schedule, not in
+# an incident: a plain pg_restore proves the data came back, but verifying the
+# hash chain proves it came back *unaltered* — which is the question that
+# actually matters after a compromise.

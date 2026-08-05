@@ -27,7 +27,7 @@ Living document. Updated as work lands, not as it's planned.
 | ✅ | CI pipeline | lint · vet · gofumpt · govulncheck · tidy check · PG matrix |
 | ⬜ | Schema registry enforcement (Go) | Table exists; validation logic not yet wired |
 | ⬜ | Threat model document | |
-| ⬜ | Backup + restore verification | Restore, then validate the hash chain |
+| ✅ | Backup + restore verification | `make restore-drill` — verified tampering is caught in a restored dump |
 | ❓ | **Break-glass design** | Blocks Phase 1. Must work with the database down |
 | ❓ | **GDPR erasure vs. append-only chain** | Constrains event payload design — decide early |
 
