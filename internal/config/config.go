@@ -32,6 +32,28 @@ type Config struct {
 	WebAuthn   WebAuthn   `toml:"webauthn"`
 	BreakGlass BreakGlass `toml:"break_glass"`
 	Recovery   Recovery   `toml:"recovery"`
+	OIDC       OIDC       `toml:"oidc"`
+}
+
+// OIDC configures the OpenID Connect provider.
+type OIDC struct {
+	// Enabled turns the provider on. Off by default: an identity provider
+	// nobody has configured clients for is attack surface without a purpose.
+	Enabled bool `toml:"enabled"`
+
+	// SigningKeyEncryptionKey encrypts the token-signing key at rest.
+	//
+	// It lives in configuration rather than the database, following the
+	// break-glass reasoning (ADR 0009). The signing key can forge tokens for
+	// every registered application, so storing it in the clear would make a
+	// database read a complete compromise of every downstream system —
+	// arguably worse than losing the directory itself. With this, an attacker
+	// needs both.
+	//
+	// Generate with `openssl rand -base64 32`. Losing it means every issued
+	// token becomes unverifiable and every client must re-fetch the JWKS, so
+	// it belongs wherever the rest of the deployment's secrets do.
+	SigningKeyEncryptionKey string `toml:"signing_key_encryption_key"`
 }
 
 type Server struct {
@@ -207,6 +229,20 @@ func (c *Config) Validate() error {
 				"%w: server.cookie_domain %q does not cover webauthn.rp_id %q, so the "+
 					"session cookie would never be sent back and sign-in would loop",
 				ErrInvalid, c.Server.CookieDomain, c.WebAuthn.RPID))
+		}
+	}
+
+	if c.OIDC.Enabled {
+		if c.OIDC.SigningKeyEncryptionKey == "" {
+			problems = append(problems, fmt.Errorf(
+				"%w: oidc.signing_key_encryption_key — the token-signing key is not "+
+					"stored in the clear, so this is required when the provider is "+
+					"enabled (generate with `openssl rand -base64 32`)", ErrMissing))
+		}
+		if c.Server.PublicURL == "" {
+			problems = append(problems, fmt.Errorf(
+				"%w: server.public_url — it is the OIDC issuer identifier and every "+
+					"token carries it, so it cannot be inferred", ErrMissing))
 		}
 	}
 

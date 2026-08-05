@@ -11,8 +11,10 @@ import (
 	"time"
 
 	"github.com/arthur-lonfils/cardinal/internal/auth"
+	"github.com/arthur-lonfils/cardinal/internal/claims"
 	"github.com/arthur-lonfils/cardinal/internal/config"
 	"github.com/arthur-lonfils/cardinal/internal/httpapi"
+	"github.com/arthur-lonfils/cardinal/internal/oidcprovider"
 	"github.com/arthur-lonfils/cardinal/internal/policy"
 	"github.com/arthur-lonfils/cardinal/internal/store"
 	"github.com/arthur-lonfils/cardinal/web"
@@ -60,10 +62,20 @@ func runServe(ctx context.Context, args []string) error {
 		ui = nil
 	}
 
+	var oidcProvider *oidcprovider.Provider
+	if cfg.OIDC.Enabled {
+		oidcProvider, err = oidcprovider.New(ctx, st, claims.NewResolver(st), cfg)
+		if err != nil {
+			return err
+		}
+		log.Info("OpenID Connect provider enabled", "issuer", cfg.Server.PublicURL)
+	}
+
 	apiServer, err := httpapi.New(st, authSvc, cfg, httpapi.Options{
 		DevMode: *dev,
 		UI:      ui,
 		Logger:  log,
+		OIDC:    oidcProvider,
 	})
 	if err != nil {
 		return err

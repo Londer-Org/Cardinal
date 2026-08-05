@@ -159,8 +159,13 @@ works.
 | ✅ | Authorization-code storage — single-use enforced in one statement, codes hashed at rest |
 | ✅ | Token storage — refresh tokens hashed and revocable; sign-out kills issued tokens |
 | ✅ | Signing keys — RSA, encrypted at rest with a config-held key, rotation with a verification grace period |
-| 🔨 | `zitadel/oidc` — storage layer done; `op.Storage` adapter and HTTP endpoints next |
+| ✅ | `op.Storage` adapter — compile-time assertion, claims from the shared projection |
+| ✅ | Authorization code flow with PKCE — verified end to end; wrong verifier and replayed code both refused |
+| ✅ | Discovery, JWKS, token, userinfo, introspection, revocation |
+| ⬜ | Frontend: resume an OIDC flow after sign-in (`?oidc_auth=`) |
 | ⬜ | Consent screen |
+| ⬜ | Client management UI |
+| ⬜ | An OIDC relying party in the e2e stack |
 | ⬜ | Client management UI |
 | ⬜ | OpenID Foundation conformance suite |
 

@@ -143,6 +143,20 @@ func (s *Server) requireAuth(next http.Handler) http.Handler {
 // guarantee, and older or unusual clients vary.
 func (s *Server) csrfProtect(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// CSRF defends cookie-authenticated requests. The OIDC protocol
+		// endpoints do not use cookies: the token, revocation and
+		// introspection endpoints authenticate with client credentials or
+		// PKCE, and are called server-to-server by relying parties that have
+		// no cookie jar and no way to obtain a token from us.
+		//
+		// Requiring one there does not add protection — there is no ambient
+		// authority to abuse — and breaks every client. The browser-facing
+		// /oidc/authorize is a GET, which is exempt below anyway.
+		if isOIDCProtocolPath(r.URL.Path) {
+			next.ServeHTTP(w, r)
+			return
+		}
+
 		switch r.Method {
 		case http.MethodGet, http.MethodHead, http.MethodOptions:
 			// Safe methods must not mutate, so no token is needed. Ensure one
@@ -180,6 +194,20 @@ func (s *Server) csrfProtect(next http.Handler) http.Handler {
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+// isOIDCProtocolPath reports whether a path belongs to the OIDC provider.
+//
+// A closed list rather than a prefix-with-exceptions, so adding a
+// cookie-authenticated endpoint under /oidc/ later does not silently inherit
+// the exemption.
+func isOIDCProtocolPath(path string) bool {
+	switch path {
+	case "/oidc/token", "/oidc/revoke", "/oidc/introspect",
+		"/oidc/userinfo", "/oidc/keys", "/.well-known/openid-configuration":
+		return true
+	}
+	return false
 }
 
 // rateLimit bounds attempts per client for an endpoint.

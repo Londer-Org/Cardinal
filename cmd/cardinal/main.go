@@ -73,6 +73,8 @@ func run(ctx context.Context, args []string) error {
 		return runHistory(ctx, rest)
 	case "migrate":
 		return runMigrate(ctx, rest)
+	case "app":
+		return runApp(ctx, rest)
 	case "policy":
 		return runPolicy(ctx, rest)
 	case "serve":
@@ -129,6 +131,10 @@ PRIVACY
   redact <type> <name> [-yes]              Erase personal data (GDPR Art. 17).
                                            Membership history and the audit
                                            chain survive; attribution does not.
+
+APPLICATIONS (OpenID Connect)
+  app register <name> -redirect <uri>       Register a relying party
+  app list                                  Registered applications
 
 AUTHORIZATION
   policy test <file.cedar>                 Compile a policy file (offline)

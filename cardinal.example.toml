@@ -111,3 +111,22 @@ email_enabled = false
 # by someone changing something unrelated. Cardinal enforces the rule instead of
 # trusting you to remember it.
 email_domains = []
+
+[oidc]
+# The OpenID Connect provider. Off by default: an identity provider nobody has
+# registered clients for is attack surface without a purpose.
+enabled = false
+
+# Encrypts the token-signing key at rest.
+#
+# Held here rather than in the database, following the break-glass reasoning
+# (ADR 0009). The signing key can forge tokens for EVERY registered
+# application, so storing it in the clear would make a database read a complete
+# compromise of every downstream system — arguably worse than losing the
+# directory itself. With this, an attacker needs both.
+#
+# Generate with: openssl rand -base64 32
+#
+# Losing it makes every issued token unverifiable and forces every client to
+# re-fetch the JWKS, so keep it wherever this deployment keeps its secrets.
+signing_key_encryption_key = ""

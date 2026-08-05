@@ -13,6 +13,7 @@ import (
 	"github.com/arthur-lonfils/cardinal/internal/auth"
 	"github.com/arthur-lonfils/cardinal/internal/claims"
 	"github.com/arthur-lonfils/cardinal/internal/config"
+	"github.com/arthur-lonfils/cardinal/internal/oidcprovider"
 	"github.com/arthur-lonfils/cardinal/internal/policy"
 	"github.com/arthur-lonfils/cardinal/internal/store"
 )
@@ -37,6 +38,11 @@ type Server struct {
 	clientIP *clientIPResolver
 	claims   *claims.Resolver
 
+	// oidc is nil when the provider is disabled, which is the default: an
+	// identity provider nobody has registered clients for is attack surface
+	// without a purpose.
+	oidc *oidcprovider.Provider
+
 	// policy holds the live engine behind an atomic pointer.
 	//
 	// Reloading swaps the whole engine rather than mutating one, so an
@@ -58,6 +64,9 @@ type Options struct {
 	DevMode bool
 	UI      fs.FS
 	Logger  *slog.Logger
+
+	// OIDC enables the OpenID Connect provider. Nil leaves it off.
+	OIDC *oidcprovider.Provider
 }
 
 func New(s *store.Store, a *auth.Service, cfg *config.Config, opts Options) (*Server, error) {
@@ -86,6 +95,7 @@ func New(s *store.Store, a *auth.Service, cfg *config.Config, opts Options) (*Se
 		ui:            opts.UI,
 		clientIP:      resolver,
 		claims:        claims.NewResolver(s),
+		oidc:          opts.OIDC,
 	}
 	return srv, nil
 }
@@ -136,6 +146,26 @@ func (s *Server) Handler() http.Handler {
 	// ── Decision explorer ──────────────────────────────────────────────────
 	mux.Handle("GET /api/decisions", s.requireAuth(http.HandlerFunc(s.handleDecisions)))
 	mux.Handle("GET /api/policy", s.requireAuth(http.HandlerFunc(s.handlePolicy)))
+
+	// ── OpenID Connect ─────────────────────────────────────────────────────
+	if s.oidc != nil {
+		// The library serves discovery, /authorize, /token, /userinfo and JWKS
+		// on its own paths. Mounted directly rather than proxied, so its
+		// well-known URLs are where every client expects them.
+		// Everything the library owns lives under /oidc/, except discovery,
+		// whose path is fixed by the specification. Cardinal's own bridge
+		// handlers are registered after, and the more specific pattern wins in
+		// Go's ServeMux.
+		oidcHandler := s.oidc.Handler()
+		mux.Handle("/.well-known/openid-configuration", oidcHandler)
+		mux.Handle("/oidc/", oidcHandler)
+
+		// The hand-off between the library and Cardinal's own authentication.
+		// More specific than "/oidc/", so it takes precedence.
+		mux.HandleFunc("GET /oidc/login", s.handleOIDCLogin)
+		mux.Handle("GET /api/oidc/resume",
+			s.requireAuth(http.HandlerFunc(s.handleOIDCResume)))
+	}
 
 	mux.HandleFunc("GET /api/health", s.handleHealth)
 
