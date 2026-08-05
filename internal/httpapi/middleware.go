@@ -111,7 +111,7 @@ func (s *Server) authenticate(next http.Handler) http.Handler {
 				s.log.ErrorContext(r.Context(), "session lookup failed", "error", err)
 			}
 			// Clear the dead cookie so the browser stops sending it.
-			clearCookie(w, sessionCookie, s.secureCookies)
+			clearCookie(w, sessionCookie, s.secureCookies, s.cfg.Server.CookieDomain)
 			next.ServeHTTP(w, r)
 			return
 		}
@@ -154,9 +154,13 @@ func (s *Server) csrfProtect(next http.Handler) http.Handler {
 					// useful in combination with the session cookie, which
 					// stays HttpOnly.
 					http.SetCookie(w, &http.Cookie{
-						Name:     csrfCookie,
-						Value:    token,
-						Path:     "/",
+						Name:  csrfCookie,
+						Value: token,
+						Path:  "/",
+						// Same scope as the session cookie: the SPA runs on the
+						// Cardinal host but the token must survive alongside a
+						// parent-domain session.
+						Domain:   s.cfg.Server.CookieDomain,
 						Secure:   s.secureCookies,
 						SameSite: http.SameSiteLaxMode,
 						HttpOnly: false,
@@ -235,11 +239,14 @@ func (r *statusRecorder) WriteHeader(code int) {
 	r.ResponseWriter.WriteHeader(code)
 }
 
-func setSessionCookie(w http.ResponseWriter, token string, expires time.Time, secure bool) {
+func setSessionCookie(w http.ResponseWriter, token string, expires time.Time, secure bool, domain string) {
 	http.SetCookie(w, &http.Cookie{
 		Name:  sessionCookie,
 		Value: token,
 		Path:  "/",
+		// Empty Domain means host-only, which is the safe default. Setting it
+		// is what makes one sign-in cover every application behind the proxy.
+		Domain: domain,
 		// HttpOnly: script must never be able to read the session token, so an
 		// XSS bug cannot become credential theft.
 		HttpOnly: true,
@@ -251,11 +258,14 @@ func setSessionCookie(w http.ResponseWriter, token string, expires time.Time, se
 	})
 }
 
-func clearCookie(w http.ResponseWriter, name string, secure bool) {
+func clearCookie(w http.ResponseWriter, name string, secure bool, domain string) {
 	http.SetCookie(w, &http.Cookie{
-		Name:     name,
-		Value:    "",
-		Path:     "/",
+		Name:  name,
+		Value: "",
+		Path:  "/",
+		// Must match how it was set, or the browser keeps the original and
+		// signing out appears to do nothing.
+		Domain:   domain,
 		HttpOnly: name == sessionCookie,
 		Secure:   secure,
 		SameSite: http.SameSiteLaxMode,

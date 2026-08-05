@@ -101,6 +101,45 @@ first genuinely useful milestone.*
 | ✅ | `forwardAuth` endpoint — identity headers, login redirect with open-redirect guard |
 | ✅ | Decision logging — every decision names the policy that made it |
 | 🔨 | **Decision explorer** — API done (`/api/decisions`, `/api/policy`); UI pending |
+| ✅ | **End-to-end stack with real Traefik** — 8 tests, `make e2e-up && make e2e` |
+
+### The end-to-end stack
+
+Framed as a **test that happens to be demoable**, not a demo. A demo nobody runs
+rots into a liability; a stack CI exercises stays honest.
+
+It earned its keep immediately, surfacing two things no unit test could:
+
+- **Sessions need a parent-domain cookie.** A cookie set at `id.example.com` is
+  never sent to `app.example.com`, so forwardAuth SSO simply did not work. Added
+  `server.cookie_domain`, with its cost documented — such a cookie reaches every
+  subdomain.
+- **There was no way to apply the schema in a container.** Migrations were a
+  Makefile `psql` loop, which works on a laptop and not at all for a deployment.
+  Added `cardinal migrate`, embedding the migrations in the binary.
+
+```
+examples/
+  protected-app/   ~60 lines reading X-Auth-Request-* headers and rendering them.
+                   Deliberately boring: this is what people copy when integrating,
+                   and anything clever in it gets cargo-culted.
+  traefik/         compose + dynamic config wiring forwardAuth
+test/e2e/          drives it: sign in, hit a protected route, assert
+```
+
+It closes a gap the current tests cannot: forwardAuth has only ever been
+exercised with hand-crafted `X-Forwarded-*` headers. Real Traefik decides which
+headers it sends, how it treats a 204 against a 200, and forwards only the
+response headers named in `authResponseHeaders` — a whole class of integration
+bug that is invisible today.
+
+In-repo rather than a separate repository, deliberately: if the header contract
+changes, an in-repo example breaks in CI immediately, whereas a separate one
+drifts silently until someone follows stale documentation.
+
+Grows with the phases — an OIDC relying party in Phase 3, a container acting as
+an enrolled host in Phase 4 — so the same stack keeps proving the newest thing
+works.
 
 ---
 

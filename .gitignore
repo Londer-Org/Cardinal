@@ -16,6 +16,10 @@ web/dist/
 *.key
 !**/testdata/**/*.pem
 !**/testdata/**/*.key
+# The end-to-end stack's break-glass key is a fixture, committed deliberately.
+# It is labelled as such in examples/cardinal.e2e.toml and grants nothing
+# outside that throwaway stack.
+!examples/e2e-break-glass.key
 
 .idea/
 .vscode/

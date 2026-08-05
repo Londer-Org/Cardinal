@@ -1,0 +1,107 @@
+# End-to-end stack: PostgreSQL, Cardinal, Traefik, and a protected application.
+#
+# Run with `make e2e-up` from the repository root. The test suite in test/e2e
+# drives this same stack, so it stays honest rather than rotting into a demo
+# nobody runs.
+#
+# Hostnames use *.localhost, which resolves to 127.0.0.1 without touching
+# /etc/hosts and which browsers treat as a secure context — so WebAuthn works
+# here over plain HTTP, as it would nowhere else.
+
+name: cardinal-e2e
+
+services:
+  postgres:
+    image: postgres:19beta2
+    environment:
+      POSTGRES_USER: cardinal
+      POSTGRES_PASSWORD: cardinal
+      POSTGRES_DB: cardinal
+      POSTGRES_INITDB_ARGS: "--data-checksums"
+    volumes:
+      - e2e-pgdata:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cardinal -d cardinal"]
+      interval: 3s
+      timeout: 3s
+      retries: 15
+
+  # Migrations run as their own step, not as a side effect of starting the
+  # server. Applying a schema change while other replicas still serve the old
+  # one is how rolling deploys break; making it a separate unit means it is a
+  # decision rather than something that happens.
+  migrate:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./cardinal.e2e.toml:/etc/cardinal/cardinal.toml:ro
+    environment:
+      CARDINAL_DSN: "postgres://cardinal:cardinal@postgres:5432/cardinal?sslmode=disable"
+    command: ["migrate"]
+    restart: "no"
+
+  cardinal:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    volumes:
+      - ./cardinal.e2e.toml:/etc/cardinal/cardinal.toml:ro
+      # The fixture break-glass key, so the end-to-end suite can obtain a
+      # session non-interactively. A passkey needs a human and a device, so
+      # break-glass is the only automatable path — which is itself a reason it
+      # exists. Never mount a real key into a container.
+      - ./e2e-break-glass.key:/etc/cardinal/break-glass.key:ro
+    # -dev because this stack runs over plain HTTP. It relaxes cookie Secure
+    # and the CSP, and the server says so loudly at startup. Never in a real
+    # deployment.
+    command: ["serve", "-config", "/etc/cardinal/cardinal.toml", "-dev"]
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/cardinal", "audit", "verify",
+             "-dsn", "postgres://cardinal:cardinal@postgres:5432/cardinal?sslmode=disable"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  traefik:
+    image: traefik:v3.6
+    depends_on:
+      - cardinal
+      - protected-app
+    command:
+      - --providers.file.filename=/etc/traefik/dynamic.yml
+      - --entrypoints.web.address=:80
+      - --api.dashboard=false
+      - --log.level=INFO
+      # Access logs make it visible which requests were admitted and which the
+      # middleware turned away — the first thing anyone debugging forwardAuth
+      # wants to see.
+      - --accesslog=true
+    ports:
+      - "8100:80"
+    volumes:
+      - ./traefik/dynamic.yml:/etc/traefik/dynamic.yml:ro
+
+  protected-app:
+    build:
+      context: ./protected-app
+    environment:
+      LISTEN: "0.0.0.0:8000"
+    # Deliberately NOT published to the host. The application trusts its
+    # identity headers unconditionally, which is only safe because it cannot be
+    # reached except through Traefik. Publishing a port here would quietly make
+    # this stack a bad example.
+    expose:
+      - "8000"
+
+volumes:
+  e2e-pgdata:

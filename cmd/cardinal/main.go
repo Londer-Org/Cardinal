@@ -13,6 +13,8 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+
+	"github.com/BurntSushi/toml"
 )
 
 const defaultDSN = "postgres://cardinal:cardinal@localhost:5433/cardinal?sslmode=disable"
@@ -69,6 +71,8 @@ func run(ctx context.Context, args []string) error {
 		return runMemberships(ctx, rest)
 	case "history":
 		return runHistory(ctx, rest)
+	case "migrate":
+		return runMigrate(ctx, rest)
 	case "policy":
 		return runPolicy(ctx, rest)
 	case "serve":
@@ -96,6 +100,7 @@ USAGE
   cardinal <command> [arguments]
 
 SERVER
+  migrate [-status]                         Apply the embedded schema
   serve [-config <file>] [-dev]             Run the API and admin UI
 
 ENTITIES
@@ -144,9 +149,15 @@ when they will stop needing it, and a bounded grant cannot be forgotten.
 `)
 }
 
-// dsn resolves the connection string: flag, then environment, then the dev
-// default. The dev default exists so the getting-started path is one command;
-// it is not a credential anyone should ever see in production.
+// dsn resolves the connection string.
+//
+// Order: explicit flag, then CARDINAL_DSN, then the configuration file, then
+// the development default.
+//
+// Reading the config file matters more than it looks. Without it, an operator
+// who has mounted cardinal.toml into a container still has to repeat -dsn on
+// every administrative command — and the DSN contains a password, so they end
+// up putting a credential in their shell history to run `cardinal list`.
 func dsn(flagValue string) string {
 	if flagValue != "" {
 		return flagValue
@@ -154,5 +165,42 @@ func dsn(flagValue string) string {
 	if env := os.Getenv("CARDINAL_DSN"); env != "" {
 		return env
 	}
+	if fromConfig := dsnFromConfig(); fromConfig != "" {
+		return fromConfig
+	}
 	return defaultDSN
+}
+
+// configSearchPaths are tried in order. The container path comes first because
+// that is where a deployment mounts it, and a stray cardinal.toml in the
+// working directory should not silently win over the mounted one.
+var configSearchPaths = []string{
+	"/etc/cardinal/cardinal.toml",
+	"cardinal.toml",
+}
+
+// dsnFromConfig reads just the DSN, tolerating a config that is otherwise
+// incomplete.
+//
+// config.Load validates everything and refuses a file missing, say, a
+// break-glass key — correct for starting a server, wrong here. `cardinal
+// migrate` must work against a half-configured deployment, since applying the
+// schema is often the first thing done.
+func dsnFromConfig() string {
+	paths := configSearchPaths
+	if env := os.Getenv("CARDINAL_CONFIG"); env != "" {
+		paths = append([]string{env}, paths...)
+	}
+
+	for _, path := range paths {
+		var partial struct {
+			Database struct {
+				DSN string `toml:"dsn"`
+			} `toml:"database"`
+		}
+		if _, err := toml.DecodeFile(path, &partial); err == nil && partial.Database.DSN != "" {
+			return partial.Database.DSN
+		}
+	}
+	return ""
 }

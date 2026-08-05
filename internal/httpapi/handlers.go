@@ -110,7 +110,7 @@ func (s *Server) handleLoginFinish(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	setSessionCookie(w, session.Token, session.ValidUntil, s.secureCookies)
+	setSessionCookie(w, session.Token, session.ValidUntil, s.secureCookies, s.cfg.Server.CookieDomain)
 	writeJSON(w, http.StatusOK, sessionBody(session))
 }
 
@@ -121,7 +121,7 @@ func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 		!errors.Is(err, store.ErrNoSuchSession) {
 		s.log.ErrorContext(r.Context(), "logout failed", "error", err)
 	}
-	clearCookie(w, sessionCookie, s.secureCookies)
+	clearCookie(w, sessionCookie, s.secureCookies, s.cfg.Server.CookieDomain)
 	w.WriteHeader(http.StatusNoContent)
 }
 

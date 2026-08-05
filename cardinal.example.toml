@@ -32,6 +32,21 @@ public_url = "https://id.example.com"
 # — would trust the part the client writes.
 trusted_proxies = []
 
+# Scopes the session cookie to a parent domain, so one sign-in covers every
+# application behind the proxy.
+#
+# Required for forwardAuth single sign-on: without it the cookie is bound to the
+# host that set it, and a session established at id.example.com is never sent to
+# app.example.com — sign-in appears to work and then loops.
+#
+# The cost, before you set it: a cookie scoped to "example.com" is sent to EVERY
+# subdomain. Anything able to read cookies on any subdomain can take the
+# session, so untrusted or user-generated content belongs on a separate
+# registrable domain rather than a subdomain of this one.
+#
+# Empty means host-only — correct and safe for a single-application deployment.
+cookie_domain = ""
+
 [database]
 # May also be supplied as CARDINAL_DSN, which is preferable in production:
 # a secret in a file gets committed, copied and backed up.

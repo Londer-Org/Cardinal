@@ -126,7 +126,7 @@ func (s *Server) handleBreakGlassFinish(w http.ResponseWriter, r *http.Request) 
 		"session_id", session.ID,
 		"expires_at", session.ValidUntil)
 
-	setSessionCookie(w, session.Token, session.ValidUntil, s.secureCookies)
+	setSessionCookie(w, session.Token, session.ValidUntil, s.secureCookies, s.cfg.Server.CookieDomain)
 	writeJSON(w, http.StatusOK, map[string]any{
 		"subjectId": session.SubjectID.String(),
 		"expiresAt": session.ValidUntil,

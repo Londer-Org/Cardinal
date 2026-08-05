@@ -53,6 +53,24 @@ type Server struct {
 	// misrouted service — an attacker reaching that path can forge the header
 	// and this setting becomes the vulnerability rather than the fix.
 	TrustedProxies []string `toml:"trusted_proxies"`
+
+	// CookieDomain scopes the session cookie to a parent domain, so a single
+	// sign-in covers every application behind the proxy.
+	//
+	// Without it the cookie is bound to the host that set it, and a session
+	// established at id.example.com is simply not sent to app.example.com —
+	// which makes forwardAuth single sign-on impossible. This is the setting
+	// that turns "logged into Cardinal" into "logged in".
+	//
+	// It has a real cost, and it should be understood before being set: a
+	// cookie scoped to ".example.com" is sent to EVERY subdomain, including any
+	// that hosts untrusted or user-generated content. Anything that can read
+	// cookies on any subdomain can take the session. Keep such content on a
+	// separate registrable domain, not a subdomain of this one.
+	//
+	// Empty means host-only, which is correct for a single-application
+	// deployment and safe by default.
+	CookieDomain string `toml:"cookie_domain"`
 }
 
 type Database struct {
@@ -176,6 +194,19 @@ func (c *Config) Validate() error {
 			problems = append(problems, fmt.Errorf(
 				"%w: server.trusted_proxies entry %q is not a CIDR or address",
 				ErrInvalid, cidr))
+		}
+	}
+
+	// A cookie domain that does not cover the relying party would produce a
+	// session the browser never sends back — a silent, baffling login loop.
+	if c.Server.CookieDomain != "" && c.WebAuthn.RPID != "" {
+		domain := strings.TrimPrefix(strings.ToLower(c.Server.CookieDomain), ".")
+		rpID := strings.ToLower(c.WebAuthn.RPID)
+		if domain != rpID && !strings.HasSuffix(rpID, "."+domain) {
+			problems = append(problems, fmt.Errorf(
+				"%w: server.cookie_domain %q does not cover webauthn.rp_id %q, so the "+
+					"session cookie would never be sent back and sign-in would loop",
+				ErrInvalid, c.Server.CookieDomain, c.WebAuthn.RPID))
 		}
 	}
 

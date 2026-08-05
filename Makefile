@@ -27,12 +27,8 @@ reset: ## Destroy the database and recreate it from migrations
 	$(MAKE) migrate
 
 .PHONY: migrate
-migrate: ## Apply all migrations in order
-	@for f in migrations/*.sql; do \
-		echo "--> $$f"; \
-		$(PSQL) -f - < "$$f" > /dev/null || exit 1; \
-	done
-	@echo "migrations applied"
+migrate: build ## Apply the schema (same code path as a deployed container)
+	@CARDINAL_DSN="$(DSN)" ./bin/cardinal migrate
 
 .PHONY: psql
 psql: ## Open a psql shell against the dev database
@@ -68,6 +64,46 @@ release: ui build ## Build the UI and a binary containing it
 .PHONY: serve
 serve: build ## Run the server in development mode
 	./bin/cardinal serve -config cardinal.toml -dev
+
+.PHONY: e2e-up
+e2e-up: ## Build and start the end-to-end stack (Traefik + a protected app)
+	docker compose -f examples/compose.yml up -d --build
+	@printf 'waiting for the stack'
+	@for i in $$(seq 1 90); do \
+		if curl -sf -H 'Host: id.localhost' http://127.0.0.1:8100/api/health >/dev/null 2>&1; then \
+			echo ' ready'; break; fi; printf '.'; sleep 1; done
+	@$(MAKE) --no-print-directory e2e-seed
+	@echo '==> http://app.localhost:8100 (protected)  ·  http://id.localhost:8100 (Cardinal)'
+
+COMPOSE_E2E := docker compose -f examples/compose.yml
+
+.PHONY: e2e-seed
+e2e-seed: ## Create the end-to-end user and activate the policy set
+	@# Errors are NOT swallowed here. An earlier version used `|| true`, and a
+	@# failed user creation then surfaced much later as a confusing
+	@# "emergency access failed" from break-glass.
+	@$(COMPOSE_E2E) exec -T cardinal \
+		cardinal user create e2e-user -display 'End-to-end User' 2>&1 \
+		| grep -qE 'created|already exists' \
+		|| { echo 'ERROR: could not create e2e-user'; \
+		     $(COMPOSE_E2E) exec -T cardinal cardinal user create e2e-user; exit 1; }
+	@docker cp policies/cardinal.cedar \
+		"$$($(COMPOSE_E2E) ps -q cardinal)":/tmp/cardinal.cedar
+	@$(COMPOSE_E2E) exec -T cardinal \
+		cardinal policy publish /tmp/cardinal.cedar -description 'e2e stack' -activate \
+		| sed 's/^/  /'
+	@# The server loads policy at startup, so it has to be restarted to pick up
+	@# the version just activated.
+	@$(COMPOSE_E2E) restart cardinal >/dev/null
+	@sleep 4
+
+.PHONY: e2e
+e2e: ## Run the end-to-end tests against the running stack
+	go test ./test/e2e/... -count=1 -v
+
+.PHONY: e2e-down
+e2e-down: ## Stop and remove the end-to-end stack
+	docker compose -f examples/compose.yml down -v
 
 .PHONY: restore-drill
 restore-drill: build ## Back up, restore to a scratch DB, and verify the audit chain

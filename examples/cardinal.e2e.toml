@@ -1,0 +1,49 @@
+# Cardinal configuration for the end-to-end stack.
+#
+# ┌───────────────────────────────────────────────────────────────────────────┐
+# │ THIS IS A TEST FIXTURE. The break-glass private key sits next to it, in    │
+# │ git, readable by anyone. It grants emergency access to any account.        │
+# │                                                                           │
+# │ Nothing here is a template for production. Generate your own key with     │
+# │ `cardinal break-glass generate` and keep the private half offline.         │
+# └───────────────────────────────────────────────────────────────────────────┘
+
+[server]
+# 0.0.0.0 because this runs in a container: 127.0.0.1 would be the container's
+# own loopback and Traefik could not reach it.
+listen = "0.0.0.0:8080"
+public_url = "http://id.localhost:8100"
+
+# The session cookie is scoped to the parent domain, so signing in at
+# id.localhost is also being signed in at app.localhost.
+#
+# Without this, forwardAuth single sign-on does not work at all: the browser
+# simply never sends a cookie set on one sibling host to another. It is the
+# setting that turns "logged into Cardinal" into "logged in".
+#
+# The cost, stated plainly: this cookie reaches EVERY subdomain. Never host
+# untrusted or user-generated content under a domain you scope a session to.
+cookie_domain = "localhost"
+
+# Traefik is the only route in, so its forwarded client addresses are
+# trustworthy. This holds ONLY because protected-app is not published to the
+# host — see the comment in compose.yml. The Docker bridge range covers the
+# compose network without pinning a container IP that changes on recreate.
+trusted_proxies = ["172.16.0.0/12", "127.0.0.1/32"]
+
+[database]
+dsn = "postgres://cardinal:cardinal@postgres:5432/cardinal?sslmode=disable"
+
+[webauthn]
+# rp_id "localhost" covers id.localhost and app.localhost, since both are
+# subdomains of it. Browsers treat *.localhost as a secure context, which is
+# what lets WebAuthn work here without TLS.
+rp_id = "localhost"
+rp_display_name = "Cardinal (end-to-end stack)"
+origins = ["http://id.localhost:8100"]
+
+[break_glass]
+public_key = "cardinal-bg-v1:+ceq8nAzjyVBHpb/6eNMZeA26XgyJ/Fvzl66OLVHjR4="
+
+[recovery]
+email_enabled = false
