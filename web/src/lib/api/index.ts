@@ -5,7 +5,9 @@ import {
   ceremonySchema,
   credentialSchema,
   credentialsSchema,
+  decisionsSchema,
   meSchema,
+  policySchema,
   recoveryCodesSchema,
 } from './schemas'
 
@@ -75,6 +77,21 @@ export const api = {
       request(`/api/credentials/${id}`, z.undefined(), { method: 'DELETE' }),
   },
 
+  decisions: {
+    /** Recent authorization decisions. Scoped to the caller server-side. */
+    list: (deniedOnly: boolean) =>
+      request(
+        `/api/decisions?limit=100${deniedOnly ? '&denied=true' : ''}`,
+        decisionsSchema,
+      ),
+  },
+
+  policy: {
+    /** The live policy set, including its text, so the explorer can show the
+     *  rule that fired rather than only its name. */
+    active: () => request('/api/policy', policySchema),
+  },
+
   recovery: {
     generateCodes: () =>
       request('/api/recovery/codes', recoveryCodesSchema, { method: 'POST' }),
@@ -85,10 +102,12 @@ export const api = {
 }
 
 export { ApiError } from './client'
-export type { Credential, Me, RecoveryCodes } from './schemas'
+export type { Credential, Decision, Me, Policy, RecoveryCodes } from './schemas'
 
 /** Query keys, centralised so invalidation cannot drift from fetching. */
 export const queryKeys = {
   me: ['me'] as const,
   credentials: ['credentials'] as const,
+  decisions: (deniedOnly: boolean) => ['decisions', deniedOnly] as const,
+  policy: ['policy'] as const,
 }

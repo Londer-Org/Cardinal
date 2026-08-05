@@ -134,6 +134,42 @@ offline key breaks the circle.
   latter can satisfy the highest assurance level, which is why policy will be
   able to demand it.
 
+## 6. Authorization, through a real proxy
+
+The stack in `examples/` runs Traefik in front of an application that knows
+nothing about authentication.
+
+```sh
+make e2e-up                    # PostgreSQL, Cardinal, Traefik, a protected app
+```
+
+Open <http://app.localhost:8100>. You are sent to Cardinal, and after signing in
+you land on a page showing the identity headers that arrived.
+
+Then look at **Access** in the admin UI. Every request you just made is there,
+with the policy that admitted it. To see a denial explained, add a rule:
+
+```cedar
+@id("no-admin-console-for-emergency-sessions")
+forbid (principal, action == Cardinal::Action::"AccessURL", resource)
+when { principal.emergency && context has path && context.path like "/admin*" };
+```
+
+```sh
+cardinal policy publish policies/cardinal.cedar -activate
+```
+
+Visit `/admin/anything` and the explorer will say *"Explicitly forbidden by
+policy no-admin-console-for-emergency-sessions"* — and clicking the rule name
+shows its text. That distinction matters: an explicit forbid sends someone to
+argue with the rule, whereas "no policy grants this" sends them to request
+access.
+
+```sh
+make e2e        # the same stack, asserted
+make e2e-down
+```
+
 ## Cleanup
 
 ```sh

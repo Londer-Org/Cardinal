@@ -4,9 +4,12 @@ Living document. Updated as work lands, not as it's planned.
 
 **Legend:** ✅ done · 🔨 in progress · ⬜ not started · 🚧 blocked · ❓ needs a decision
 
-**Current position:** Phase 2 — Cedar governs forwardAuth end to end; the
-decision explorer UI is the remaining piece. Phase 1 complete except TOTP,
-recovery-email delivery, and dual-control recovery. See [docs/first-run.md](docs/first-run.md) to try it.
+**Current position:** Phase 2 complete. Cedar governs forwardAuth end to end,
+verified through real Traefik, and the decision explorer answers "why was I
+denied?" with the rule text. Phase 1 complete except TOTP, recovery-email
+delivery, and dual-control recovery.
+
+Next: Phase 3, the OIDC provider. See [docs/first-run.md](docs/first-run.md) to try it.
 
 **Not yet verified by a human:** a real passkey in a real browser. Everything up
 to that boundary is tested; WebAuthn's failure modes are browser-side and need
@@ -100,7 +103,7 @@ first genuinely useful milestone.*
 | ✅ | **Claims projection** — protocol-agnostic, import constraint enforced by test |
 | ✅ | `forwardAuth` endpoint — identity headers, login redirect with open-redirect guard |
 | ✅ | Decision logging — every decision names the policy that made it |
-| 🔨 | **Decision explorer** — API done (`/api/decisions`, `/api/policy`); UI pending |
+| ✅ | **Decision explorer** — decisions name the rule that decided; clicking it shows the rule text |
 | ✅ | **End-to-end stack with real Traefik** — 8 tests, `make e2e-up && make e2e` |
 
 ### The end-to-end stack

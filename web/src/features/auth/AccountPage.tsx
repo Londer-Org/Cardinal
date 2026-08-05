@@ -1,7 +1,9 @@
 import { LogOutIcon, ShieldAlertIcon, ShieldQuestionIcon } from 'lucide-react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { CredentialList } from '@/features/credentials/CredentialList'
+import { DecisionExplorer } from '@/features/decisions/DecisionExplorer'
 import { RecoveryCodes } from '@/features/recovery/RecoveryCodes'
 import type { Me } from '@/lib/api'
 import { useLogout } from './useAuth'
@@ -11,7 +13,7 @@ export function AccountPage({ session }: { session: Me }) {
 
   return (
     <div className="min-h-dvh bg-background p-6">
-      <div className="mx-auto max-w-2xl space-y-4">
+      <div className="mx-auto max-w-3xl space-y-4">
         <header className="flex items-start justify-between gap-4">
           <div className="min-w-0">
             <h1 className="truncate text-xl font-semibold">
@@ -55,8 +57,25 @@ export function AccountPage({ session }: { session: Me }) {
           </Alert>
         )}
 
-        <CredentialList />
-        <RecoveryCodes remaining={session.recoveryCodesRemaining} />
+        {/* Local tab state rather than a router.
+            Two views do not justify a routing dependency; one arrives when
+            deep-linking to a specific decision is actually wanted, which is the
+            first thing that genuinely needs URLs. */}
+        <Tabs defaultValue="account">
+          <TabsList>
+            <TabsTrigger value="account">Account</TabsTrigger>
+            <TabsTrigger value="access">Access</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="account" className="mt-4 space-y-4">
+            <CredentialList />
+            <RecoveryCodes remaining={session.recoveryCodesRemaining} />
+          </TabsContent>
+
+          <TabsContent value="access" className="mt-4">
+            <DecisionExplorer />
+          </TabsContent>
+        </Tabs>
       </div>
     </div>
   )

@@ -62,4 +62,32 @@ export const breakGlassChallengeSchema = z.object({
 })
 export type BreakGlassChallenge = z.infer<typeof breakGlassChallengeSchema>
 
+export const decisionSchema = z.object({
+  decisionPoint: z.string(),
+  principalId: z.string().nullable(),
+  action: z.string(),
+  resource: z.string(),
+  allowed: z.boolean(),
+  reasons: z.array(z.string()),
+  errors: z.array(z.string()),
+  policyVersion: z.number(),
+  durationMs: z.number(),
+  // Computed server-side so the CLI, the UI and anyone reading the API all say
+  // the same thing about why a decision went the way it did.
+  explanation: z.string(),
+})
+export type Decision = z.infer<typeof decisionSchema>
+
+export const decisionsSchema = z.array(decisionSchema)
+
+export const policySchema = z.object({
+  version: z.number(),
+  description: z.string(),
+  activatedAt: z.string(),
+  digest: z.string(),
+  policies: z.array(z.string()),
+  document: z.string(),
+})
+export type Policy = z.infer<typeof policySchema>
+
 export const errorSchema = z.object({ error: z.string() })
