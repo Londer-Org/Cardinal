@@ -4,7 +4,12 @@ Living document. Updated as work lands, not as it's planned.
 
 **Legend:** ✅ done · 🔨 in progress · ⬜ not started · 🚧 blocked · ❓ needs a decision
 
-**Current position:** Phase 1 substantially complete — passkey login works end to end against a real browser API, with the UI embedded in the binary.
+**Current position:** Phase 1 complete except TOTP, recovery-email delivery, and
+dual-control recovery. See [docs/first-run.md](docs/first-run.md) to try it.
+
+**Not yet verified by a human:** a real passkey in a real browser. Everything up
+to that boundary is tested; WebAuthn's failure modes are browser-side and need
+someone with a device.
 
 ---
 
@@ -63,7 +68,7 @@ The core thesis was tested before any Go was written:
 | | Item |
 |---|---|
 | ✅ | WebAuthn — registration and login ceremonies, discoverable (usernameless) login, clone detection |
-| ✅ | Break-glass — keypair, ceremony, challenge/response, emergency session, distinct audit action |
+| ✅ | Break-glass — keypair, ceremony, challenge/response, HTTP endpoints, UI flow; also the first-credential bootstrap path |
 | ⬜ | TOTP (migration aid + second factor; never for admin actions) |
 | ⬜ | Recovery email delivery (config + circularity guard done; SMTP sending pending) |
 | ✅ | Config loading — no unsafe defaults; enforces the recovery/IdP circularity rule |

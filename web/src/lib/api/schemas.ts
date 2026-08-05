@@ -55,4 +55,11 @@ export const recoveryCodesSchema = z.object({
 })
 export type RecoveryCodes = z.infer<typeof recoveryCodesSchema>
 
+export const breakGlassChallengeSchema = z.object({
+  challenge: z.string(),
+  expiresAt: z.string(),
+  command: z.string(),
+})
+export type BreakGlassChallenge = z.infer<typeof breakGlassChallengeSchema>
+
 export const errorSchema = z.object({ error: z.string() })

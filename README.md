@@ -64,6 +64,8 @@ make test                     # Go unit + integration tests
 make ui-check                 # frontend typecheck + lint
 ```
 
+See **[docs/first-run.md](docs/first-run.md)** for a ten-minute walkthrough.
+
 To run it:
 
 ```sh

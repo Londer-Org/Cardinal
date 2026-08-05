@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { KeyRoundIcon, ShieldAlertIcon } from 'lucide-react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
@@ -10,10 +11,12 @@ import {
 } from '@/components/ui/card'
 import { ErrorMessage } from '@/components/ErrorMessage'
 import { isSupported } from '@/lib/webauthn'
+import { BreakGlassDialog } from './BreakGlassDialog'
 import { useLogin } from './useAuth'
 
 export function LoginPage() {
   const login = useLogin()
+  const [emergency, setEmergency] = useState(false)
 
   if (!isSupported()) {
     return (
@@ -59,6 +62,18 @@ export function LoginPage() {
           </Button>
 
           <ErrorMessage error={login.error} />
+
+          {emergency ? (
+            <BreakGlassDialog onClose={() => { setEmergency(false) }} />
+          ) : (
+            <button
+              type="button"
+              onClick={() => { setEmergency(true) }}
+              className="mt-6 w-full text-center text-xs text-muted-foreground underline-offset-4 hover:underline"
+            >
+              Emergency access
+            </button>
+          )}
         </CardContent>
       </Card>
     </Shell>

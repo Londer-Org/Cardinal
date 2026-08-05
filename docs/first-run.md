@@ -1,0 +1,142 @@
+# First run
+
+Everything below works today. It takes about ten minutes, and the last section
+is the part nobody has done yet — a real passkey against a real browser.
+
+## 1. Database and build
+
+```sh
+make up                 # PostgreSQL 19 beta 2 on port 5433
+make migrate
+make release            # builds the React UI and embeds it in the binary
+```
+
+## 2. The break-glass ceremony
+
+This is a real ceremony, not a formality. The private key is printed once and
+never stored by Cardinal.
+
+```sh
+./bin/cardinal break-glass generate > break-glass.key
+```
+
+The public key goes in `cardinal.toml`; the private key would normally go
+offline. For a local test, leaving it in the working directory is fine — it is
+gitignored, and you should delete it afterwards.
+
+```sh
+cp cardinal.example.toml cardinal.toml
+```
+
+Edit it: paste the public key, and for local testing set
+
+```toml
+[server]
+listen = "127.0.0.1:8099"
+
+[webauthn]
+rp_id = "localhost"
+origins = ["http://localhost:8099"]
+```
+
+`rp_id = "localhost"` matters. Browsers treat `http://localhost` as a secure
+context, so WebAuthn works there without TLS — which is true of no other
+hostname.
+
+## 3. The directory, from the CLI
+
+This is Phase 0, and all of it works:
+
+```sh
+./bin/cardinal user create alonfils -display "Arthur Lonfils"
+./bin/cardinal user create contractor
+./bin/cardinal group create engineers
+./bin/cardinal group create prod-access
+
+# Nested groups: engineers are, transitively, production
+./bin/cardinal grant prod-access engineers -reason "engineering owns production"
+./bin/cardinal grant engineers alonfils   -reason "employee"
+
+# The interesting one: time-boxed access
+./bin/cardinal grant prod-access contractor -for 72h -reason "incident #42"
+```
+
+Then look at what that bought you:
+
+```sh
+./bin/cardinal memberships alonfils     # prod-access, inherited, depth 2
+./bin/cardinal members prod-access
+./bin/cardinal revoke prod-access contractor
+./bin/cardinal history prod-access contractor
+```
+
+That last command is the point of the whole temporal model. The contractor's
+access is gone, but the record of who granted it, when, and *why* survived the
+revocation. A boolean membership model destroys that.
+
+Point-in-time queries:
+
+```sh
+./bin/cardinal members prod-access -at 2026-08-04T12:00:00Z
+```
+
+And the audit chain:
+
+```sh
+./bin/cardinal audit verify
+make restore-drill      # back up, restore, verify the chain survived
+```
+
+## 4. Erasure
+
+```sh
+./bin/cardinal redact user contractor
+./bin/cardinal list -all      # name is tombstoned
+./bin/cardinal audit verify   # chain still intact
+```
+
+History survives; attribution does not. That is the resolution of append-only
+audit versus GDPR Article 17 (ADR 0010).
+
+## 5. The browser — the part that needs a human
+
+```sh
+./bin/cardinal serve -config cardinal.toml -dev
+```
+
+Open <http://localhost:8099>.
+
+There is a chicken-and-egg problem here, and break-glass is the designed answer
+to it: enrolling a passkey needs a session, and getting a session needs a
+passkey. Rather than a bootstrap mode someone could forget to disable, the
+offline key breaks the circle.
+
+1. Click **Emergency access**, then **Request a challenge**.
+2. Run the command it shows you:
+   ```sh
+   ./bin/cardinal break-glass sign <challenge> -key break-glass.key
+   ```
+3. Paste the signature, enter `alonfils`, open the session.
+4. You are in, with a red banner saying so. The session lasts 15 minutes.
+5. Name a passkey and click **Add** — your laptop's biometric or a security key.
+6. Add a second one. The warning banner clears at two.
+7. Generate recovery codes.
+8. Sign out, then **Sign in**. No username field: your authenticator offers the
+   account, so there is nothing to enumerate.
+
+## What to look for
+
+- The break-glass session shows `authMethod: break_glass` and a red banner.
+- The server logs `BREAK-GLASS SESSION OPENED` at error level. That is
+  deliberate — it should page someone.
+- Revoking your only passkey is refused, because that would be a lockout.
+- A synced passkey is badged *Synced*; a hardware key, *Device-bound*. Only the
+  latter can satisfy the highest assurance level, which is why policy will be
+  able to demand it.
+
+## Cleanup
+
+```sh
+rm break-glass.key
+make down
+```
