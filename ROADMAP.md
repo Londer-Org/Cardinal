@@ -152,9 +152,14 @@ works.
 
 | | Item |
 |---|---|
-| ⬜ | `zitadel/oidc` integration |
-| ⬜ | Client management UI, consent |
-| ⬜ | PKCE + `private_key_jwt` |
+| ✅ | **Applications are directory entities** — a client can be a group member, a policy subject, and appear in the audit trail like a person |
+| ✅ | Client registration — opaque client_id, Argon2id secrets, PKCE required for every client type |
+| ✅ | Redirect-URI validation — wildcards, fragments and plain http refused; loopback permitted per RFC 8252 |
+| ✅ | **Recovery/IdP circularity guard now enforced** at client registration (ADR 0009) |
+| 🔨 | `zitadel/oidc` integration — schema and client model done; `op.Storage` next |
+| ⬜ | Authorization code flow, consent, token issuance |
+| ⬜ | Signing key management — encrypted at rest with a config-held key |
+| ⬜ | Client management UI |
 | ⬜ | OpenID Foundation conformance suite |
 
 ---
