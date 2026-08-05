@@ -12,6 +12,7 @@ import (
 
 	"github.com/arthur-lonfils/cardinal/internal/directory"
 	"github.com/arthur-lonfils/cardinal/internal/store"
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/require"
 	"github.com/testcontainers/testcontainers-go"
@@ -191,3 +192,12 @@ var (
 	sep1 = time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC)
 	dec1 = time.Date(2026, 12, 1, 0, 0, 0, 0, time.UTC)
 )
+
+// uuidMust parses a UUID in a test, failing loudly rather than returning a zero
+// value that would produce a confusing assertion failure later.
+func uuidMust(t *testing.T, s string) uuid.UUID {
+	t.Helper()
+	id, err := uuid.Parse(s)
+	require.NoError(t, err)
+	return id
+}

@@ -156,9 +156,11 @@ works.
 | ✅ | Client registration — opaque client_id, Argon2id secrets, PKCE required for every client type |
 | ✅ | Redirect-URI validation — wildcards, fragments and plain http refused; loopback permitted per RFC 8252 |
 | ✅ | **Recovery/IdP circularity guard now enforced** at client registration (ADR 0009) |
-| 🔨 | `zitadel/oidc` integration — schema and client model done; `op.Storage` next |
-| ⬜ | Authorization code flow, consent, token issuance |
-| ⬜ | Signing key management — encrypted at rest with a config-held key |
+| ✅ | Authorization-code storage — single-use enforced in one statement, codes hashed at rest |
+| ✅ | Token storage — refresh tokens hashed and revocable; sign-out kills issued tokens |
+| ✅ | Signing keys — RSA, encrypted at rest with a config-held key, rotation with a verification grace period |
+| 🔨 | `zitadel/oidc` — storage layer done; `op.Storage` adapter and HTTP endpoints next |
+| ⬜ | Consent screen |
 | ⬜ | Client management UI |
 | ⬜ | OpenID Foundation conformance suite |
 
