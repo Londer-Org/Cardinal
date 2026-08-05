@@ -1,0 +1,96 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Cardinal is authentication infrastructure. Every gate here is a hard failure,
+# never a warning: a security product whose CI merely suggests is a product
+# whose invariants erode one "fix it later" at a time.
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build and vet
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.25'
+          check-latest: true
+
+      - name: Verify go.mod is tidy
+        run: |
+          go mod tidy
+          git diff --exit-code go.mod go.sum \
+            || { echo "::error::go.mod/go.sum are not tidy — run 'go mod tidy'"; exit 1; }
+
+      - run: go build ./...
+      - run: go vet ./...
+
+      - name: gofumpt
+        run: |
+          go install mvdan.cc/gofumpt@latest
+          test -z "$(gofumpt -l .)" \
+            || { gofumpt -l -d .; echo "::error::run 'gofumpt -w .'"; exit 1; }
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.25'
+      - uses: golangci/golangci-lint-action@v9
+        with:
+          version: latest
+
+  vulncheck:
+    name: Vulnerability scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.25'
+      - name: govulncheck
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          govulncheck ./...
+
+  test:
+    name: Tests (PostgreSQL ${{ matrix.postgres }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # Pinned, never floated: FOR PORTION OF changed between 19 beta 1 and
+        # beta 2, so a floating tag would let the suite's meaning drift.
+        #
+        # Add "19" here the moment it goes GA, keep beta2 until it does, then
+        # drop beta2 in the same commit that moves production to GA.
+        postgres: ['19beta2']
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.25'
+
+      # Integration tests use testcontainers and start PostgreSQL themselves,
+      # so no service container is declared here. The image is pre-pulled to
+      # keep the first test's startup out of the suite's timeout budget.
+      - name: Pre-pull PostgreSQL image
+        run: docker pull postgres:${{ matrix.postgres }}
+
+      - name: Test
+        env:
+          CARDINAL_TEST_POSTGRES_IMAGE: postgres:${{ matrix.postgres }}
+        run: go test ./... -race -count=1 -timeout 10m
