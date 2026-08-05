@@ -117,7 +117,7 @@ func (s *Store) RedeemBreakGlassChallenge(
 	var session *Session
 	err = s.InTx(ctx, func(tx pgx.Tx) error {
 		var err error
-		session, err = createSessionTx(ctx, tx, subjectID, sessionSpec{
+		session, err = createSessionTx(ctx, tx, subjectID, SessionSpec{
 			AuthMethod:  "break_glass",
 			TTL:         breakglass.SessionTTL,
 			DeviceBound: false,

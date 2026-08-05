@@ -69,6 +69,8 @@ func run(ctx context.Context, args []string) error {
 		return runMemberships(ctx, rest)
 	case "history":
 		return runHistory(ctx, rest)
+	case "serve":
+		return runServe(ctx, rest)
 	case "break-glass":
 		return runBreakGlass(rest)
 	case "redact":
@@ -90,6 +92,9 @@ func usage() {
 
 USAGE
   cardinal <command> [arguments]
+
+SERVER
+  serve [-config <file>] [-dev]             Run the API and admin UI
 
 ENTITIES
   user create <name> [-display <text>]     Create a user

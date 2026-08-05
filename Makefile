@@ -49,9 +49,25 @@ lint: ## Run linters and vulnerability scanning
 	golangci-lint run
 	govulncheck ./...
 
+.PHONY: ui
+ui: ## Build the admin UI into web/dist (embedded by the Go build)
+	cd web && npm ci --silent && npm run build
+
+.PHONY: ui-check
+ui-check: ## Typecheck and lint the frontend
+	cd web && npx tsc --noEmit && npx eslint . --max-warnings 0
+
 .PHONY: build
-build: ## Build the cardinal binary
+build: ## Build the cardinal binary (run `make ui` first for the admin UI)
 	go build -o bin/cardinal ./cmd/cardinal
+
+.PHONY: release
+release: ui build ## Build the UI and a binary containing it
+	@echo "==> single self-contained binary at bin/cardinal"
+
+.PHONY: serve
+serve: build ## Run the server in development mode
+	./bin/cardinal serve -config cardinal.toml -dev
 
 .PHONY: restore-drill
 restore-drill: build ## Back up, restore to a scratch DB, and verify the audit chain

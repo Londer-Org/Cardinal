@@ -42,6 +42,9 @@ const (
 
 	ActionCredentialRegistered = "credential.registered"
 	ActionCredentialRevoked    = "credential.revoked"
+
+	ActionRecoveryCodesIssued = "recovery.codes_issued"
+	ActionRecoveryCodeUsed    = "recovery.code_used"
 )
 
 // Event is one immutable record in the journal.

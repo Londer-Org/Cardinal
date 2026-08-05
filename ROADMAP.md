@@ -4,7 +4,7 @@ Living document. Updated as work lands, not as it's planned.
 
 **Legend:** ✅ done · 🔨 in progress · ⬜ not started · 🚧 blocked · ❓ needs a decision
 
-**Current position:** Phase 0 substantially complete — directory core, temporal membership, audit chain and CLI all working against real PostgreSQL 19.
+**Current position:** Phase 1 substantially complete — passkey login works end to end against a real browser API, with the UI embedded in the binary.
 
 ---
 
@@ -62,16 +62,18 @@ The core thesis was tested before any Go was written:
 
 | | Item |
 |---|---|
-| 🔨 | WebAuthn — credential store, clone detection, enrollment rules done; ceremonies + HTTP pending |
+| ✅ | WebAuthn — registration and login ceremonies, discoverable (usernameless) login, clone detection |
 | ✅ | Break-glass — keypair, ceremony, challenge/response, emergency session, distinct audit action |
 | ⬜ | TOTP (migration aid + second factor; never for admin actions) |
-| ⬜ | Recovery email (opt-in, ordinary users only, never alone) |
+| ⬜ | Recovery email delivery (config + circularity guard done; SMTP sending pending) |
 | ✅ | Config loading — no unsafe defaults; enforces the recovery/IdP circularity rule |
-| 🔨 | Session management — store layer done (hashed tokens, read-time revocation); CSRF pending with HTTP |
-| 🔨 | ≥2 passkeys enforced (done); recovery codes pending |
+| ✅ | Session management + CSRF — hashed tokens, read-time revocation, double-submit CSRF, security headers |
+| ✅ | Recovery codes (Argon2id, single-use) and ≥2 passkeys enforced |
 | ⬜ | Dual-control admin recovery |
-| ⬜ | Frontend stack (React 19, Vite, Tailwind v4, shadcn/ui, TanStack, generated zod, strict-TS CI gates) |
-| ⬜ | `embed.FS` release build + first container image |
+| ✅ | Rate limiting — fixed-window, fails closed |
+| ✅ | Frontend — React 19, Vite 7, Tailwind v4, TanStack Query, zod, strict TS with `any` banned |
+| ✅ | `embed.FS` release build — `make release` yields one self-contained binary |
+| ⬜ | Container image |
 
 > **Resolved.** [ADR 0009](docs/adr/0009-recovery-and-break-glass.md) settles
 > recovery before authentication is built. Recovery email was considered and

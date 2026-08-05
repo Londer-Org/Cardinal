@@ -57,7 +57,8 @@ func (s *Session) Emergency() bool { return s.AuthMethod == "break_glass" }
 // must be a latency problem rather than an authorization bypass.
 func (s *Session) Expired() bool { return time.Now().After(s.ValidUntil) }
 
-type sessionSpec struct {
+// SessionSpec describes a session to be created.
+type SessionSpec struct {
 	AuthMethod   string
 	TTL          time.Duration
 	DeviceBound  bool
@@ -71,7 +72,7 @@ type sessionSpec struct {
 // authenticate. Hashing is plain SHA-256 rather than Argon2id deliberately —
 // unlike a password, the token has 256 bits of entropy and is not guessable, so
 // a slow KDF would only add latency to every request.
-func createSessionTx(ctx context.Context, tx pgx.Tx, subjectID uuid.UUID, spec sessionSpec) (*Session, error) {
+func createSessionTx(ctx context.Context, tx pgx.Tx, subjectID uuid.UUID, spec SessionSpec) (*Session, error) {
 	raw := make([]byte, sessionTokenBytes)
 	if _, err := rand.Read(raw); err != nil {
 		return nil, fmt.Errorf("store: generating session token: %w", err)
@@ -106,7 +107,7 @@ func createSessionTx(ctx context.Context, tx pgx.Tx, subjectID uuid.UUID, spec s
 }
 
 // CreateSession mints a session and records it.
-func (s *Store) CreateSession(ctx context.Context, subjectID uuid.UUID, spec sessionSpec) (*Session, error) {
+func (s *Store) CreateSession(ctx context.Context, subjectID uuid.UUID, spec SessionSpec) (*Session, error) {
 	var out *Session
 	err := s.InTx(ctx, func(tx pgx.Tx) error {
 		var err error
