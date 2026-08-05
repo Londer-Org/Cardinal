@@ -41,6 +41,45 @@ jobs:
           test -z "$(gofumpt -l .)" \
             || { gofumpt -l -d .; echo "::error::run 'gofumpt -w .'"; exit 1; }
 
+  frontend:
+    name: Frontend
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - run: npm ci
+        working-directory: web
+
+      # `any` is banned and the no-unsafe-* rules are errors. A security
+      # product whose frontend casts around its own type system is worse than
+      # one with no types — it looks safe. See ADR 0008.
+      - name: Typecheck
+        run: npx tsc --noEmit
+        working-directory: web
+
+      - name: Lint
+        run: npx eslint . --max-warnings 0
+        working-directory: web
+
+      - name: Build
+        run: npx vite build
+        working-directory: web
+
+  image:
+    name: Container image builds
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      # Proves the single-artifact property still holds: UI compiled, embedded,
+      # and the whole thing running as a static binary on distroless.
+      - name: Build image
+        run: docker build -t cardinal:ci .
+
   lint:
     name: Lint
     runs-on: ubuntu-latest

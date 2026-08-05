@@ -73,7 +73,7 @@ The core thesis was tested before any Go was written:
 | ✅ | Rate limiting — fixed-window, fails closed |
 | ✅ | Frontend — React 19, Vite 7, Tailwind v4, TanStack Query, zod, strict TS with `any` banned |
 | ✅ | `embed.FS` release build — `make release` yields one self-contained binary |
-| ⬜ | Container image |
+| ✅ | Container image — distroless, nonroot, static, 23 MB |
 
 > **Resolved.** [ADR 0009](docs/adr/0009-recovery-and-break-glass.md) settles
 > recovery before authentication is built. Recovery email was considered and

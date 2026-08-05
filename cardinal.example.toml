@@ -5,6 +5,11 @@
 # a plausible-looking wrong value is worse than one that will not boot.
 
 [server]
+# Loopback by default, so an unconfigured server is not exposed by accident.
+#
+# In a container this must be "0.0.0.0:8080" instead: 127.0.0.1 inside a
+# container is that container's own loopback, so a published port reaches
+# nothing and the symptom is a healthy-looking process nobody can connect to.
 listen = "127.0.0.1:8080"
 
 # Externally reachable base URL, behind whatever proxy terminates TLS.

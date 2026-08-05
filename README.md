@@ -60,8 +60,22 @@ second database.
 ```sh
 docker compose up -d          # PostgreSQL 19 on port 5433
 make migrate                  # apply migrations
-make test                     # unit + integration tests
+make test                     # Go unit + integration tests
+make ui-check                 # frontend typecheck + lint
 ```
+
+To run it:
+
+```sh
+./bin/cardinal break-glass generate > /media/usb/break-glass.key
+cp cardinal.example.toml cardinal.toml   # paste in the public key
+make release                             # UI + binary, one artifact
+./bin/cardinal serve -config cardinal.toml -dev
+```
+
+`make release` compiles the React UI and embeds it in the binary, so deployment
+is one file plus a database. The container image is distroless, static and runs
+as nonroot.
 
 Integration tests run against a real PostgreSQL via testcontainers. They are not
 optional and cannot be mocked: `WITHOUT OVERLAPS` and `FOR PORTION OF` are
