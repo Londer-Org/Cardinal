@@ -8,9 +8,12 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+	"sync/atomic"
 
 	"github.com/arthur-lonfils/cardinal/internal/auth"
+	"github.com/arthur-lonfils/cardinal/internal/claims"
 	"github.com/arthur-lonfils/cardinal/internal/config"
+	"github.com/arthur-lonfils/cardinal/internal/policy"
 	"github.com/arthur-lonfils/cardinal/internal/store"
 )
 
@@ -32,6 +35,23 @@ type Server struct {
 	ui fs.FS
 
 	clientIP *clientIPResolver
+	claims   *claims.Resolver
+
+	// policy holds the live engine behind an atomic pointer.
+	//
+	// Reloading swaps the whole engine rather than mutating one, so an
+	// in-flight request can never observe a half-applied policy change — it
+	// evaluates entirely against the old set or entirely against the new.
+	policy atomic.Pointer[policy.Engine]
+}
+
+// ReloadPolicy swaps in a new policy version.
+func (s *Server) ReloadPolicy(engine *policy.Engine) {
+	s.policy.Store(engine)
+	if engine != nil {
+		s.log.Info("policy set loaded",
+			"version", engine.Version(), "policies", len(engine.PolicyIDs()))
+	}
 }
 
 type Options struct {
@@ -57,7 +77,7 @@ func New(s *store.Store, a *auth.Service, cfg *config.Config, opts Options) (*Se
 			"proxies", cfg.Server.TrustedProxies)
 	}
 
-	return &Server{
+	srv := &Server{
 		store: s, auth: a, cfg: cfg, log: log,
 		// Secure cookies are the default; dev mode is the only way to opt out,
 		// so forgetting to configure something cannot silently downgrade them.
@@ -65,7 +85,9 @@ func New(s *store.Store, a *auth.Service, cfg *config.Config, opts Options) (*Se
 		devMode:       opts.DevMode,
 		ui:            opts.UI,
 		clientIP:      resolver,
-	}, nil
+		claims:        claims.NewResolver(s),
+	}
+	return srv, nil
 }
 
 // Handler builds the routing tree.
@@ -105,6 +127,15 @@ func (s *Server) Handler() http.Handler {
 		s.requireAuth(http.HandlerFunc(s.handleGenerateRecoveryCodes)))
 	mux.Handle("GET /api/recovery/codes/remaining",
 		s.requireAuth(http.HandlerFunc(s.handleRemainingRecoveryCodes)))
+
+	// ── Traefik forwardAuth ────────────────────────────────────────────────
+	// Any method: Traefik mirrors the original request's method here, and a
+	// POST to a protected route must be authorized the same as a GET.
+	mux.HandleFunc("/api/auth/verify", s.handleForwardAuth)
+
+	// ── Decision explorer ──────────────────────────────────────────────────
+	mux.Handle("GET /api/decisions", s.requireAuth(http.HandlerFunc(s.handleDecisions)))
+	mux.Handle("GET /api/policy", s.requireAuth(http.HandlerFunc(s.handlePolicy)))
 
 	mux.HandleFunc("GET /api/health", s.handleHealth)
 

@@ -69,6 +69,8 @@ func run(ctx context.Context, args []string) error {
 		return runMemberships(ctx, rest)
 	case "history":
 		return runHistory(ctx, rest)
+	case "policy":
+		return runPolicy(ctx, rest)
 	case "serve":
 		return runServe(ctx, rest)
 	case "break-glass":
@@ -122,6 +124,13 @@ PRIVACY
   redact <type> <name> [-yes]              Erase personal data (GDPR Art. 17).
                                            Membership history and the audit
                                            chain survive; attribution does not.
+
+AUTHORIZATION
+  policy test <file.cedar>                 Compile a policy file (offline)
+  policy publish <file> [-activate]        Store a new version
+  policy activate <version>                Make a version live (rollback too)
+  policy list                              Published versions
+  policy show                              The live policy set
 
 AUDIT
   audit verify                             Verify the event log's hash chain

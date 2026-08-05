@@ -13,6 +13,7 @@ import (
 	"github.com/arthur-lonfils/cardinal/internal/auth"
 	"github.com/arthur-lonfils/cardinal/internal/config"
 	"github.com/arthur-lonfils/cardinal/internal/httpapi"
+	"github.com/arthur-lonfils/cardinal/internal/policy"
 	"github.com/arthur-lonfils/cardinal/internal/store"
 	"github.com/arthur-lonfils/cardinal/web"
 )
@@ -66,6 +67,23 @@ func runServe(ctx context.Context, args []string) error {
 	})
 	if err != nil {
 		return err
+	}
+
+	// Load the active policy before serving. A server with no policy denies
+	// everything, which is safe but is still an outage, so it is worth being
+	// loud about at startup rather than discovering it from the first 503.
+	if version, err := st.ActivePolicy(ctx); err != nil {
+		log.Error("no active policy — all authorization will be denied; "+
+			"publish one with `cardinal policy publish`", "error", err)
+	} else {
+		engine, err := policy.NewEngine([]byte(version.Document), version.Version)
+		if err != nil {
+			// A stored policy that no longer compiles means the engine changed
+			// under a version that was valid when published. Refusing to start
+			// is better than serving with no rules.
+			return fmt.Errorf("loading active policy version %d: %w", version.Version, err)
+		}
+		apiServer.ReloadPolicy(engine)
 	}
 
 	srv := &http.Server{

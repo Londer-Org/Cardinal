@@ -4,8 +4,9 @@ Living document. Updated as work lands, not as it's planned.
 
 **Legend:** ✅ done · 🔨 in progress · ⬜ not started · 🚧 blocked · ❓ needs a decision
 
-**Current position:** Phase 1 complete except TOTP, recovery-email delivery, and
-dual-control recovery. See [docs/first-run.md](docs/first-run.md) to try it.
+**Current position:** Phase 2 — Cedar governs forwardAuth end to end; the
+decision explorer UI is the remaining piece. Phase 1 complete except TOTP,
+recovery-email delivery, and dual-control recovery. See [docs/first-run.md](docs/first-run.md) to try it.
 
 **Not yet verified by a human:** a real passkey in a real browser. Everything up
 to that boundary is tested; WebAuthn's failure modes are browser-side and need
@@ -94,12 +95,12 @@ first genuinely useful milestone.*
 
 | | Item |
 |---|---|
-| ⬜ | `cedar-go` integration |
-| ⬜ | Policy storage, versioning, CI test suite |
-| ⬜ | **Protocol-agnostic claims projection** (four consumers — [ADR 0007](docs/adr/0007-no-saml.md)) |
-| ⬜ | `forwardAuth` endpoint |
-| ⬜ | Decision logging with policy attribution |
-| ⬜ | **Decision explorer UI** — "why was this denied?" |
+| ✅ | `cedar-go` integration — named policies, fail-closed, evaluation errors surfaced |
+| ✅ | Policy storage + versioning — publish/activate separated, document frozen by trigger, rollback is one command |
+| ✅ | **Claims projection** — protocol-agnostic, import constraint enforced by test |
+| ✅ | `forwardAuth` endpoint — identity headers, login redirect with open-redirect guard |
+| ✅ | Decision logging — every decision names the policy that made it |
+| 🔨 | **Decision explorer** — API done (`/api/decisions`, `/api/policy`); UI pending |
 
 ---
 
