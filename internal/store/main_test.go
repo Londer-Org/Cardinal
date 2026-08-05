@@ -6,11 +6,13 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/arthur-lonfils/cardinal/internal/directory"
 	"github.com/arthur-lonfils/cardinal/internal/store"
+	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/require"
 	"github.com/testcontainers/testcontainers-go"
 	tcpostgres "github.com/testcontainers/testcontainers-go/modules/postgres"
@@ -137,8 +139,36 @@ func newStore(t *testing.T) *store.Store {
 	require.NoError(t, err)
 	t.Cleanup(s.Close)
 
+	// The table list is derived, not hardcoded.
+	//
+	// A hardcoded list silently stops isolating tests the moment someone adds a
+	// table and forgets to update it — which is exactly what happened once
+	// already, producing a failure that looked like a logic bug rather than
+	// leaked state. Deriving it means new tables are covered automatically.
+	//
+	// Partitions are excluded because truncating the partitioned parent already
+	// clears them, and naming both is an error.
+	rows, err := s.Pool().Query(ctx, `
+		SELECT c.relname
+		  FROM pg_class c
+		  JOIN pg_namespace n ON n.oid = c.relnamespace
+		 WHERE n.nspname = 'public'
+		   AND c.relkind IN ('r', 'p')
+		   AND NOT c.relispartition`)
+	require.NoError(t, err)
+
+	var tables []string
+	for rows.Next() {
+		var name string
+		require.NoError(t, rows.Scan(&name))
+		tables = append(tables, pgx.Identifier{name}.Sanitize())
+	}
+	rows.Close()
+	require.NoError(t, rows.Err())
+	require.NotEmpty(t, tables, "no tables found — did migrations run?")
+
 	_, err = s.Pool().Exec(ctx,
-		`TRUNCATE events, group_members, sessions, entities RESTART IDENTITY CASCADE`)
+		"TRUNCATE "+strings.Join(tables, ", ")+" RESTART IDENTITY CASCADE")
 	require.NoError(t, err)
 
 	return s

@@ -33,6 +33,15 @@ const (
 
 	ActionSessionCreated = "session.created"
 	ActionSessionRevoked = "session.revoked"
+
+	// ActionBreakGlassUsed is deliberately its own action rather than a
+	// session.created variant, so that alerting on emergency access is a
+	// trivial predicate rather than a payload inspection. Break-glass that
+	// nobody notices is just a backdoor (ADR 0009).
+	ActionBreakGlassUsed = "breakglass.used"
+
+	ActionCredentialRegistered = "credential.registered"
+	ActionCredentialRevoked    = "credential.revoked"
 )
 
 // Event is one immutable record in the journal.
