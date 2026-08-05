@@ -62,13 +62,13 @@ The core thesis was tested before any Go was written:
 
 | | Item |
 |---|---|
-| ⬜ | WebAuthn registration and login — *unblocked; ADR 0009 decided* |
+| 🔨 | WebAuthn — credential store, clone detection, enrollment rules done; ceremonies + HTTP pending |
 | ✅ | Break-glass — keypair, ceremony, challenge/response, emergency session, distinct audit action |
 | ⬜ | TOTP (migration aid + second factor; never for admin actions) |
 | ⬜ | Recovery email (opt-in, ordinary users only, never alone) |
 | ✅ | Config loading — no unsafe defaults; enforces the recovery/IdP circularity rule |
 | 🔨 | Session management — store layer done (hashed tokens, read-time revocation); CSRF pending with HTTP |
-| ⬜ | Recovery codes, ≥2 passkeys enforced |
+| 🔨 | ≥2 passkeys enforced (done); recovery codes pending |
 | ⬜ | Dual-control admin recovery |
 | ⬜ | Frontend stack (React 19, Vite, Tailwind v4, shadcn/ui, TanStack, generated zod, strict-TS CI gates) |
 | ⬜ | `embed.FS` release build + first container image |
