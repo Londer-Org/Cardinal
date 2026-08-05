@@ -16,6 +16,7 @@ package config
 import (
 	"errors"
 	"fmt"
+	"net/netip"
 	"net/url"
 	"os"
 	"slices"
@@ -39,6 +40,19 @@ type Server struct {
 	// PublicURL is the externally reachable base URL. Used to build redirect
 	// URIs and to cross-check the WebAuthn origin.
 	PublicURL string `toml:"public_url"`
+
+	// TrustedProxies lists the CIDRs (or bare addresses) of reverse proxies
+	// permitted to set X-Forwarded-For.
+	//
+	// Empty means trust nothing, which is the safe default: X-Forwarded-For is
+	// attacker-controlled unless a proxy overwrites it, so honouring it
+	// unconditionally would let anyone evade rate limiting with a header.
+	//
+	// Only set this when Cardinal is genuinely unreachable except through the
+	// proxy. If anything can connect directly — a pod network, a debug port, a
+	// misrouted service — an attacker reaching that path can forge the header
+	// and this setting becomes the vulnerability rather than the fix.
+	TrustedProxies []string `toml:"trusted_proxies"`
 }
 
 type Database struct {
@@ -157,6 +171,14 @@ func (c *Config) Validate() error {
 				"let any mailbox recover any account", ErrMissing))
 	}
 
+	for _, cidr := range c.Server.TrustedProxies {
+		if _, err := parseTrustedPrefix(strings.TrimSpace(cidr)); err != nil {
+			problems = append(problems, fmt.Errorf(
+				"%w: server.trusted_proxies entry %q is not a CIDR or address",
+				ErrInvalid, cidr))
+		}
+	}
+
 	if c.Server.PublicURL != "" {
 		if u, err := url.Parse(c.Server.PublicURL); err != nil || u.Host == "" {
 			problems = append(problems,
@@ -243,6 +265,19 @@ func (c *Config) CheckRelyingPartyDomain(domain string) error {
 		}
 	}
 	return nil
+}
+
+// parseTrustedPrefix accepts a CIDR or a bare address, since operators
+// reasonably write either.
+func parseTrustedPrefix(s string) (netip.Prefix, error) {
+	if prefix, err := netip.ParsePrefix(s); err == nil {
+		return prefix, nil
+	}
+	addr, err := netip.ParseAddr(s)
+	if err != nil {
+		return netip.Prefix{}, err
+	}
+	return netip.PrefixFrom(addr, addr.BitLen()), nil
 }
 
 // originMatchesRPID reports whether host is the RP ID or a subdomain of it,

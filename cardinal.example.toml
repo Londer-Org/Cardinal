@@ -15,6 +15,23 @@ listen = "127.0.0.1:8080"
 # Externally reachable base URL, behind whatever proxy terminates TLS.
 public_url = "https://id.example.com"
 
+# Reverse proxies permitted to set X-Forwarded-For, as CIDRs or bare addresses.
+#
+# Empty means trust nothing, and that is the safe default: X-Forwarded-For is
+# attacker-controlled unless a proxy overwrites it, so honouring it
+# unconditionally lets anyone evade rate limiting with a header.
+#
+# Set it only when Cardinal is genuinely unreachable except through the proxy —
+# the property that makes trusting the header sound is network isolation, not
+# the setting itself. If anything can connect directly (a pod network, a debug
+# port, a misrouted service), an attacker on that path forges the header and
+# this line becomes the vulnerability rather than the fix.
+#
+# Cardinal walks the chain from the RIGHT, skipping trusted hops, and takes the
+# first untrusted address. Reading left-to-right — what most implementations do
+# — would trust the part the client writes.
+trusted_proxies = []
+
 [database]
 # May also be supplied as CARDINAL_DSN, which is preferable in production:
 # a secret in a file gets committed, copied and backed up.

@@ -3,6 +3,7 @@ package httpapi
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io/fs"
 	"log/slog"
 	"net/http"
@@ -29,6 +30,8 @@ type Server struct {
 	// ui is the embedded admin interface. Nil serves API only, which is useful
 	// while the frontend is being rebuilt.
 	ui fs.FS
+
+	clientIP *clientIPResolver
 }
 
 type Options struct {
@@ -37,11 +40,23 @@ type Options struct {
 	Logger  *slog.Logger
 }
 
-func New(s *store.Store, a *auth.Service, cfg *config.Config, opts Options) *Server {
+func New(s *store.Store, a *auth.Service, cfg *config.Config, opts Options) (*Server, error) {
 	log := opts.Logger
 	if log == nil {
 		log = slog.Default()
 	}
+
+	// Validated at startup rather than per request: a malformed trusted_proxies
+	// entry must stop the server, not silently degrade to trusting nothing.
+	resolver, err := newClientIPResolver(cfg.Server.TrustedProxies)
+	if err != nil {
+		return nil, fmt.Errorf("httpapi: server.trusted_proxies: %w", err)
+	}
+	if len(cfg.Server.TrustedProxies) > 0 {
+		log.Info("trusting forwarded client addresses from configured proxies",
+			"proxies", cfg.Server.TrustedProxies)
+	}
+
 	return &Server{
 		store: s, auth: a, cfg: cfg, log: log,
 		// Secure cookies are the default; dev mode is the only way to opt out,
@@ -49,7 +64,8 @@ func New(s *store.Store, a *auth.Service, cfg *config.Config, opts Options) *Ser
 		secureCookies: !opts.DevMode,
 		devMode:       opts.DevMode,
 		ui:            opts.UI,
-	}
+		clientIP:      resolver,
+	}, nil
 }
 
 // Handler builds the routing tree.

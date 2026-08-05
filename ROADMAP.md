@@ -70,8 +70,8 @@ The core thesis was tested before any Go was written:
 | ✅ | Session management + CSRF — hashed tokens, read-time revocation, double-submit CSRF, security headers |
 | ✅ | Recovery codes (Argon2id, single-use) and ≥2 passkeys enforced |
 | ⬜ | Dual-control admin recovery |
-| ✅ | Rate limiting — fixed-window, fails closed |
-| ✅ | Frontend — React 19, Vite 7, Tailwind v4, TanStack Query, zod, strict TS with `any` banned |
+| ✅ | Rate limiting — fixed-window, fails closed, trusted-proxy aware |
+| ✅ | Frontend — React 19, Vite 7, Tailwind v4, **shadcn/ui (vendored)**, TanStack Query, zod, strict TS with `any` banned |
 | ✅ | `embed.FS` release build — `make release` yields one self-contained binary |
 | ✅ | Container image — distroless, nonroot, static, 23 MB |
 

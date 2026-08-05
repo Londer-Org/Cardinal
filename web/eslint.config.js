@@ -8,7 +8,11 @@ import globals from 'globals'
 // around its own type system is worse than one with no types, because it looks
 // safe. See ADR 0008.
 export default tseslint.config(
-  { ignores: ['dist', 'node_modules'] },
+  // Vendored shadcn/ui primitives are upstream code (ADR 0008: components are
+  // vendored so a security product has no runtime dependency on an external
+  // component library). They are still typechecked; they are simply not held to
+  // rules written for code we author.
+  { ignores: ['dist', 'node_modules', 'src/components/ui/**'] },
 
   // Type-checked rules apply only to source. Config files are not in the
   // tsconfig project, and pointing typed rules at them fails to load.

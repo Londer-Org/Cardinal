@@ -59,13 +59,18 @@ func runServe(ctx context.Context, args []string) error {
 		ui = nil
 	}
 
+	apiServer, err := httpapi.New(st, authSvc, cfg, httpapi.Options{
+		DevMode: *dev,
+		UI:      ui,
+		Logger:  log,
+	})
+	if err != nil {
+		return err
+	}
+
 	srv := &http.Server{
-		Addr: cfg.Server.Listen,
-		Handler: httpapi.New(st, authSvc, cfg, httpapi.Options{
-			DevMode: *dev,
-			UI:      ui,
-			Logger:  log,
-		}).Handler(),
+		Addr:    cfg.Server.Listen,
+		Handler: apiServer.Handler(),
 		// Bounded so a slow or stalled client cannot occupy a connection
 		// indefinitely. WriteTimeout is generous enough for a WebAuthn ceremony
 		// that waits on a hardware key.

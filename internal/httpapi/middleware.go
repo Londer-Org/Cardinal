@@ -12,7 +12,6 @@ import (
 	"encoding/base64"
 	"errors"
 	"log/slog"
-	"net"
 	"net/http"
 	"strconv"
 	"strings"
@@ -183,7 +182,7 @@ func (s *Server) csrfProtect(next http.Handler) http.Handler {
 func (s *Server) rateLimit(limit store.RateLimit) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			subject := clientIP(r)
+			subject := s.clientIP.resolve(r)
 
 			allowed, err := s.store.Allow(r.Context(), limit, subject)
 			if err != nil {
@@ -270,19 +269,4 @@ func newToken() (string, error) {
 		return "", err
 	}
 	return base64.RawURLEncoding.EncodeToString(b), nil
-}
-
-// clientIP extracts the address used for rate limiting.
-//
-// X-Forwarded-For is deliberately NOT trusted. It is attacker-controlled unless
-// a proxy is known to overwrite it, so honouring it here would let anyone evade
-// rate limiting by varying a header. Deployments behind a trusted proxy should
-// have it set the connection address, or this needs an explicit allowlist of
-// proxy addresses — which is a decision for whoever runs it, not a default.
-func clientIP(r *http.Request) string {
-	host, _, err := net.SplitHostPort(r.RemoteAddr)
-	if err != nil {
-		return r.RemoteAddr
-	}
-	return host
 }
