@@ -70,66 +70,77 @@ break-glass key itself), **two distinct break-glass keys must sign**.
 `pgBackRest` PITR, plus `make restore-drill`, which restores to a scratch
 database and verifies the audit hash chain. Already implemented.
 
-## On recovery email: permitted for ordinary users, with a tripwire
+## On recovery email: optional, constrained, and self-policing
 
-**Amended 2026-08-05**, before implementation, on learning that the company's
-email is **Google Workspace** — an identity domain currently independent of
-Cardinal. The original text rejected recovery email outright on the assumption
-that email would authenticate *through* Cardinal. That assumption does not hold
-today, so the conclusion is narrowed rather than kept. The original reasoning is
-preserved below because the risk it describes has not disappeared — it has
-become conditional.
+**Amended 2026-08-05**, before implementation. The original text rejected
+recovery email outright, on the assumption that email would authenticate
+*through* Cardinal. That assumption is deployment-specific, and Cardinal is a
+general-purpose product: it cannot know what any given operator's email is, who
+runs it, or how it is secured. The conclusion is therefore restated as a rule
+Cardinal can enforce for **any** environment, rather than a verdict derived from
+one.
 
-### The circular dependency is latent, not absent
+### The governing principle
 
-The deadlock to avoid: if email access authenticates through Cardinal, then
-"Cardinal is broken" implies "recovery channel unreachable", precisely when it
-is needed.
+> **A recovery channel must not depend on the system being recovered.**
 
-Today that does not apply — Google Workspace authenticates independently.
+That is the whole rule, and it is environment-independent. Whether email is
+self-hosted, Google Workspace, Microsoft 365, or a third-party provider, the
+question is identical: *if Cardinal is unavailable or compromised, can this
+channel still be reached, and can it still be trusted?*
 
-But Google Workspace supports **third-party IdP SSO over custom OIDC profiles**
-(generally available since November 2025), in addition to SAML. Cardinal does
-not implement SAML (ADR 0007), but it *will* be an OIDC provider (Phase 3).
-So the deadlock is not structurally prevented; it is one configuration change
-away, and that change would be made for unrelated reasons by someone not
-thinking about account recovery.
+The dependency is rarely present on day one. It is usually **created later**,
+when someone federates the mail provider to Cardinal for SSO — a change made for
+entirely unrelated reasons, by someone not thinking about account recovery. The
+recovery path then breaks precisely when it is needed, and nobody notices until
+the day it matters.
 
-> **Tripwire — this must be enforced, not merely remembered:**
-> **If Google Workspace is ever federated to Cardinal for SSO, recovery email
-> must be disabled in the same change.** Phase 3 must refuse to start, or
-> loudly warn, when an OIDC client is configured for the same domain used for
-> recovery email.
+This is not hypothetical for any particular vendor. Every major mail platform
+supports third-party IdP SSO over SAML or OIDC, and Cardinal becomes an OIDC
+provider in Phase 3. Any deployment can walk into this.
 
-### Accepted, and the price of accepting it
+### Cardinal enforces it rather than documenting it
 
-Recovery email is permitted for **ordinary users** as a Layer 2 recovery signal,
-because Google Workspace accounts can themselves be protected by security keys
-and Google's own phishing-resistant authentication — this is not generic email.
+A warning in a document is not a control. Cardinal therefore **detects the
+circular dependency itself**:
 
-Three consequences are accepted knowingly:
+- Recovery email is **opt-in and off by default**.
+- The operator configures which email domains are acceptable for recovery.
+- **At startup and at OIDC client registration, Cardinal refuses to serve a
+  relying party whose domain is also configured as a recovery-email domain.**
+  Creating the loop becomes an error, not a silent regression.
 
-1. **Google becomes a root of trust for Cardinal recovery.** Whoever controls a
-   Google Workspace account can recover the corresponding Cardinal account. This
-   is a deliberate dependency on Google's security posture, not an accident.
-2. **A Google Workspace super-admin implicitly becomes a Cardinal admin.**
-   Workspace admins can access or reset any user's mailbox, therefore any
-   recovery message. This is a real privilege-escalation path and it must be
-   named rather than discovered later.
-3. **It remains a bearer channel.** No cryptographic binding to a person.
+An operator who genuinely wants both must remove the recovery domain
+deliberately, which is exactly the moment to think about it.
+
+### What the operator is accepting
+
+Recovery email is permitted for **ordinary users** as one signal in a recovery
+flow. Enabling it means accepting, knowingly:
+
+1. **The mail provider becomes a root of trust for Cardinal recovery.** Whoever
+   controls a mailbox can recover the corresponding account. Strong providers
+   with enforced security keys make this defensible; weak ones make it a
+   liability. Cardinal cannot judge this, so the operator must.
+2. **Mail administrators implicitly become Cardinal administrators.** Anyone who
+   can read or reset a user's mailbox can intercept a recovery message. This is
+   a genuine privilege-escalation path and must be named, not discovered.
+3. **It remains a bearer channel** with no cryptographic binding to a person.
+
+Consequence (2) is why the limits below are not configurable.
 
 ### What recovery email may never do
 
-- **Recover an administrator's account.** Consequence (2) makes this circular:
-  it would place Cardinal's administrative tier under Workspace's. Admin
-  recovery stays dual-control (Layer 2) or break-glass (Layer 3).
+- **Recover an administrator's account.** Consequence (2) makes this circular —
+  it would place Cardinal's administrative tier beneath the mail platform's.
+  Admin recovery stays dual-control (Layer 2) or break-glass (Layer 3).
 - **Serve as break-glass.** Determining the address requires reading the
   database, which is exactly what may be unavailable.
-- **Act alone.** It is one signal in a recovery flow, not a single-factor
+- **Act alone.** One signal in a recovery flow, never a single-factor
   password-reset link.
 
 Email is also used in the safe direction, as a **notification** channel:
-recovery attempts, break-glass use, and credential changes all generate alerts.
+recovery attempts, break-glass use, and credential changes all raise alerts.
 Notification over an unauthenticated channel is sound; authorization is not.
 
 ## On TOTP: supported, but positioned carefully

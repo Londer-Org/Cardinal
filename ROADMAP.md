@@ -65,6 +65,8 @@ The core thesis was tested before any Go was written:
 | ⬜ | WebAuthn registration and login — *unblocked; ADR 0009 decided* |
 | 🔨 | Break-glass keypair + bootstrap ceremony — **done**; server-side challenge flow and quarterly drill outstanding |
 | ⬜ | TOTP (migration aid + second factor; never for admin actions) |
+| ⬜ | Recovery email (opt-in, ordinary users only, never alone) |
+| ✅ | Config loading — no unsafe defaults; enforces the recovery/IdP circularity rule |
 | ⬜ | Session management + CSRF |
 | ⬜ | Recovery codes, ≥2 passkeys enforced |
 | ⬜ | Dual-control admin recovery |
