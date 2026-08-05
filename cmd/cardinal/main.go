@@ -69,6 +69,8 @@ func run(ctx context.Context, args []string) error {
 		return runMemberships(ctx, rest)
 	case "history":
 		return runHistory(ctx, rest)
+	case "break-glass":
+		return runBreakGlass(rest)
 	case "redact":
 		return runRedact(ctx, rest)
 	case "audit":
@@ -105,6 +107,11 @@ MEMBERSHIP
   members <group> [-at <RFC3339>]          Who is in a group, now or at an instant
   memberships <user> [-at <RFC3339>]       Which groups someone is in, transitively
   history <group> <member>                 Every grant ever, including expired
+
+EMERGENCY ACCESS
+  break-glass generate                     Bootstrap ceremony: create the
+                                           offline emergency keypair
+  break-glass sign <challenge> -key <f>    Sign a challenge with the offline key
 
 PRIVACY
   redact <type> <name> [-yes]              Erase personal data (GDPR Art. 17).

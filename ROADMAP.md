@@ -29,7 +29,7 @@ Living document. Updated as work lands, not as it's planned.
 | ✅ | Backup + restore verification | `make restore-drill` — verified tampering is caught in a restored dump |
 | ✅ | **Break-glass design** | [ADR 0009](docs/adr/0009-recovery-and-break-glass.md) — offline key, public half in config not the DB |
 | ✅ | **GDPR erasure vs. append-only chain** | [ADR 0010](docs/adr/0010-personal-data-and-erasure.md) — enforced in code, `cardinal redact` works |
-| ⬜ | Threat model document | |
+| ✅ | Threat model document | [docs/threat-model.md](docs/threat-model.md) — includes an honest known-gaps list |
 
 ### Verified against `postgres:19beta2` (2026-08-05)
 
@@ -63,7 +63,7 @@ The core thesis was tested before any Go was written:
 | | Item |
 |---|---|
 | ⬜ | WebAuthn registration and login — *unblocked; ADR 0009 decided* |
-| ⬜ | Break-glass keypair, bootstrap ceremony, quarterly drill |
+| 🔨 | Break-glass keypair + bootstrap ceremony — **done**; server-side challenge flow and quarterly drill outstanding |
 | ⬜ | TOTP (migration aid + second factor; never for admin actions) |
 | ⬜ | Session management + CSRF |
 | ⬜ | Recovery codes, ≥2 passkeys enforced |
@@ -156,6 +156,19 @@ Recorded so these don't get relitigated:
   [ADR 0004](docs/adr/0004-postgresql-is-the-only-datastore.md). If ever
   revisited: Valkey (BSD), not Redis (AGPLv3).
 - **Multi-master replication** — single writer, streaming replication.
+
+## Known security gaps
+
+Tracked openly, from [the threat model](docs/threat-model.md):
+
+| Gap | Consequence | Phase |
+|---|---|---|
+| No external anchor for the hash chain | A superuser could rewrite it wholesale and pass validation | Post-1.0 |
+| Session revocation propagation unspecified | A cached decision could outlive a revocation | Blocks Phase 2 |
+| SSH CA key management undecided | Highest-stakes remaining decision | Blocks Phase 4 |
+| No rate limiting or lockout | Online guessing against TOTP | Phase 1 |
+| `sensitive` attribute flag not enforced | The registry declares it; nothing encrypts yet | Phase 1 |
+| No external security review | Self-assessment only | Before production |
 
 ## Standing risks
 

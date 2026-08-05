@@ -33,6 +33,9 @@ security key kept elsewhere). Most recovery events simply never happen.
 
 - **Recovery codes**: high-entropy, single-use, hashed with Argon2id, shown
   once at enrollment.
+- **Recovery email** for ordinary users only, as one signal among several —
+  never for administrators, never alone. See the amendment below for the
+  conditions attached.
 - **Admin-mediated re-enrollment under dual control**: two administrators must
   independently approve restoring a third party's access. This is what stops
   a single compromised (or coerced) admin account from taking over any
@@ -67,30 +70,67 @@ break-glass key itself), **two distinct break-glass keys must sign**.
 `pgBackRest` PITR, plus `make restore-drill`, which restores to a scratch
 database and verifies the audit hash chain. Already implemented.
 
-## On recovery email: rejected as an authentication path
+## On recovery email: permitted for ordinary users, with a tripwire
 
-Recovery email was considered and is **deliberately not implemented**. Three
-reasons, the first of which is decisive for Cardinal specifically:
+**Amended 2026-08-05**, before implementation, on learning that the company's
+email is **Google Workspace** — an identity domain currently independent of
+Cardinal. The original text rejected recovery email outright on the assumption
+that email would authenticate *through* Cardinal. That assumption does not hold
+today, so the conclusion is narrowed rather than kept. The original reasoning is
+preserved below because the risk it describes has not disappeared — it has
+become conditional.
 
-1. **Circular dependency.** Cardinal's purpose is to be the SSO provider for
-   company services — including email. If email access authenticates through
-   Cardinal, then "Cardinal is broken" implies "email is unreachable", and the
-   recovery channel is unavailable in precisely the scenario it exists for.
-   This is the classic identity-system deadlock and it is not theoretical.
-2. **It downgrades the entire system to mailbox control.** A passkey is
-   phishing-resistant and hardware-bound. Email is a bearer channel with no
-   cryptographic binding to anyone. Adding it as a recovery path means the
-   real authentication strength of every account — including administrators —
-   is that of its mailbox. Building AAL3 authentication behind an AAL1
-   recovery path is self-defeating.
-3. **It cannot satisfy the break-glass requirement anyway.** Determining where
-   to send the message requires reading the database, which is exactly what
-   may be unavailable.
+### The circular dependency is latent, not absent
 
-Email *is* used, but only in the opposite direction: as a **notification**
-channel. Recovery attempts, break-glass use, and credential changes generate
-alerts. Notification is a safe use of an unauthenticated channel; authorization
-is not.
+The deadlock to avoid: if email access authenticates through Cardinal, then
+"Cardinal is broken" implies "recovery channel unreachable", precisely when it
+is needed.
+
+Today that does not apply — Google Workspace authenticates independently.
+
+But Google Workspace supports **third-party IdP SSO over custom OIDC profiles**
+(generally available since November 2025), in addition to SAML. Cardinal does
+not implement SAML (ADR 0007), but it *will* be an OIDC provider (Phase 3).
+So the deadlock is not structurally prevented; it is one configuration change
+away, and that change would be made for unrelated reasons by someone not
+thinking about account recovery.
+
+> **Tripwire — this must be enforced, not merely remembered:**
+> **If Google Workspace is ever federated to Cardinal for SSO, recovery email
+> must be disabled in the same change.** Phase 3 must refuse to start, or
+> loudly warn, when an OIDC client is configured for the same domain used for
+> recovery email.
+
+### Accepted, and the price of accepting it
+
+Recovery email is permitted for **ordinary users** as a Layer 2 recovery signal,
+because Google Workspace accounts can themselves be protected by security keys
+and Google's own phishing-resistant authentication — this is not generic email.
+
+Three consequences are accepted knowingly:
+
+1. **Google becomes a root of trust for Cardinal recovery.** Whoever controls a
+   Google Workspace account can recover the corresponding Cardinal account. This
+   is a deliberate dependency on Google's security posture, not an accident.
+2. **A Google Workspace super-admin implicitly becomes a Cardinal admin.**
+   Workspace admins can access or reset any user's mailbox, therefore any
+   recovery message. This is a real privilege-escalation path and it must be
+   named rather than discovered later.
+3. **It remains a bearer channel.** No cryptographic binding to a person.
+
+### What recovery email may never do
+
+- **Recover an administrator's account.** Consequence (2) makes this circular:
+  it would place Cardinal's administrative tier under Workspace's. Admin
+  recovery stays dual-control (Layer 2) or break-glass (Layer 3).
+- **Serve as break-glass.** Determining the address requires reading the
+  database, which is exactly what may be unavailable.
+- **Act alone.** It is one signal in a recovery flow, not a single-factor
+  password-reset link.
+
+Email is also used in the safe direction, as a **notification** channel:
+recovery attempts, break-glass use, and credential changes all generate alerts.
+Notification over an unauthenticated channel is sound; authorization is not.
 
 ## On TOTP: supported, but positioned carefully
 
