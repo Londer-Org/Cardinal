@@ -61,6 +61,13 @@ const (
 	ActionInvitationIssued   = "invitation.issued"
 	ActionInvitationRedeemed = "invitation.redeemed"
 	ActionInvitationRevoked  = "invitation.revoked"
+
+	// Dual-control recovery. Each step is its own action: alerting on "someone
+	// asked to take over an account" is a different question from "a second
+	// administrator agreed", and the second is the one that matters.
+	ActionRecoveryRequested = "recovery.requested"
+	ActionRecoveryApproved  = "recovery.approved"
+	ActionRecoveryCancelled = "recovery.cancelled"
 )
 
 // Event is one immutable record in the journal.

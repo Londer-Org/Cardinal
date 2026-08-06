@@ -196,6 +196,22 @@ Each refusal names the policy that produced it, in the response and in
 **Access → decisions**. That is the demo worth showing someone: neither FreeIPA
 nor Keycloak can tell you *which rule* denied you.
 
+### Recovering an account
+
+Issuing an enrollment link for an account that *already* has passkeys is account
+takeover by shape — open the link, register a credential, and you are that
+person. So it takes two administrators (ADR 0015):
+
+```
+POST /api/recoveries              {"login": "jdoe", "reason": "lost both keys"}
+POST /api/recoveries/jdoe/approve  ← a different administrator
+```
+
+The second approval issues the link. `cardinal invite jdoe` refuses an enrolled
+account and says so. The escape hatch is unchanged: on the host, with database
+access, `cardinal invite` still works — that is already the credential of last
+resort, and no API rule changes it.
+
 ### Adding a second person
 
 This is the part that had no safe answer until ADR 0013. Break-glass is the

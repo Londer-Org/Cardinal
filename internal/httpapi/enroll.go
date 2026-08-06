@@ -271,10 +271,9 @@ type issuedInvitationResponse struct {
 	URL       string    `json:"url"`
 	ExpiresAt time.Time `json:"expiresAt"`
 
-	// Recovery is true when the account already had credentials. The UI says so
-	// loudly: issuing one of these for an account that can already sign in is
-	// how a lost-device recovery works, and also what an account takeover looks
-	// like.
+	// Recovery is always false now that this endpoint refuses enrolled
+	// accounts. Kept so existing clients do not break on a missing field, and
+	// so the distinction stays visible in the API rather than becoming folklore.
 	Recovery bool `json:"recovery"`
 }
 
@@ -301,6 +300,22 @@ func (s *Server) handleIssueInvitation(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// An account that can already sign in is a recovery, not an onboarding, and
+	// recovery takes two administrators.
+	//
+	// Without this one user-admin could mint a link for a directory-admin, open
+	// it, register a passkey and become them — which made the tiers decorative,
+	// because the narrow one contained a path to the broad one.
+	if recovery {
+		s.log.WarnContext(ctx, "refused a single-control invitation for an enrolled account",
+			"subject", entity.ID, "login", entity.Name, "actor", session.SubjectID)
+		writeError(w, http.StatusConflict,
+			entity.Name+" already has a passkey, so issuing a link would restore "+
+				"access rather than grant it for the first time. That needs two "+
+				"administrators — open a recovery request instead")
+		return
+	}
+
 	actorID := session.SubjectID
 	issued, err := s.store.IssueInvitation(ctx, entity.ID, &actorID, store.InvitationTTL)
 	if err != nil {
@@ -309,16 +324,8 @@ func (s *Server) handleIssueInvitation(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if recovery {
-		// Warning level, because this is the shape of an account takeover as
-		// well as of a legitimate recovery, and the two are indistinguishable
-		// from the record alone.
-		s.log.WarnContext(ctx, "invitation issued for an account that can already sign in",
-			"subject", entity.ID, "login", entity.Name, "actor", actorID)
-	} else {
-		s.log.InfoContext(ctx, "invitation issued",
-			"subject", entity.ID, "login", entity.Name, "actor", actorID)
-	}
+	s.log.InfoContext(ctx, "invitation issued",
+		"subject", entity.ID, "login", entity.Name, "actor", actorID)
 
 	writeJSON(w, http.StatusCreated, issuedInvitationResponse{
 		Login:     entity.Name,

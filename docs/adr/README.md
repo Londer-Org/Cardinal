@@ -24,6 +24,7 @@ isn't finished.
 | [0012](0012-the-directory-administers-itself-through-cedar.md) | The directory administers itself through Cedar | Accepted |
 | [0013](0013-enrollment-invitations.md) | Enrollment invitations replace break-glass as the bootstrap path | Accepted |
 | [0014](0014-break-glass-removed.md) | Break-glass removed; the CLI is the recovery path | Accepted |
+| [0015](0015-dual-control-recovery.md) | Recovery takes two administrators | Accepted |
 
 ## Conventions
 

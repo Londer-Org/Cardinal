@@ -145,6 +145,17 @@ func (s *Server) Handler() http.Handler {
 
 	// Issuing them is administration.
 	mux.Handle("POST /api/invitations", people(s.handleIssueInvitation))
+
+	// Recovery restores an account that can already sign in, so it can mint a
+	// credential on an administrator's account. That needs the broad tier, and
+	// two of them.
+	recovery := func(h http.HandlerFunc) http.Handler {
+		return s.requireAuth(s.requirePermission(policy.ActionAdministerData, h))
+	}
+	mux.Handle("GET /api/recoveries", recovery(s.handleListRecoveries))
+	mux.Handle("POST /api/recoveries", recovery(s.handleRequestRecovery))
+	mux.Handle("POST /api/recoveries/{login}/approve", recovery(s.handleApproveRecovery))
+	mux.Handle("DELETE /api/recoveries/{login}", recovery(s.handleCancelRecovery))
 	mux.Handle("GET /api/invitations", people(s.handleListInvitations))
 	mux.Handle("DELETE /api/invitations/{login}", people(s.handleRevokeInvitation))
 
