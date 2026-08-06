@@ -36,8 +36,42 @@ flowchart LR
     c -. "short-lived SSH certificates" .-> hosts
 ```
 
-Two integration styles, and the choice between them is the main decision an
-application owner makes.
+## They are layers, not alternatives
+
+Two integration styles — but **not a choice between them**. They sit at
+different layers and compose freely:
+
+| Combination | What it looks like | When |
+|---|---|---|
+| forwardAuth only | The proxy gates the app; the app implements nothing | Most internal applications |
+| OIDC only | The app runs its own login and owns its session | The app is not behind the proxy, or wants its own session lifecycle |
+| **Both** | The proxy gates the host; the app *also* runs OIDC | Defence in depth — unauthenticated traffic never reaches the app, and the app still gets a real identity and refresh tokens |
+
+Using both costs the user nothing, because they share the same Cardinal
+session. Signing in once at the proxy gate means the app's subsequent OIDC
+authorization completes silently — that is single sign-on working, not a second
+login:
+
+```
+session cookie ──▶ forwardAuth      ──▶ 204 + identity headers
+               └─▶ /oidc/authorize  ──▶ code, no interactive step
+```
+
+### One wrinkle if you use both
+
+The two decision points name the application differently:
+
+| Door | Cedar resource |
+|---|---|
+| `forwardAuth` | `Application::"<Host header>"` — e.g. `Application::"aura.example.com"` |
+| OIDC (`AccessApplication`) | `Application::"<registered name>"` — e.g. `Application::"aura"` |
+
+So a policy granting access to `Application::"aura"` does **not** grant access
+to its URL, and vice versa. An application using both needs a rule for each,
+under each name. That is a rough edge rather than a design: nothing today links
+a registered application to the hostnames it answers on, so `forwardAuth` has
+only the `Host` header to key on. Worth knowing before writing policy, and
+recorded as a gap in the [roadmap](../ROADMAP.md).
 
 ## Style 1 — the proxy asks, the app trusts headers
 

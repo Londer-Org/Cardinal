@@ -277,6 +277,7 @@ Tracked openly, from [the threat model](docs/threat-model.md):
 | SSH CA key management undecided | Highest-stakes remaining decision | Blocks Phase 4 |
 | No account lockout | Nothing guessable is unlimited today; reopens with TOTP | With TOTP |
 | The `sensitive` flag is declared and unread | The registry lets an operator mark an attribute sensitive; nothing encrypts or redacts on it | Phase 1 |
+| An application is two Cedar resources depending on the door | `forwardAuth` decides against `Application::"<host>"` and OIDC against `Application::"<registered name>"`, because nothing links a registered application to the hostnames it answers on. An application using both integration styles needs a policy under each name, and granting one does not grant the other | Phase 5 |
 | No `acr` claim, and no assurance levels defined | A client sending `acr_values` gets no `acr` back. Cardinal has the raw material — a device-bound passkey is a stronger assertion than a synced one — but has not defined what its levels *mean*, and inventing one would assert an assurance it has not specified. Same reasoning as refusing to claim `email_verified` | Phase 5 |
 | Replayed authorization codes do not revoke tokens already issued | OIDC Core says the server MUST deny the replay (it does) and SHOULD revoke tokens issued from that code (it does not). `oidc_tokens` has no link back to the authorization request, so the fix is a column plus plumbing through token creation | Phase 5 |
 | No external security review | Self-assessment only | Before production |
