@@ -211,6 +211,7 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("DELETE /api/directory/users/{login}", people(s.handleDisableUser))
 
 	mux.Handle("GET /api/directory/groups", people(s.handleListGroups))
+	mux.Handle("GET /api/directory/applications", people(s.handleListApplicationNames))
 	mux.Handle("POST /api/directory/groups", people(s.handleCreateGroup))
 	mux.Handle("GET /api/directory/groups/{name}", people(s.handleGetGroup))
 	mux.Handle("POST /api/directory/groups/{name}/members", people(s.handleGrantMembership))

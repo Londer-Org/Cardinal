@@ -7,6 +7,7 @@ import {
   consentsSchema,
   createdUserSchema,
   credentialSchema,
+  applicationRefsSchema,
   directoryGroupDetailSchema,
   directoryGroupsSchema,
   directoryUserDetailSchema,
@@ -201,8 +202,15 @@ export const api = {
       request(`/api/directory/users/${encodeURIComponent(login)}`, z.undefined(),
         { method: 'DELETE' }),
 
-    groups: (page: PageQuery) =>
-      request(`/api/directory/groups?${pageParams(page)}`, directoryGroupsSchema),
+    groups: (page: PageQuery, kind: GroupKind = '') =>
+      request(
+        `/api/directory/groups?${pageParams(page)}${kind === '' ? '' : `&kind=${kind}`}`,
+        directoryGroupsSchema,
+      ),
+
+    /** Applications by name, readable by whoever manages groups. */
+    applications: (page: PageQuery) =>
+      request(`/api/directory/applications?${pageParams(page)}`, applicationRefsSchema),
 
     group: (name: string) =>
       request(`/api/directory/groups/${encodeURIComponent(name)}`,
@@ -295,6 +303,9 @@ export const api = {
 }
 
 /** Paging and search, as the directory endpoints expect them. */
+/** Which category of group to list. Empty means all of them. */
+export type GroupKind = '' | 'system' | 'application' | 'plain'
+
 export interface PageQuery {
   q: string
   limit: number
@@ -358,7 +369,10 @@ export const queryKeys = {
   recoveries: ['recoveries'] as const,
   users: (page: PageQuery) => ['directory', 'users', page] as const,
   user: (login: string) => ['directory', 'users', login] as const,
-  groups: (page: PageQuery) => ['directory', 'groups', page] as const,
+  groups: (page: PageQuery, kind: GroupKind) =>
+    ['directory', 'groups', kind, page] as const,
+  refApplications: (page: PageQuery) =>
+    ['directory', 'ref-applications', page] as const,
   group: (name: string) => ['directory', 'groups', name] as const,
   credentials: ['credentials'] as const,
   decisions: (deniedOnly: boolean) => ['decisions', deniedOnly] as const,

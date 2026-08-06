@@ -217,6 +217,15 @@ export type DirectoryGroup = z.infer<typeof directoryGroupSchema>
 
 export const directoryGroupsSchema = paged(directoryGroupSchema)
 
+/** Applications by name only, for an owner picker. */
+export const applicationRefSchema = z.object({
+  name: z.string(),
+  displayName: z.string(),
+})
+export type ApplicationRef = z.infer<typeof applicationRefSchema>
+
+export const applicationRefsSchema = paged(applicationRefSchema)
+
 export const directoryGroupDetailSchema = z.object({
   name: z.string(),
   displayName: z.string(),

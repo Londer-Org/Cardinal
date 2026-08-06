@@ -147,17 +147,62 @@ type GroupSummary struct {
 	Owner string
 }
 
+// GroupKind narrows a group listing to one category.
+//
+// The three are genuinely different things that happen to share a table, and an
+// administrator looking for the group an application uses should not have to
+// read past the ones that hand out administrative power.
+type GroupKind string
+
+const (
+	// AnyGroupKind is the unfiltered listing.
+	AnyGroupKind GroupKind = ""
+
+	// SystemGroups confer authority within Cardinal.
+	SystemGroups GroupKind = "system"
+
+	// ApplicationGroups exist for a registered application.
+	ApplicationGroups GroupKind = "application"
+
+	// PlainGroups belong to neither: ordinary directory structure.
+	PlainGroups GroupKind = "plain"
+)
+
+// condition renders the kind as SQL against the entities alias `e`.
+//
+// Written here rather than assembled at the call site so the filter and the
+// count cannot disagree — a total that counts different rows from the page is
+// worse than no total.
+func (k GroupKind) condition() string {
+	switch k {
+	case SystemGroups:
+		return "e.system"
+	case ApplicationGroups:
+		return "NOT e.system AND e.owner_id IS NOT NULL"
+	case PlainGroups:
+		return "NOT e.system AND e.owner_id IS NULL"
+	case AnyGroupKind:
+		return "true"
+	default:
+		// An unrecognised filter shows everything rather than nothing. A typo
+		// in a query string should not look like an empty directory.
+		return "true"
+	}
+}
+
 // ListGroups returns a page of active groups with their current member counts.
-func (s *Store) ListGroups(ctx context.Context, page Page) ([]*GroupSummary, int, error) {
+func (s *Store) ListGroups(ctx context.Context, page Page, kind GroupKind) ([]*GroupSummary, int, error) {
 	page = page.normalise()
 	pattern := "%" + strings.ToLower(page.Search) + "%"
+	where := `
+		 WHERE e.type = 'group' AND e.disabled_at IS NULL
+		   AND (` + kind.condition() + `)
+		   AND ($1 = '' OR lower(e.name) LIKE $2
+		        OR lower(coalesce(e.display_name, '')) LIKE $2)`
 
 	var total int
-	if err := s.pool.QueryRow(ctx, `
-		SELECT count(*) FROM entities e
-		 WHERE e.type = 'group' AND e.disabled_at IS NULL
-		   AND ($1 = '' OR lower(e.name) LIKE $2
-		        OR lower(coalesce(e.display_name, '')) LIKE $2)`,
+	if err := s.pool.QueryRow(ctx,
+		`SELECT count(*) FROM entities e`+where,
 		page.Search, pattern).Scan(&total); err != nil {
 		return nil, 0, fmt.Errorf("store: counting groups: %w", err)
 	}
@@ -168,10 +213,7 @@ func (s *Store) ListGroups(ctx context.Context, page Page) ([]*GroupSummary, int
 		         WHERE m.group_id = e.id AND m.valid_period @> now()),
 		       e.system, coalesce(o.name, '')
 		  FROM entities e
-		  LEFT JOIN entities o ON o.id = e.owner_id
-		 WHERE e.type = 'group' AND e.disabled_at IS NULL
-		   AND ($1 = '' OR lower(e.name) LIKE $2
-		        OR lower(coalesce(e.display_name, '')) LIKE $2)
+		  LEFT JOIN entities o ON o.id = e.owner_id`+where+`
 		 ORDER BY e.name
 		 LIMIT $3 OFFSET $4`, page.Search, pattern, page.Limit, page.Offset)
 	if err != nil {
@@ -281,4 +323,52 @@ func (s *Store) GroupsOfMember(ctx context.Context, memberID uuid.UUID) ([]*Name
 	}
 	defer rows.Close()
 	return scanNamedGrants(rows)
+}
+
+// ApplicationRef is the least an owner picker needs.
+type ApplicationRef struct {
+	Name        string
+	DisplayName string
+}
+
+// ListApplicationNames returns applications by name, for reference.
+//
+// Deliberately not the full registration. Associating a group with an
+// application means naming it, not inspecting its redirect URIs — and the tier
+// that manages groups is not the tier that registers clients, so handing it the
+// whole record to populate a dropdown would widen access for a dropdown's sake.
+func (s *Store) ListApplicationNames(ctx context.Context, page Page) ([]ApplicationRef, int, error) {
+	page = page.normalise()
+	pattern := "%" + strings.ToLower(page.Search) + "%"
+	where := `
+		 WHERE e.type = 'application' AND e.disabled_at IS NULL
+		   AND ($1 = '' OR lower(e.name) LIKE $2
+		        OR lower(coalesce(e.display_name, '')) LIKE $2)`
+
+	var total int
+	if err := s.pool.QueryRow(ctx,
+		`SELECT count(*) FROM entities e`+where,
+		page.Search, pattern).Scan(&total); err != nil {
+		return nil, 0, fmt.Errorf("store: counting applications: %w", err)
+	}
+
+	rows, err := s.pool.Query(ctx, `
+		SELECT e.name, coalesce(e.display_name, '')
+		  FROM entities e`+where+`
+		 ORDER BY e.name
+		 LIMIT $3 OFFSET $4`, page.Search, pattern, page.Limit, page.Offset)
+	if err != nil {
+		return nil, 0, fmt.Errorf("store: listing applications: %w", err)
+	}
+	defer rows.Close()
+
+	var out []ApplicationRef
+	for rows.Next() {
+		var a ApplicationRef
+		if err := rows.Scan(&a.Name, &a.DisplayName); err != nil {
+			return nil, 0, fmt.Errorf("store: scanning application: %w", err)
+		}
+		out = append(out, a)
+	}
+	return out, total, rows.Err()
 }

@@ -51,6 +51,9 @@ interface DataTableProps<T> {
   isPending: boolean
   empty: string
   onRowClick?: (row: T) => void
+
+  /** Rendered beside the search box, for narrowing that is not free text. */
+  filters?: React.ReactNode
 }
 
 /**
@@ -80,6 +83,7 @@ export function DataTable<T>({
   isPending,
   empty,
   onRowClick,
+  filters,
 }: DataTableProps<T>) {
   const page = Math.floor(offset / limit) + 1
   const pages = Math.max(1, Math.ceil(total / limit))
@@ -93,15 +97,18 @@ export function DataTable<T>({
     // need while looking through a long list are the two things you cannot
     // reach.
     <div className="flex h-full min-h-0 flex-col gap-3">
-      <div className="relative max-w-sm shrink-0">
-        <SearchIcon className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
-        <Input
-          className="pl-9"
-          value={search}
-          onChange={(event) => { onSearch(event.target.value) }}
-          placeholder={searchPlaceholder}
-          aria-label={searchPlaceholder}
-        />
+      <div className="flex shrink-0 flex-wrap items-center gap-2">
+        <div className="relative max-w-sm flex-1">
+          <SearchIcon className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            className="pl-9"
+            value={search}
+            onChange={(event) => { onSearch(event.target.value) }}
+            placeholder={searchPlaceholder}
+            aria-label={searchPlaceholder}
+          />
+        </div>
+        {filters}
       </div>
 
       {/* min-h-0 is what lets this shrink inside a flex column rather than

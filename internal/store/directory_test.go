@@ -93,7 +93,7 @@ func TestExpiredGrantsLeaveTheMemberList(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, members, "an expired grant must not appear as membership")
 
-	groups, _, err := s.ListGroups(ctx, store.Page{})
+	groups, _, err := s.ListGroups(ctx, store.Page{}, store.AnyGroupKind)
 	require.NoError(t, err)
 	for _, g := range groups {
 		if g.Name == "contractors" {
@@ -229,4 +229,53 @@ func TestUnboundedListingIsStillPaged(t *testing.T) {
 	huge, _, err := s.ListUsers(ctx, store.Page{Limit: 100_000})
 	require.NoError(t, err)
 	assert.LessOrEqual(t, len(huge), 25, "an absurd limit must be clamped")
+}
+
+// TestGroupKindsAreDistinguishable.
+//
+// Three genuinely different things share one table. An administrator looking
+// for the group an application uses should not have to read past the ones that
+// hand out administrative power, and the count must agree with the page — a
+// total that counts different rows is worse than no total.
+func TestGroupKindsAreDistinguishable(t *testing.T) {
+	s := newStore(t)
+	ctx := t.Context()
+
+	app := mustCreate(t, s, directory.TypeApplication, "aura")
+	mustCreate(t, s, directory.TypeGroup, "everyone")
+
+	owned, err := directory.NewEntity(directory.TypeGroup, "aura-users", "")
+	require.NoError(t, err)
+	owned.OwnerID = &app.ID
+	require.NoError(t, s.CreateEntity(ctx, owned, nil))
+
+	// The system case is covered end to end rather than here. This harness
+	// truncates every table for isolation, which removes the groups the
+	// migrations seed — and there is deliberately no store method to mark one,
+	// because an API that can confer authority within Cardinal is the thing
+	// migration 0013 exists to keep out of reach.
+	names := func(kind store.GroupKind) []string {
+		groups, total, err := s.ListGroups(ctx, store.Page{}, kind)
+		require.NoError(t, err)
+		out := make([]string, 0, len(groups))
+		for _, g := range groups {
+			out = append(out, g.Name)
+		}
+		assert.Equal(t, len(out), total, "the total must count the same rows as the page")
+		return out
+	}
+
+	assert.Empty(t, names(store.SystemGroups),
+		"nothing here is a system group; see TestSystemGroupsAreMarked in the "+
+			"end-to-end suite, where the migrations are intact")
+
+	assert.Equal(t, []string{"aura-users"}, names(store.ApplicationGroups))
+
+	assert.Equal(t, []string{"everyone"}, names(store.PlainGroups))
+
+	all := names(store.AnyGroupKind)
+	assert.ElementsMatch(t, []string{"everyone", "aura-users"}, all)
+
+	// A typo in a query string should not look like an empty directory.
+	assert.ElementsMatch(t, all, names(store.GroupKind("nonsense")))
 }

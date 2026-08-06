@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { api, queryKeys, type PageQuery } from '@/lib/api'
+import { api, queryKeys, type GroupKind, type PageQuery } from '@/lib/api'
 
 export function useUsers(page: PageQuery) {
   return useQuery({
@@ -20,10 +20,19 @@ export function useUser(login: string | null) {
   })
 }
 
-export function useGroups(page: PageQuery) {
+export function useGroups(page: PageQuery, kind: GroupKind = '') {
   return useQuery({
-    queryKey: queryKeys.groups(page),
-    queryFn: () => api.directory.groups(page),
+    queryKey: queryKeys.groups(page, kind),
+    queryFn: () => api.directory.groups(page, kind),
+    placeholderData: (previous) => previous,
+  })
+}
+
+/** Applications by name, for an owner picker. */
+export function useApplicationRefs(page: PageQuery) {
+  return useQuery({
+    queryKey: queryKeys.refApplications(page),
+    queryFn: () => api.directory.applications(page),
     placeholderData: (previous) => previous,
   })
 }

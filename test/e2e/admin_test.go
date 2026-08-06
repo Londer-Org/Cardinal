@@ -112,18 +112,21 @@ func TestAdminDenialIsLoggedAsADecision(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// The action the endpoint actually asks for. This used to assert
+	// AdministerDirectory, which stopped being what /api/applications evaluates
+	// the moment administration was split into tiers — and kept passing on
+	// records another test had written.
 	for _, record := range records {
-		if record.DecisionPoint == "adminAPI" && record.Action == "AdministerDirectory" {
-			if record.Allowed {
-				continue
-			}
+		if record.DecisionPoint == "adminAPI" &&
+			record.Action == "ManageApplications" && !record.Allowed {
 			if record.Explanation == "" {
 				t.Error("the decision carries no explanation, so the explorer has nothing to show")
 			}
 			return
 		}
 	}
-	t.Fatal("the refused admin request was not logged as a decision")
+	t.Fatalf("the refused admin request was not logged as a decision; saw %d records",
+		len(records))
 }
 
 // TestUnauthenticatedAdminAPIIsUnauthorized.

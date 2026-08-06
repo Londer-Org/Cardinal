@@ -13,6 +13,7 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { ErrorMessage } from '@/components/ErrorMessage'
+import { ApplicationPicker } from './ApplicationPicker'
 import { useCreateGroup } from './useDirectory'
 
 export function CreateGroup() {
@@ -89,11 +90,10 @@ export function CreateGroup() {
 
           <div className="space-y-1.5">
             <Label htmlFor="group-owner">For an application</Label>
-            <Input
+            <ApplicationPicker
               id="group-owner"
               value={owner}
-              onChange={(event) => { setOwner(event.target.value) }}
-              placeholder="aura"
+              onChange={setOwner}
             />
             <p className="text-xs text-muted-foreground">
               {/* Organisational only. Cardinal treats an owned group exactly

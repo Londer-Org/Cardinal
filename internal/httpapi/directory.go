@@ -310,7 +310,8 @@ func (s *Server) handleListGroups(w http.ResponseWriter, r *http.Request) {
 
 	page := pageFrom(r)
 
-	groups, total, err := s.store.ListGroups(ctx, page)
+	kind := store.GroupKind(r.URL.Query().Get("kind"))
+	groups, total, err := s.store.ListGroups(ctx, page, kind)
 	if err != nil {
 		s.log.ErrorContext(ctx, "listing groups failed", "error", err)
 		writeError(w, http.StatusInternalServerError, "could not list groups")
@@ -328,6 +329,38 @@ func (s *Server) handleListGroups(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, pagedResponse[groupResponse]{
 		Items: out, Total: total,
 		Limit: len(out), Offset: page.Offset,
+	})
+}
+
+// handleListApplicationNames lists applications for an owner picker.
+//
+// Under ManageUsers, not ManageApplications: the tier that creates groups needs
+// to name an application to associate one with, and would otherwise be refused
+// the list it has to choose from. It returns names only — associating a group
+// means naming an application, not inspecting its redirect URIs, so this does
+// not widen access to a registration for a dropdown's sake.
+func (s *Server) handleListApplicationNames(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	page := pageFrom(r)
+
+	apps, total, err := s.store.ListApplicationNames(ctx, page)
+	if err != nil {
+		s.log.ErrorContext(ctx, "listing application names failed", "error", err)
+		writeError(w, http.StatusInternalServerError, "could not list applications")
+		return
+	}
+
+	type ref struct {
+		Name        string `json:"name"`
+		DisplayName string `json:"displayName"`
+	}
+	out := make([]ref, 0, len(apps))
+	for _, a := range apps {
+		out = append(out, ref{Name: a.Name, DisplayName: a.DisplayName})
+	}
+
+	writeJSON(w, http.StatusOK, pagedResponse[ref]{
+		Items: out, Total: total, Limit: len(out), Offset: page.Offset,
 	})
 }
 
