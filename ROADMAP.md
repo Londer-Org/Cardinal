@@ -106,14 +106,15 @@ first genuinely useful milestone.*
 | ✅ | `forwardAuth` endpoint — identity headers, login redirect with open-redirect guard |
 | ✅ | Decision logging — every decision names the policy that made it |
 | ✅ | **Decision explorer** — decisions name the rule that decided; clicking it shows the rule text |
-| ✅ | **End-to-end stack with real Traefik** — 8 tests, `make e2e-up && make e2e` |
+| ✅ | **End-to-end stack with real Traefik** — 13 tests, `make e2e-up && make e2e` |
 
 ### The end-to-end stack
 
 Framed as a **test that happens to be demoable**, not a demo. A demo nobody runs
 rots into a liability; a stack CI exercises stays honest.
 
-It earned its keep immediately, surfacing two things no unit test could:
+It has now found five defects no unit test could, listed here because the
+pattern is the point — every one compiled and passed the unit suite:
 
 - **Sessions need a parent-domain cookie.** A cookie set at `id.example.com` is
   never sent to `app.example.com`, so forwardAuth SSO simply did not work. Added
@@ -122,6 +123,17 @@ It earned its keep immediately, surfacing two things no unit test could:
 - **There was no way to apply the schema in a container.** Migrations were a
   Makefile `psql` loop, which works on a laptop and not at all for a deployment.
   Added `cardinal migrate`, embedding the migrations in the binary.
+- **Registration accepted redirect URIs the provider then refused.** Cardinal
+  treated any `*.localhost` host as loopback; RFC 8252 means literal
+  `127.0.0.1`/`::1`, and the provider enforces the narrow reading — so a client
+  could be registered that could never complete a login.
+- **Clients were granted scopes they were not registered for.** The library
+  treats standard OIDC scopes as always permissible, so a client registered for
+  `openid profile` could request `offline_access` and receive a refresh token
+  nobody approved. Cardinal now narrows scopes at the authorization request.
+- **Refresh-token rotation had never actually run.** It worked, but nothing had
+  exercised it; the test that does also caught that `oauth2.TokenSource` only
+  refreshes an *expired* token, which had made rotation look broken.
 
 ```
 examples/
@@ -167,7 +179,7 @@ works.
 | ✅ | Frontend resumes an OIDC flow after sign-in — browser login works end to end |
 | ⬜ | Consent screen |
 | ⬜ | Client management UI |
-| ⬜ | An OIDC relying party in the e2e stack |
+| ✅ | **An OIDC relying party in the e2e stack** — coreos/go-oidc, an independent client library; 5 tests |
 | ⬜ | Client management UI |
 | ⬜ | OpenID Foundation conformance suite |
 

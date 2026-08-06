@@ -45,13 +45,27 @@ func TestRedirectURIValidation(t *testing.T) {
 			because:  "an authorization code would cross the network in the clear",
 		},
 		{
-			name: "http on loopback is permitted", uri: "http://127.0.0.1:1234/callback",
+			name: "http on loopback IP is permitted", uri: "http://127.0.0.1:1234/callback",
 			accepted: true,
 			because:  "RFC 8252 requires it for native apps, and the port varies per launch",
 		},
 		{
-			name: "http on localhost is permitted", uri: "http://localhost:8080/callback",
-			accepted: true,
+			name: "http on a localhost hostname needs dev_mode", uri: "http://localhost:8080/callback",
+			accepted: false,
+			because: "a localhost hostname resolves through DNS and is not loopback in " +
+				"RFC 8252's sense; the provider refuses http for it at authorization " +
+				"time, so accepting it here would register a client that can never " +
+				"complete a login",
+		},
+		{
+			name: "http on a .localhost subdomain needs dev_mode too",
+			uri:  "http://app.localhost:8100/callback", accepted: false,
+			because: "same reasoning — this is the case that actually bit, in the " +
+				"end-to-end stack",
+		},
+		{
+			name: "http on localhost with dev_mode is permitted",
+			uri:  "http://localhost:8080/callback", devMode: true, accepted: true,
 		},
 		{
 			name: "plain http with dev_mode is permitted", uri: "http://app.internal/cb",

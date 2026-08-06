@@ -207,15 +207,23 @@ func validateRedirectURI(raw string, devMode bool) (*url.URL, error) {
 			"match exactly", ErrInsecureRedirect, raw)
 
 	case u.Scheme == "http":
-		// Loopback stays permitted regardless: RFC 8252 requires it for native
-		// apps, and the port varies per launch so it cannot be pinned.
-		if isLoopback(u.Hostname()) {
+		// Literal loopback stays permitted: RFC 8252 requires it for native
+		// apps, where the port varies per launch and so cannot be pinned.
+		//
+		// Note this is IP loopback only. A *.localhost hostname is a browser
+		// convenience, not loopback in RFC 8252's sense, and the OIDC provider
+		// rejects http for it at authorization time. Accepting such a URI here
+		// would register a client that can never complete a login — the
+		// registration succeeds, and the failure surfaces much later to
+		// somebody else.
+		if isLoopbackIP(u.Hostname()) {
 			return u, nil
 		}
 		if !devMode {
 			return nil, fmt.Errorf(
 				"%w: %q uses http, so an authorization code would cross the "+
-					"network in the clear; use https, or set dev_mode deliberately",
+					"network in the clear, and the provider will refuse it at "+
+					"authorization time; use https, or set dev_mode deliberately",
 				ErrInsecureRedirect, raw)
 		}
 	}
@@ -223,9 +231,14 @@ func validateRedirectURI(raw string, devMode bool) (*url.URL, error) {
 	return u, nil
 }
 
-func isLoopback(host string) bool {
-	return host == "localhost" || host == "127.0.0.1" || host == "::1" ||
-		strings.HasSuffix(host, ".localhost")
+// isLoopbackIP reports whether a host is literal IP loopback.
+//
+// Deliberately narrower than "looks local". RFC 8252's exemption is for native
+// applications binding an ephemeral port on the loopback interface; hostnames
+// like localhost or app.localhost resolve through DNS and are not covered,
+// which matters because the OIDC provider enforces the narrow reading.
+func isLoopbackIP(host string) bool {
+	return host == "127.0.0.1" || host == "::1"
 }
 
 // OIDCClientByID loads a client for a request.

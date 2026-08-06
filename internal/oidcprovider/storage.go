@@ -60,9 +60,22 @@ func (s *Storage) AuthorizeClientIDSecret(ctx context.Context, clientID, secret 
 // ── Authorization requests ─────────────────────────────────────────────────
 
 func (s *Storage) CreateAuthRequest(ctx context.Context, req *oidc.AuthRequest, _ string) (op.AuthRequest, error) {
+	// Scopes are narrowed to what the client is registered for, here, before
+	// anything is recorded.
+	//
+	// The library cannot do this for us: it treats the standard OIDC scopes —
+	// profile, email, offline_access — as always permissible and never consults
+	// the client's IsScopeAllowed for them. That is defensible for a generic
+	// library and wrong for Cardinal, because offline_access is what decides
+	// whether a refresh token is issued. Without this, a client registered for
+	// `openid profile` could ask for offline_access and walk away with a
+	// long-lived credential nobody approved it for — and the client listing
+	// would still show the narrow registration.
+	scopes := s.permittedScopes(ctx, req.ClientID, req.Scopes)
+
 	stored := &store.AuthRequest{
 		ClientID:            req.ClientID,
-		Scopes:              req.Scopes,
+		Scopes:              scopes,
 		ResponseType:        string(req.ResponseType),
 		RedirectURI:         req.RedirectURI,
 		State:               req.State,
@@ -75,6 +88,37 @@ func (s *Storage) CreateAuthRequest(ctx context.Context, req *oidc.AuthRequest, 
 		return nil, err
 	}
 	return &authRequest{r: stored}, nil
+}
+
+// permittedScopes intersects a request's scopes with the client's registration.
+//
+// `openid` is always kept: without it the request is not an OIDC request at
+// all, and dropping it would produce a confusing failure far from the cause.
+// An unknown client returns the requested scopes unchanged, because the
+// library rejects the request on its own moments later and duplicating that
+// judgement here would only add a second place for it to differ.
+func (s *Storage) permittedScopes(ctx context.Context, clientID string, requested []string) []string {
+	c, err := s.store.OIDCClientByID(ctx, clientID)
+	if err != nil {
+		return requested
+	}
+
+	allowed := make(map[string]struct{}, len(c.Scopes))
+	for _, scope := range c.Scopes {
+		allowed[scope] = struct{}{}
+	}
+
+	kept := make([]string, 0, len(requested))
+	for _, scope := range requested {
+		if scope == oidc.ScopeOpenID {
+			kept = append(kept, scope)
+			continue
+		}
+		if _, ok := allowed[scope]; ok {
+			kept = append(kept, scope)
+		}
+	}
+	return kept
 }
 
 func (s *Storage) AuthRequestByID(ctx context.Context, id string) (op.AuthRequest, error) {

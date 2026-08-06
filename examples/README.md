@@ -12,14 +12,23 @@ make e2e           # run the end-to-end tests against it
 make e2e-down      # stop and remove
 ```
 
-Then open <http://app.localhost:8100>. You will be sent to Cardinal to sign in,
-and land back on a page showing the identity headers that arrived.
+Two applications, protected two different ways:
+
+- <http://app.localhost:8100> — knows nothing about authentication; Traefik asks
+  Cardinal on its behalf via `forwardAuth`.
+- <http://client.localhost:8100> — speaks OpenID Connect itself, and needs no
+  proxy in front of it.
+
+Both send you to Cardinal to sign in. The first lands on a page showing the
+identity headers that arrived; the second shows the claims from an ID token it
+verified against Cardinal's published JWKS.
 
 ## What is here
 
 | Path | Purpose |
 |---|---|
 | `protected-app/` | ~120 lines that read `X-Auth-Request-*` and render them. Deliberately boring — this is what people copy. |
+| `oidc-client/` | An OpenID Connect relying party using **coreos/go-oidc** — deliberately a different library from the provider's own, so satisfying it is evidence rather than self-agreement. |
 | `traefik/dynamic.yml` | The `forwardAuth` middleware. The comments are the interesting part. |
 | `compose.yml` | The whole stack |
 | `cardinal.e2e.toml` | Configuration, annotated |

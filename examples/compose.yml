@@ -74,12 +74,32 @@ services:
 
   traefik:
     image: traefik:v3.6
+    networks:
+      default:
+        # Containers resolve the public hostnames to Traefik, so the relying
+        # party fetches discovery from exactly the URL the browser uses.
+        #
+        # This is not a test convenience: an OIDC issuer must be reachable at
+        # one identifier from both the browser and the backend, because the
+        # issuer in the token has to match what the client discovered. Papering
+        # over it with a separate internal URL is how "issuer mismatch" bugs
+        # reach production.
+        aliases:
+          - id.localhost
+          - app.localhost
+          - client.localhost
     depends_on:
       - cardinal
       - protected-app
     command:
       - --providers.file.filename=/etc/traefik/dynamic.yml
-      - --entrypoints.web.address=:80
+      # Port 8100 inside the network as well as outside, so the issuer URL
+      # http://id.localhost:8100 resolves identically from the browser and from
+      # a container. An OIDC issuer must be one identifier everywhere: the
+      # value in the token has to match what the client discovered, and papering
+      # over a difference with a separate internal URL is how "issuer mismatch"
+      # reaches production.
+      - --entrypoints.web.address=:8100
       - --api.dashboard=false
       - --log.level=INFO
       # Access logs make it visible which requests were admitted and which the
@@ -87,9 +107,30 @@ services:
       # wants to see.
       - --accesslog=true
     ports:
-      - "8100:80"
+      - "8100:8100"
     volumes:
       - ./traefik/dynamic.yml:/etc/traefik/dynamic.yml:ro
+
+  # An OpenID Connect relying party, using coreos/go-oidc.
+  #
+  # Deliberately a different library from the one the provider is built on:
+  # zitadel's server satisfying zitadel's client would mostly prove they agree
+  # with each other.
+  oidc-client:
+    build:
+      context: ./oidc-client
+    depends_on:
+      cardinal:
+        condition: service_started
+    environment:
+      OIDC_ISSUER: "http://id.localhost:8100"
+      OIDC_REDIRECT_URL: "http://client.localhost:8100/callback"
+      LISTEN: "0.0.0.0:8000"
+      # Set by `make e2e-seed`, which registers the client and writes the id
+      # into examples/.oidc-client-id.
+      OIDC_CLIENT_ID: "${OIDC_CLIENT_ID:-}"
+    expose:
+      - "8000"
 
   protected-app:
     build:

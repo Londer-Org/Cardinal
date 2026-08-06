@@ -47,3 +47,10 @@ public_key = "cardinal-bg-v1:+ceq8nAzjyVBHpb/6eNMZeA26XgyJ/Fvzl66OLVHjR4="
 
 [recovery]
 email_enabled = false
+
+[oidc]
+enabled = true
+
+# A fixture, like the break-glass key beside it. Generate your own with
+# `openssl rand -base64 32` and keep it wherever the deployment's secrets live.
+signing_key_encryption_key = "e2e-fixture-signing-key-encryption-not-for-real-use"

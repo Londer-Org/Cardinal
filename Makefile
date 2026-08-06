@@ -73,7 +73,8 @@ e2e-up: ## Build and start the end-to-end stack (Traefik + a protected app)
 		if curl -sf -H 'Host: id.localhost' http://127.0.0.1:8100/api/health >/dev/null 2>&1; then \
 			echo ' ready'; break; fi; printf '.'; sleep 1; done
 	@$(MAKE) --no-print-directory e2e-seed
-	@echo '==> http://app.localhost:8100 (protected)  ·  http://id.localhost:8100 (Cardinal)'
+	@echo '==> http://app.localhost:8100 (forwardAuth)  ·  http://client.localhost:8100 (OIDC)'
+	@echo '    http://id.localhost:8100 (Cardinal)'
 
 COMPOSE_E2E := docker compose -f examples/compose.yml
 
@@ -96,6 +97,25 @@ e2e-seed: ## Create the end-to-end user and activate the policy set
 	@# the version just activated.
 	@$(COMPOSE_E2E) restart cardinal >/dev/null
 	@sleep 4
+	@$(MAKE) --no-print-directory e2e-seed-oidc
+
+.PHONY: e2e-seed-oidc
+e2e-seed-oidc: ## Register the relying party and start it with its client id
+	@# The client id is generated, so the relying party cannot be configured
+	@# until Cardinal has issued one. Registering first and starting the client
+	@# after is the only ordering that works.
+	@if ! $(COMPOSE_E2E) exec -T cardinal cardinal app list 2>/dev/null | grep -q e2e-client; then \
+		$(COMPOSE_E2E) exec -T cardinal cardinal app register e2e-client \
+			-display 'End-to-end relying party' \
+			-redirect 'http://client.localhost:8100/callback' \
+			-dev-mode \
+			-scopes 'openid,profile,email,groups,offline_access' \
+			-config /etc/cardinal/cardinal.toml >/dev/null; \
+	fi
+	@$(COMPOSE_E2E) exec -T postgres psql -U cardinal -d cardinal -tAc \
+		"SELECT client_id FROM oidc_clients LIMIT 1" | tr -d ' \r\n' > examples/.oidc-client-id
+	@OIDC_CLIENT_ID="$$(cat examples/.oidc-client-id)" $(COMPOSE_E2E) up -d oidc-client >/dev/null
+	@echo "  relying party registered: $$(cut -c1-16 examples/.oidc-client-id)…"
 
 .PHONY: e2e
 e2e: ## Run the end-to-end tests against the running stack

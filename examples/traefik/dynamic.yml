@@ -71,6 +71,14 @@ http:
       entryPoints: [web]
       middlewares: [strip-identity, cardinal-auth]
 
+    # The OpenID Connect relying party. NOT behind forwardAuth: it does its own
+    # authentication, via the provider, which is the whole point — an
+    # application that speaks OIDC does not need a proxy in front of it.
+    oidc-client:
+      rule: "Host(`client.localhost`)"
+      service: oidc-client
+      entryPoints: [web]
+
     # The same application with no auth, for the end-to-end test to prove the
     # middleware is what makes the difference rather than something incidental.
     # Never do this in a real deployment.
@@ -88,3 +96,7 @@ http:
       loadBalancer:
         servers:
           - url: "http://protected-app:8000"
+    oidc-client:
+      loadBalancer:
+        servers:
+          - url: "http://oidc-client:8000"
