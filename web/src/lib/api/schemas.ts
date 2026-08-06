@@ -207,6 +207,11 @@ export const directoryGroupSchema = z.object({
   name: z.string(),
   displayName: z.string(),
   members: z.number(),
+  // Membership confers authority within Cardinal. Shown because an
+  // administrator cannot otherwise tell aura-admins from directory-admins.
+  system: z.boolean(),
+  // The application this group exists for, empty when none.
+  owner: z.string(),
 })
 export type DirectoryGroup = z.infer<typeof directoryGroupSchema>
 
@@ -215,6 +220,8 @@ export const directoryGroupsSchema = paged(directoryGroupSchema)
 export const directoryGroupDetailSchema = z.object({
   name: z.string(),
   displayName: z.string(),
+  system: z.boolean(),
+  owner: z.string(),
   members: z.array(grantSchema),
 })
 export type DirectoryGroupDetail = z.infer<typeof directoryGroupDetailSchema>

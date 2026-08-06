@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/arthur-lonfils/cardinal/internal/directory"
+	"github.com/arthur-lonfils/cardinal/internal/policy"
 	"github.com/arthur-lonfils/cardinal/internal/store"
 	"github.com/arthur-lonfils/cardinal/internal/temporal"
 )
@@ -293,6 +294,15 @@ type groupResponse struct {
 	Name        string `json:"name"`
 	DisplayName string `json:"displayName"`
 	Members     int    `json:"members"`
+
+	// System marks a group whose membership confers authority within Cardinal.
+	// The console shows it, because an administrator cannot otherwise tell
+	// aura-admins from directory-admins by looking.
+	System bool `json:"system"`
+
+	// Owner is the application a group exists for, empty when it belongs to
+	// nobody in particular.
+	Owner string `json:"owner"`
 }
 
 func (s *Server) handleListGroups(w http.ResponseWriter, r *http.Request) {
@@ -311,6 +321,7 @@ func (s *Server) handleListGroups(w http.ResponseWriter, r *http.Request) {
 	for _, g := range groups {
 		out = append(out, groupResponse{
 			Name: g.Name, DisplayName: g.DisplayName, Members: g.Members,
+			System: g.System, Owner: g.Owner,
 		})
 	}
 
@@ -336,9 +347,18 @@ func (s *Server) handleGetGroup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	owner := ""
+	if entity.OwnerID != nil {
+		if app, err := s.store.GetEntity(ctx, *entity.OwnerID); err == nil {
+			owner = app.Name
+		}
+	}
+
 	writeJSON(w, http.StatusOK, map[string]any{
 		"name":        entity.Name,
 		"displayName": entity.DisplayName,
+		"system":      entity.System,
+		"owner":       owner,
 		"members":     describeGrants(members),
 	})
 }
@@ -350,6 +370,11 @@ func (s *Server) handleCreateGroup(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Name        string `json:"name"`
 		DisplayName string `json:"displayName"`
+
+		// Owner names the application this group exists for. Organisational
+		// only: Cardinal treats an owned group exactly like any other, and it
+		// still reaches the application through the groups claim.
+		Owner string `json:"owner"`
 	}
 	if err := decodeJSON(r, &req); err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
@@ -363,6 +388,19 @@ func (s *Server) handleCreateGroup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// A group created through the API is never a system group. Conferring
+	// authority within Cardinal is a decision the policy set makes, and it
+	// should not be reachable by choosing a name in a form.
+	ownerName := strings.TrimSpace(req.Owner)
+	if ownerName != "" {
+		app, err := s.store.LookupEntity(ctx, directory.TypeApplication, ownerName)
+		if err != nil {
+			writeError(w, http.StatusNotFound, "no such application")
+			return
+		}
+		entity.OwnerID = &app.ID
+	}
+
 	actorID := session.SubjectID
 	if err := s.store.CreateEntity(ctx, entity, &actorID); err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
@@ -370,9 +408,12 @@ func (s *Server) handleCreateGroup(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.log.InfoContext(ctx, "group created",
-		"name", entity.Name, "actor", session.SubjectID)
+		"name", entity.Name, "owner", ownerName, "actor", session.SubjectID)
+
+	// Reports the owner it was given. Echoing an empty one back would tell the
+	// caller their request was ignored when it was not.
 	writeJSON(w, http.StatusCreated, groupResponse{
-		Name: entity.Name, DisplayName: entity.DisplayName,
+		Name: entity.Name, DisplayName: entity.DisplayName, Owner: ownerName,
 	})
 }
 
@@ -383,6 +424,48 @@ type grantRequest struct {
 	// directory ends up full of — so the UI asks, and the CLI warns.
 	Until  *time.Time `json:"until"`
 	Reason string     `json:"reason"`
+}
+
+// requireAuthorityOver refuses to let a narrow tier grant a broad one.
+//
+// Membership of a system group *is* administrative authority, so handing one
+// out is an act of the same weight as the power it confers. ManageUsers is
+// enough to run onboarding and to manage the groups an application cares about;
+// it is not enough to make somebody an administrator, because then a user-admin
+// could simply grant themselves directory-admins — which is exactly what they
+// could do before this existed.
+//
+// Returns true when the caller may proceed; it has already written the refusal
+// otherwise.
+func (s *Server) requireAuthorityOver(w http.ResponseWriter, r *http.Request, group *directory.Entity) bool {
+	if !group.System {
+		return true
+	}
+
+	ctx := r.Context()
+	session, _ := SessionFrom(ctx)
+
+	decision, subject, err := s.decideAction(ctx, session, policy.ActionAdministerData)
+	if err != nil {
+		s.log.ErrorContext(ctx, "authority check failed", "error", err)
+		writeError(w, http.StatusServiceUnavailable, "authorization unavailable")
+		return false
+	}
+	s.logAdminDecision(ctx, subject, decision, "AdministerDirectory",
+		r.Method+" "+r.URL.Path)
+
+	if !decision.Allowed {
+		s.log.WarnContext(ctx, "refused a system-group change from a narrow tier",
+			"group", group.Name, "actor", session.SubjectID)
+		writeJSON(w, http.StatusForbidden, map[string]any{
+			"error": group.Name + " confers authority within Cardinal, so changing " +
+				"its membership needs full directory administration — managing " +
+				"people is not enough to make somebody an administrator",
+			"policy": decision.Reasons,
+		})
+		return false
+	}
+	return true
 }
 
 func (s *Server) handleGrantMembership(w http.ResponseWriter, r *http.Request) {
@@ -398,6 +481,9 @@ func (s *Server) handleGrantMembership(w http.ResponseWriter, r *http.Request) {
 	group, err := s.store.LookupEntity(ctx, directory.TypeGroup, r.PathValue("name"))
 	if err != nil {
 		writeError(w, http.StatusNotFound, "no such group")
+		return
+	}
+	if !s.requireAuthorityOver(w, r, group) {
 		return
 	}
 
@@ -450,6 +536,12 @@ func (s *Server) handleRevokeMembership(w http.ResponseWriter, r *http.Request) 
 	group, err := s.store.LookupEntity(ctx, directory.TypeGroup, r.PathValue("name"))
 	if err != nil {
 		writeError(w, http.StatusNotFound, "no such group")
+		return
+	}
+	// Revocation too. Removing the last administrator is not an escalation, but
+	// it is a denial of service on the directory, and a tier that cannot grant
+	// the power should not be able to take it away either.
+	if !s.requireAuthorityOver(w, r, group) {
 		return
 	}
 	member, err := s.lookupMember(ctx, r.PathValue("member"))

@@ -69,6 +69,17 @@ type Entity struct {
 	// additions. The map[string]any is a deliberate serialisation boundary.
 	Attrs map[string]any
 
+	// System marks a group whose membership confers authority within Cardinal
+	// itself. Granting one is an administrative act of the same weight as the
+	// power it hands over, so it needs AdministerDirectory rather than merely
+	// ManageUsers — otherwise a narrow tier can hand itself a broad one.
+	System bool
+
+	// OwnerID is the application a group exists for, if any. Organisational
+	// only: Cardinal treats an owned group exactly like any other, and it still
+	// reaches applications through the groups claim.
+	OwnerID *uuid.UUID
+
 	CreatedAt time.Time
 	UpdatedAt time.Time
 

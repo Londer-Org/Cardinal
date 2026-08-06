@@ -12,6 +12,7 @@ import (
 )
 
 const entityColumns = `id, type, name, coalesce(display_name, ''), attrs,
+                       system, owner_id,
                        created_at, updated_at, disabled_at, redacted_at`
 
 // CreateEntity persists a new entity and its audit event atomically.
@@ -22,10 +23,10 @@ const entityColumns = `id, type, name, coalesce(display_name, ''), attrs,
 func (s *Store) CreateEntity(ctx context.Context, e *directory.Entity, actorID *uuid.UUID) error {
 	return s.InTx(ctx, func(tx pgx.Tx) error {
 		err := tx.QueryRow(ctx, `
-			INSERT INTO entities (id, type, name, display_name, attrs)
-			VALUES ($1, $2, $3, nullif($4, ''), $5)
+			INSERT INTO entities (id, type, name, display_name, attrs, owner_id)
+			VALUES ($1, $2, $3, nullif($4, ''), $5, $6)
 			RETURNING created_at, updated_at`,
-			e.ID, string(e.Type), e.Name, e.DisplayName, e.Attrs,
+			e.ID, string(e.Type), e.Name, e.DisplayName, e.Attrs, e.OwnerID,
 		).Scan(&e.CreatedAt, &e.UpdatedAt)
 		if err != nil {
 			if pgErrCode(err) == codeUniqueViolation {
@@ -142,6 +143,7 @@ func scanEntity(row scanner) (*directory.Entity, error) {
 		typeStr string
 	)
 	err := row.Scan(&e.ID, &typeStr, &e.Name, &e.DisplayName, &e.Attrs,
+		&e.System, &e.OwnerID,
 		&e.CreatedAt, &e.UpdatedAt, &e.DisabledAt, &e.RedactedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, directory.ErrNotFound

@@ -208,7 +208,7 @@ export const api = {
       request(`/api/directory/groups/${encodeURIComponent(name)}`,
         directoryGroupDetailSchema),
 
-    createGroup: (input: { name: string; displayName: string }) =>
+    createGroup: (input: { name: string; displayName: string; owner: string }) =>
       request('/api/directory/groups', z.looseObject({}), {
         method: 'POST',
         body: input,

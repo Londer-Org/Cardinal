@@ -1,4 +1,6 @@
 import { Link, useParams } from '@tanstack/react-router'
+import { ShieldIcon } from 'lucide-react'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import {
   Card,
@@ -31,6 +33,26 @@ export function GroupDetailView() {
         title={group.name}
         description={group.displayName === '' ? undefined : group.displayName}
       />
+
+      {group.system && (
+        <Alert>
+          <ShieldIcon />
+          <AlertTitle>System group</AlertTitle>
+          <AlertDescription>
+            Membership confers authority within Cardinal, so changing it needs
+            full directory administration — managing people is not enough to
+            make somebody an administrator.
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {group.owner !== '' && (
+        <p className="text-sm text-muted-foreground">
+          Exists for the <span className="font-medium">{group.owner}</span>{' '}
+          application. Cardinal treats it like any other group and sends it in
+          that application's groups claim.
+        </p>
+      )}
 
       <Card>
         <CardHeader>

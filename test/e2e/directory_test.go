@@ -180,15 +180,17 @@ func TestUserDetailAgreesWithTheList(t *testing.T) {
 	inList := false
 	listResp := request(t, c, http.MethodGet, hostCardinal,
 		"/api/directory/users", "application/json")
-	var users []struct {
-		Login             string `json:"login"`
-		InvitationPending bool   `json:"invitationPending"`
+	var users struct {
+		Items []struct {
+			Login             string `json:"login"`
+			InvitationPending bool   `json:"invitationPending"`
+		} `json:"items"`
 	}
 	if err := json.NewDecoder(listResp.Body).Decode(&users); err != nil {
 		t.Fatal(err)
 	}
 	drain(listResp)
-	for _, u := range users {
+	for _, u := range users.Items {
 		if u.Login == login {
 			inList = u.InvitationPending
 		}

@@ -1,4 +1,6 @@
 import { useNavigate } from '@tanstack/react-router'
+import { ShieldIcon } from 'lucide-react'
+import { Badge } from '@/components/ui/badge'
 import { ErrorMessage } from '@/components/ErrorMessage'
 import { DataTable, type Column } from '@/components/DataTable'
 import { CreateGroup } from '@/features/directory/CreateGroup'
@@ -16,7 +18,25 @@ export function GroupsView() {
     {
       key: 'name',
       header: 'Name',
-      cell: (g) => <span className="font-medium">{g.name}</span>,
+      cell: (g) => (
+        <span className="flex min-w-0 items-center gap-2">
+          <span className="truncate font-medium">{g.name}</span>
+          {/* Two kinds of group share this table, and only one of them hands
+              out administrative power. Saying which is the difference between
+              a list and a list you can act on safely. */}
+          {g.system && (
+            <Badge variant="secondary" className="shrink-0 font-normal">
+              <ShieldIcon className="size-3" />
+              System
+            </Badge>
+          )}
+          {g.owner !== '' && (
+            <Badge variant="secondary" className="shrink-0 font-normal">
+              {g.owner}
+            </Badge>
+          )}
+        </span>
+      ),
     },
     {
       key: 'description',
@@ -41,7 +61,7 @@ export function GroupsView() {
     <div className="flex h-full min-h-0 flex-col gap-4">
       <ViewHeader
         title="Groups"
-        description="What policy reads. Membership is temporal — counts are as of now."
+        description="What policy reads. System groups confer authority inside Cardinal; the rest are for applications."
         action={<CreateGroup />}
       />
 

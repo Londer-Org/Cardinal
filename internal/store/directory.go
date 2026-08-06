@@ -139,6 +139,12 @@ type GroupSummary struct {
 	// all expired shows zero, which is the truth and the point of the temporal
 	// model — membership is a fact about a moment, not a flag.
 	Members int
+
+	// System marks a group whose membership confers authority within Cardinal.
+	System bool
+
+	// Owner is the application this group exists for, empty when none.
+	Owner string
 }
 
 // ListGroups returns a page of active groups with their current member counts.
@@ -159,8 +165,10 @@ func (s *Store) ListGroups(ctx context.Context, page Page) ([]*GroupSummary, int
 	rows, err := s.pool.Query(ctx, `
 		SELECT e.id, e.name, coalesce(e.display_name, ''),
 		       (SELECT count(*) FROM group_members m
-		         WHERE m.group_id = e.id AND m.valid_period @> now())
+		         WHERE m.group_id = e.id AND m.valid_period @> now()),
+		       e.system, coalesce(o.name, '')
 		  FROM entities e
+		  LEFT JOIN entities o ON o.id = e.owner_id
 		 WHERE e.type = 'group' AND e.disabled_at IS NULL
 		   AND ($1 = '' OR lower(e.name) LIKE $2
 		        OR lower(coalesce(e.display_name, '')) LIKE $2)
@@ -174,7 +182,8 @@ func (s *Store) ListGroups(ctx context.Context, page Page) ([]*GroupSummary, int
 	var out []*GroupSummary
 	for rows.Next() {
 		var g GroupSummary
-		if err := rows.Scan(&g.ID, &g.Name, &g.DisplayName, &g.Members); err != nil {
+		if err := rows.Scan(&g.ID, &g.Name, &g.DisplayName, &g.Members,
+			&g.System, &g.Owner); err != nil {
 			return nil, 0, fmt.Errorf("store: scanning group: %w", err)
 		}
 		out = append(out, &g)
