@@ -1,8 +1,12 @@
+<img src="assets/cardinal-mark.svg" alt="" width="88" align="left" hspace="16" vspace="4">
+
 # Cardinal
 
 A directory and identity platform built on Go and PostgreSQL, where **identity is
 immutable**, **access is time-bounded by default**, and **every authorization
 decision can explain itself**.
+
+<br clear="left">
 
 > **Status: pre-1.0, under active development. Not production ready.**
 > There is no stable API, no upgrade path between versions, and no security
@@ -102,6 +106,13 @@ event-sourced), [Authentik](https://goauthentik.io/) (Python), and
 
 Please report vulnerabilities privately — see [SECURITY.md](SECURITY.md). Do not
 open a public issue for a security problem.
+
+## Brand
+
+The mark is a compass rose — cardinal directions. Files live in
+[`assets/`](assets/): `cardinal-mark.svg` is the icon alone,
+`cardinal-logo.svg` includes the wordmark. The admin UI inlines a variant whose
+navy is `currentColor`, so it stays legible on a dark background.
 
 ## License
 

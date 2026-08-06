@@ -2,6 +2,7 @@ import { LogOutIcon, ShieldAlertIcon, ShieldQuestionIcon } from 'lucide-react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { CardinalMark } from '@/components/CardinalMark'
 import { CredentialList } from '@/features/credentials/CredentialList'
 import { DecisionExplorer } from '@/features/decisions/DecisionExplorer'
 import { RecoveryCodes } from '@/features/recovery/RecoveryCodes'
@@ -15,11 +16,14 @@ export function AccountPage({ session }: { session: Me }) {
     <div className="min-h-dvh bg-background p-6">
       <div className="mx-auto max-w-3xl space-y-4">
         <header className="flex items-start justify-between gap-4">
-          <div className="min-w-0">
-            <h1 className="truncate text-xl font-semibold">
-              {session.displayName || session.login}
-            </h1>
-            <p className="text-sm text-muted-foreground">{session.login}</p>
+          <div className="flex min-w-0 items-center gap-3">
+            <CardinalMark className="size-9 shrink-0 text-foreground" />
+            <div className="min-w-0">
+              <h1 className="truncate text-xl font-semibold">
+                {session.displayName || session.login}
+              </h1>
+              <p className="text-sm text-muted-foreground">{session.login}</p>
+            </div>
           </div>
           <Button
             variant="ghost"

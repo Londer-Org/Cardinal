@@ -48,6 +48,15 @@ lint: ## Run linters and vulnerability scanning
 .PHONY: ui
 ui: ## Build the admin UI into web/dist (embedded by the Go build)
 	cd web && npm ci --silent && npm run build
+	@# vite empties dist, taking the placeholder with it. Without one, a clean
+	@# checkout fails to compile with "pattern all:dist: no matching files
+	@# found" — an error that points at embed.go and not at the actual cause.
+	@$(MAKE) --no-print-directory ui-placeholder
+
+.PHONY: ui-placeholder
+ui-placeholder:
+	@git show HEAD:web/dist/.gitkeep > web/dist/.gitkeep 2>/dev/null || \
+		echo 'Keeps //go:embed all:dist compiling before the UI is built.' > web/dist/.gitkeep
 
 .PHONY: ui-check
 ui-check: ## Typecheck and lint the frontend

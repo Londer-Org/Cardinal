@@ -9,6 +9,7 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
+import { CardinalMark } from '@/components/CardinalMark'
 import { ErrorMessage } from '@/components/ErrorMessage'
 import { isSupported } from '@/lib/webauthn'
 import { BreakGlassDialog } from './BreakGlassDialog'
@@ -28,6 +29,7 @@ export function LoginPage({
       <Shell>
         <Card>
           <CardHeader>
+            <CardinalMark className="mb-2 size-12 text-foreground" />
             <CardTitle>Cardinal</CardTitle>
           </CardHeader>
           <CardContent>
@@ -49,6 +51,7 @@ export function LoginPage({
     <Shell>
       <Card>
         <CardHeader>
+          <CardinalMark className="mb-2 size-12 text-foreground" />
           <CardTitle className="text-xl">Cardinal</CardTitle>
           <CardDescription>
             {continuingToApplication
