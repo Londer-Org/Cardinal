@@ -79,6 +79,8 @@ func run(ctx context.Context, args []string) error {
 		return runInvite(ctx, args[1:])
 	case "app":
 		return runApp(ctx, rest)
+	case "token":
+		return runToken(ctx, rest)
 	case "policy":
 		return runPolicy(ctx, rest)
 	case "serve":
@@ -139,6 +141,15 @@ PRIVACY
 APPLICATIONS (OpenID Connect)
   app register <name> -redirect <uri>       Register a relying party
   app list                                  Registered applications
+
+ACCESS TOKENS (scripts and automation)
+  token create <login> -name <text>         Issue a bearer token, shown once
+      -for <duration>                         default 90d; bounded like a grant
+  token list <login>                        Tokens, live ones first
+  token revoke <login> <token-id>           End one, keeping its history
+
+  A token authenticates its owner but is never device-bound, so existing policy
+  refuses it administrative actions and SSH certificates.
 
 AUTHORIZATION
   policy test <file.cedar>                 Compile a policy file (offline)

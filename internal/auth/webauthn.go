@@ -300,7 +300,7 @@ func (s *Service) FinishLogin(
 	}
 
 	return s.store.CreateSession(ctx, subject, store.SessionSpec{
-		AuthMethod: "passkey",
+		AuthMethod: store.AuthMethodPasskey,
 		// Zero: the store applies the configured idle window.
 		// A credential that cannot be backed up stays on its hardware, which is
 		// what lets policy demand a device-bound factor for privileged actions.

@@ -47,6 +47,12 @@ const (
 	ActionCredentialRegistered = "credential.registered"
 	ActionCredentialRevoked    = "credential.revoked"
 
+	// Access tokens. Issuing one creates a credential that can act as the
+	// subject without a passkey, so it is as auditable as registering a
+	// credential — which is what it is.
+	ActionAccessTokenIssued  = "access_token.issued"
+	ActionAccessTokenRevoked = "access_token.revoked"
+
 	ActionRecoveryCodesIssued = "recovery.codes_issued"
 	ActionRecoveryCodeUsed    = "recovery.code_used"
 

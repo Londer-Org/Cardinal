@@ -90,35 +90,97 @@ func securityHeaders(devMode bool) func(http.Handler) http.Handler {
 	}
 }
 
-// authenticate resolves the session cookie, if present.
+// authenticate resolves the session cookie or a bearer token, if either is
+// present.
 //
 // It does not reject unauthenticated requests — that is requireAuth's job — so
 // that endpoints which are legitimately anonymous (beginning a login) still see
 // a session when one exists.
+//
+// The cookie is tried first. A browser that also happens to carry an
+// Authorization header is still a browser, and its cookie is the credential it
+// is entitled to use; preferring the header would let a page that can set one
+// choose which identity Cardinal sees.
 func (s *Server) authenticate(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		cookie, err := r.Cookie(sessionCookie)
-		if err != nil || cookie.Value == "" {
-			next.ServeHTTP(w, r)
-			return
-		}
-
-		// Validity is checked in SQL on every request. Revocation is enforced
-		// here, at read time, never by cache invalidation (ADR 0004).
-		sess, err := s.store.LookupSession(r.Context(), cookie.Value)
-		if err != nil {
-			if !errors.Is(err, store.ErrSessionInvalid) {
-				s.log.ErrorContext(r.Context(), "session lookup failed", "error", err)
+		if cookie, err := r.Cookie(sessionCookie); err == nil && cookie.Value != "" {
+			// Validity is checked in SQL on every request. Revocation is
+			// enforced here, at read time, never by cache invalidation
+			// (ADR 0004).
+			sess, err := s.store.LookupSession(r.Context(), cookie.Value)
+			if err != nil {
+				if !errors.Is(err, store.ErrSessionInvalid) {
+					s.log.ErrorContext(r.Context(), "session lookup failed", "error", err)
+				}
+				// Clear the dead cookie so the browser stops sending it.
+				clearCookie(w, sessionCookie, s.secureCookies, s.cfg.Server.CookieDomain)
+				next.ServeHTTP(w, r)
+				return
 			}
-			// Clear the dead cookie so the browser stops sending it.
-			clearCookie(w, sessionCookie, s.secureCookies, s.cfg.Server.CookieDomain)
+			next.ServeHTTP(w, r.WithContext(
+				context.WithValue(r.Context(), ctxSession, sess)))
+			return
+		}
+
+		presented := bearerToken(r)
+		if presented == "" {
 			next.ServeHTTP(w, r)
 			return
 		}
 
-		ctx := context.WithValue(r.Context(), ctxSession, sess)
-		next.ServeHTTP(w, r.WithContext(ctx))
+		token, err := s.store.LookupAccessToken(r.Context(), presented)
+		if err != nil {
+			if !errors.Is(err, store.ErrTokenInvalid) {
+				s.log.ErrorContext(r.Context(), "access token lookup failed", "error", err)
+			}
+			next.ServeHTTP(w, r)
+			return
+		}
+
+		next.ServeHTTP(w, r.WithContext(
+			context.WithValue(r.Context(), ctxSession, sessionForToken(token))))
 	})
+}
+
+// bearerToken reads an RFC 6750 Authorization header.
+func bearerToken(r *http.Request) string {
+	const prefix = "Bearer "
+	header := r.Header.Get("Authorization")
+	if len(header) <= len(prefix) || !strings.EqualFold(header[:len(prefix)], prefix) {
+		return ""
+	}
+	return strings.TrimSpace(header[len(prefix):])
+}
+
+// sessionForToken presents an access token as the principal it authenticates.
+//
+// Deliberately a Session, so that every claim projection, policy evaluation and
+// decision log entry downstream works unchanged rather than growing a second
+// code path for machines — a second path is where the two drift and one of them
+// stops being checked.
+//
+// Two fields carry the whole security argument, and neither is incidental:
+//
+//   - DeviceBound is false. `admin-requires-fresh-device-bound-auth` and
+//     `ssh-requires-device-bound` are both written `unless { principal.deviceBound
+//     && … }`, so a token is refused every administrative action and every SSH
+//     certificate by policy that already exists. Setting this true would hand a
+//     string in a CI variable the authority of a hardware key.
+//
+//   - AuthAt is when the token was issued, not when it was used. A token typed
+//     into a pipeline months ago has not authenticated anyone recently, and
+//     reporting otherwise would make authAgeSeconds — which freshness rules are
+//     built on — a fiction.
+func sessionForToken(token *store.AccessToken) *store.Session {
+	return &store.Session{
+		ID:          token.ID,
+		SubjectID:   token.SubjectID,
+		AuthMethod:  store.AuthMethodAccessToken,
+		AuthAt:      token.CreatedAt,
+		DeviceBound: false,
+		ValidFrom:   token.ValidFrom,
+		ValidUntil:  token.ValidUntil,
+	}
 }
 
 // requireAuth rejects unauthenticated requests.
@@ -153,6 +215,22 @@ func (s *Server) csrfProtect(next http.Handler) http.Handler {
 		// authority to abuse — and breaks every client. The browser-facing
 		// /oidc/authorize is a GET, which is exempt below anyway.
 		if isOIDCProtocolPath(r.URL.Path) {
+			next.ServeHTTP(w, r)
+			return
+		}
+
+		// A request authenticated by a bearer token has no ambient authority to
+		// abuse: nothing attaches an Authorization header on a browser's behalf
+		// the way it attaches a cookie, which is the entire premise of CSRF.
+		//
+		// The test is what actually authenticated this request, not whether a
+		// header happens to be present. Skipping on the mere presence of one
+		// would be a hole: a page that can add a header to a cookie-carrying
+		// request could switch the protection off. authenticate() prefers the
+		// cookie for the same reason, so a request holding both is
+		// cookie-authenticated and still lands here.
+		if session, ok := SessionFrom(r.Context()); ok &&
+			session.AuthMethod == store.AuthMethodAccessToken {
 			next.ServeHTTP(w, r)
 			return
 		}

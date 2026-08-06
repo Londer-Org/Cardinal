@@ -201,6 +201,19 @@ works.
 
 ---
 
+## Phase 3.5 — Machine and API access
+
+**Goal:** a script reaches an internal application without routing around
+Cardinal.
+
+| | Item |
+|---|---|
+| ✅ | **Personal access tokens** ([ADR 0018](docs/adr/0018-access-tokens-are-a-weaker-credential.md)) — `Authorization: Bearer` accepted wherever a session cookie is, so the proxy needs no rule sending API traffic around the auth check and the application still reads only `X-Auth-Request-*`. A token is never device-bound, so `admin-requires-fresh-device-bound-auth` and `ssh-requires-device-bound` refuse it every administrative action and every SSH certificate — **with no new policy written**. Verified by sabotage: flipping that one field turns the refusals into 200s |
+| ⬜ | **Token scopes** — a token can currently do anything its owner can that does not need a device-bound credential, which is broad for something in a CI variable. Wanted: a scope list surfaced to Cedar as context |
+| ⬜ | **Service accounts** — non-human identities with `private_key_jwt`. Deliberately separate from tokens, or a token becomes the way around the passkey requirement |
+
+---
+
 ## Phase 4 — Linux host access
 
 **Goal:** one host runs with no SSSD. *Largest and riskiest phase.*

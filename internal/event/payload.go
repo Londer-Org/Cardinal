@@ -31,6 +31,10 @@ var allowedPayloadKeys = []string{
 	"group_id",
 	"member_id",
 	"session_id",
+	// An access token's own id. Opaque, and the row it points at is where the
+	// token's name lives — a name the owner wrote, so it stays out of the
+	// chain and in a table erasure can reach.
+	"token_id",
 
 	// Validity periods. Not identifying.
 	"from",

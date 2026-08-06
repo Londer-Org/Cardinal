@@ -15,6 +15,20 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
+// Authentication methods, as recorded on a session and surfaced to policy.
+//
+// Strings rather than an enum because they travel: into the decision log, into
+// `amr` on an ID token, and into Cedar as a principal attribute. A value here
+// is part of the contract with anything reading those.
+const (
+	AuthMethodPasskey = "passkey"
+
+	// AuthMethodAccessToken is a bearer token used by a script. Recorded so a
+	// decision log can be read for "what did automation do", which is the
+	// question the proxy-bypass arrangement it replaces made unanswerable.
+	AuthMethodAccessToken = "access_token"
+)
+
 // sessionTokenBytes is 32 bytes of entropy. Session tokens are bearer
 // credentials, so this is the one place where being generous costs nothing.
 const sessionTokenBytes = 32

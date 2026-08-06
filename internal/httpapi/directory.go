@@ -283,6 +283,14 @@ func (s *Server) handleDisableUser(w http.ResponseWriter, r *http.Request) {
 		s.log.ErrorContext(ctx, "revoking sessions for disabled user failed", "error", err)
 	}
 
+	// Nor do access tokens, for the same reason and more urgently: a session
+	// ends on its own within hours, whereas a token in someone's pipeline is
+	// valid until its expiry, and nobody watching the account list would see it
+	// still working.
+	if _, err := s.store.RevokeAllAccessTokens(ctx, entity.ID); err != nil {
+		s.log.ErrorContext(ctx, "revoking access tokens for disabled user failed", "error", err)
+	}
+
 	s.log.InfoContext(ctx, "user disabled",
 		"login", entity.Name, "actor", session.SubjectID)
 	w.WriteHeader(http.StatusNoContent)
