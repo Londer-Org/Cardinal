@@ -23,7 +23,21 @@ const minServerVersion = 190000
 // Store owns the connection pool.
 type Store struct {
 	pool *pgxpool.Pool
+
+	// limits bound session lifetime. Zero means the defaults, so a Store opened
+	// without them is usable rather than issuing sessions that never expire.
+	limits SessionLimits
 }
+
+// SetSessionLimits applies the configured session clocks.
+//
+// Set after Open rather than passed to it, because the DSN is available long
+// before the configuration is — `cardinal migrate` opens a store with neither.
+func (s *Store) SetSessionLimits(limits SessionLimits) {
+	s.limits = limits.withDefaults()
+}
+
+func (s *Store) sessionLimits() SessionLimits { return s.limits.withDefaults() }
 
 // Open connects, verifies the server is new enough, and returns a Store.
 func Open(ctx context.Context, dsn string) (*Store, error) {

@@ -132,3 +132,13 @@ export function onStepUpNeeded(listener: StepUpListener): () => void {
   stepUpListeners.add(listener)
   return () => stepUpListeners.delete(listener)
 }
+
+/**
+ * Asks for the step-up dialog deliberately.
+ *
+ * The same signal a refused request raises, so there is one way in whether the
+ * prompt was provoked by the server or by somebody pressing a button.
+ */
+export function requestStepUp() {
+  stepUpNeeded()
+}

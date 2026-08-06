@@ -27,18 +27,45 @@ var (
 // Session is an authenticated session.
 // Two clocks bound a session, which is what every session system converges on.
 //
-// IdleSessionTTL is how long it survives without being used, and it slides: a
-// request pushes it forward, so somebody working through a morning is not
-// signed out because of when they started.
+// Idle is how long it survives without being used, and it slides: a request
+// pushes it forward, so somebody working through a morning is not signed out
+// because of when they started.
 //
-// AbsoluteSessionTTL is the hard end, never extended. It is what makes
-// "everyone re-authenticates eventually" true rather than aspirational —
-// sliding expiry with no cap means a stolen token is valid indefinitely
-// provided it is used, which is precisely the case a cap exists for.
+// Absolute is the hard end, never extended. It is what makes "everyone
+// re-authenticates eventually" true rather than aspirational — sliding expiry
+// with no cap means a stolen token is valid indefinitely provided it is used,
+// which is precisely the case a cap exists for.
+//
+// Defaults, not law: an operator sets these in [sessions]. Eight hours is a
+// working day, so signing in once in the morning carries someone through it —
+// and the tempting shorter values are the ones that get raised, because a
+// control people route around is worse than a looser one they keep.
+//
+// Neither governs administration. Changing the directory needs a device-bound
+// key used within five minutes regardless of session age, and that rule lives
+// in the policy set.
 const (
-	IdleSessionTTL     = 12 * time.Hour
-	AbsoluteSessionTTL = 7 * 24 * time.Hour
+	DefaultIdleSessionTTL     = 8 * time.Hour
+	DefaultAbsoluteSessionTTL = 7 * 24 * time.Hour
 )
+
+// SessionLimits are the two clocks, as configured.
+type SessionLimits struct {
+	Idle     time.Duration
+	Absolute time.Duration
+}
+
+// withDefaults fills anything unset, so a zero value is usable rather than
+// meaning "no expiry at all" — which is the one thing these must never mean.
+func (l SessionLimits) withDefaults() SessionLimits {
+	if l.Idle <= 0 {
+		l.Idle = DefaultIdleSessionTTL
+	}
+	if l.Absolute <= 0 {
+		l.Absolute = DefaultAbsoluteSessionTTL
+	}
+	return l
+}
 
 type Session struct {
 	ID        uuid.UUID
@@ -96,7 +123,7 @@ type SessionSpec struct {
 // authenticate. Hashing is plain SHA-256 rather than Argon2id deliberately —
 // unlike a password, the token has 256 bits of entropy and is not guessable, so
 // a slow KDF would only add latency to every request.
-func createSessionTx(ctx context.Context, tx pgx.Tx, subjectID uuid.UUID, spec SessionSpec) (*Session, error) {
+func createSessionTx(ctx context.Context, tx pgx.Tx, subjectID uuid.UUID, spec SessionSpec, limits SessionLimits) (*Session, error) {
 	raw := make([]byte, sessionTokenBytes)
 	if _, err := rand.Read(raw); err != nil {
 		return nil, fmt.Errorf("store: generating session token: %w", err)
@@ -105,11 +132,20 @@ func createSessionTx(ctx context.Context, tx pgx.Tx, subjectID uuid.UUID, spec S
 	sum := sha256.Sum256([]byte(token))
 
 	now := time.Now().UTC().Truncate(time.Microsecond)
+
+	// A zero TTL means the configured idle window, not an instantly-expired
+	// session — the one interpretation that would be a silent lockout.
+	limits = limits.withDefaults()
+	idle := spec.TTL
+	if idle <= 0 {
+		idle = limits.Idle
+	}
+
 	s := &Session{
 		SubjectID:    subjectID,
 		Token:        token,
 		ValidFrom:    now,
-		ValidUntil:   now.Add(spec.TTL),
+		ValidUntil:   now.Add(idle),
 		AuthMethod:   spec.AuthMethod,
 		AuthAt:       now,
 		DeviceBound:  spec.DeviceBound,
@@ -118,7 +154,7 @@ func createSessionTx(ctx context.Context, tx pgx.Tx, subjectID uuid.UUID, spec S
 
 	absolute := spec.AbsoluteTTL
 	if absolute <= 0 {
-		absolute = AbsoluteSessionTTL
+		absolute = limits.Absolute
 	}
 	s.AbsoluteExpiry = now.Add(absolute)
 
@@ -141,7 +177,7 @@ func (s *Store) CreateSession(ctx context.Context, subjectID uuid.UUID, spec Ses
 	var out *Session
 	err := s.InTx(ctx, func(tx pgx.Tx) error {
 		var err error
-		out, err = createSessionTx(ctx, tx, subjectID, spec)
+		out, err = createSessionTx(ctx, tx, subjectID, spec, s.sessionLimits())
 		if err != nil {
 			return err
 		}
@@ -189,7 +225,7 @@ func (s *Store) LookupSession(ctx context.Context, token string) (*Session, erro
 		   AND upper(valid_period) < least(now() + $2::interval, absolute_expiry) - interval '1 minute'
 		RETURNING id, subject_id, lower(valid_period), upper(valid_period),
 		          auth_method, auth_at, device_bound, credential_id, absolute_expiry`,
-		sum[:], IdleSessionTTL,
+		sum[:], s.sessionLimits().Idle,
 	).Scan(&sess.ID, &sess.SubjectID, &sess.ValidFrom, &sess.ValidUntil,
 		&sess.AuthMethod, &sess.AuthAt, &sess.DeviceBound, &sess.CredentialID,
 		&sess.AbsoluteExpiry)

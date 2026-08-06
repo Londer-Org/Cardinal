@@ -4,6 +4,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 )
 
 func valid() *Config {
@@ -194,6 +195,54 @@ func TestValidateReportsEveryProblem(t *testing.T) {
 	for _, want := range []string{"database.dsn", "rp_id", "origins"} {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("error should mention %q; got:\n%v", want, err)
+		}
+	}
+}
+
+// TestSessionClocksMustMakeSenseTogether.
+//
+// An absolute cap inside the idle window means every session ends at its cap,
+// so the idle setting silently does nothing — a configuration that looks like
+// two controls and behaves like one.
+func TestSessionClocksMustMakeSenseTogether(t *testing.T) {
+	c := valid()
+	c.Sessions.Idle = Duration(12 * time.Hour)
+	c.Sessions.Absolute = Duration(time.Hour)
+
+	err := c.Validate()
+	if err == nil {
+		t.Fatal("an absolute cap shorter than the idle window was accepted")
+	}
+	if !strings.Contains(err.Error(), "sessions.absolute") {
+		t.Errorf("the error does not name the setting at fault: %v", err)
+	}
+}
+
+// TestDurationsAreWrittenTheWayPeopleWriteThem.
+func TestDurationsAreWrittenTheWayPeopleWriteThem(t *testing.T) {
+	cases := map[string]time.Duration{
+		"8h":  8 * time.Hour,
+		"30m": 30 * time.Minute,
+		// Days, because "168h" is a week only after doing the arithmetic.
+		"7d": 7 * 24 * time.Hour,
+		"1d": 24 * time.Hour,
+	}
+
+	for text, want := range cases {
+		var d Duration
+		if err := d.UnmarshalText([]byte(text)); err != nil {
+			t.Errorf("%q: %v", text, err)
+			continue
+		}
+		if d.Duration() != want {
+			t.Errorf("%q = %s, want %s", text, d, want)
+		}
+	}
+
+	for _, bad := range []string{"", "soon", "-1h", "0h", "8"} {
+		var d Duration
+		if err := d.UnmarshalText([]byte(bad)); err == nil {
+			t.Errorf("%q was accepted as a duration", bad)
 		}
 	}
 }

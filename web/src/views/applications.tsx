@@ -1,7 +1,8 @@
 import { ApplicationList } from '@/features/applications/ApplicationList'
+import { RequiresFreshAuth } from '@/features/auth/RequiresFreshAuth'
 import { ViewHeader } from '@/views/ViewHeader'
 
-export function ApplicationsView() {
+function ApplicationsViewBody() {
   return (
     <div className="space-y-4">
       <ViewHeader
@@ -10,5 +11,19 @@ export function ApplicationsView() {
       />
       <ApplicationList />
     </div>
+  )
+}
+
+/**
+ * Guarded, so arriving here with a stale session shows what is needed rather
+ * than firing requests that will be refused — which produced an empty table
+ * under the words "Nobody yet.", a statement about the directory and a false
+ * one.
+ */
+export function ApplicationsView() {
+  return (
+    <RequiresFreshAuth>
+      <ApplicationsViewBody />
+    </RequiresFreshAuth>
   )
 }

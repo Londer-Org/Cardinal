@@ -72,6 +72,25 @@ rp_display_name = "Example Corp"
 # what may authenticate. Each must fall within rp_id.
 origins = ["https://id.example.com"]
 
+[sessions]
+# How long a session survives without being used. It slides: using Cardinal
+# pushes it forward, so nobody is signed out mid-task because of when they
+# started. Eight hours is a working day.
+#
+# Shorter is tempting and is the setting that gets raised. A control people
+# route around is worse than a looser one they keep — and an hour is long
+# enough to be defeated by lunch. Set it shorter if you mean it.
+idle = "8h"
+
+# The hard end, never extended. This is what makes "everybody re-authenticates
+# eventually" true rather than aspirational: sliding expiry with no cap means a
+# stolen cookie lasts indefinitely provided somebody keeps using it.
+absolute = "7d"
+
+# Neither governs administration. Changing the directory needs a device-bound
+# key used within five minutes regardless of session age, and that rule lives in
+# policies/cardinal.cedar where it can be read and changed like every other one.
+
 [recovery]
 # Recovery email is OFF by default, and that default is a security position
 # rather than laziness.

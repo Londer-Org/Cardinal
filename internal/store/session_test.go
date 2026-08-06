@@ -31,7 +31,7 @@ func TestSessionSlidesWhileItIsUsed(t *testing.T) {
 
 	used, err := s.LookupSession(ctx, created.Token)
 	require.NoError(t, err)
-	assert.WithinDuration(t, time.Now().Add(store.IdleSessionTTL), used.ValidUntil,
+	assert.WithinDuration(t, time.Now().Add(store.DefaultIdleSessionTTL), used.ValidUntil,
 		time.Minute, "using a session must push its idle window forward")
 	assert.Equal(t, created.ID, used.ID, "extending must not mint a new session")
 }
@@ -47,7 +47,7 @@ func TestSessionIsNotRewrittenOnEveryRequest(t *testing.T) {
 
 	user := mustCreate(t, s, directory.TypeUser, "alice")
 	created, err := s.CreateSession(ctx, user.ID, store.SessionSpec{
-		AuthMethod: "passkey", TTL: store.IdleSessionTTL,
+		AuthMethod: "passkey", TTL: store.DefaultIdleSessionTTL,
 	})
 	require.NoError(t, err)
 
@@ -100,11 +100,11 @@ func TestDefaultSessionCarriesACap(t *testing.T) {
 
 	user := mustCreate(t, s, directory.TypeUser, "alice")
 	created, err := s.CreateSession(ctx, user.ID, store.SessionSpec{
-		AuthMethod: "passkey", TTL: store.IdleSessionTTL,
+		AuthMethod: "passkey", TTL: store.DefaultIdleSessionTTL,
 	})
 	require.NoError(t, err)
 
-	assert.WithinDuration(t, time.Now().Add(store.AbsoluteSessionTTL),
+	assert.WithinDuration(t, time.Now().Add(store.DefaultAbsoluteSessionTTL),
 		created.AbsoluteExpiry, time.Minute)
 	assert.True(t, created.AbsoluteExpiry.After(created.ValidUntil),
 		"the cap must sit beyond the idle window, or a session ends at sign-in")

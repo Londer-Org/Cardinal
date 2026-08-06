@@ -1,7 +1,8 @@
 import { RecoveryRequests } from '@/features/recovery/RecoveryRequests'
+import { RequiresFreshAuth } from '@/features/auth/RequiresFreshAuth'
 import { ViewHeader } from '@/views/ViewHeader'
 
-export function RecoveryView() {
+function RecoveryViewBody() {
   return (
     <div className="space-y-4">
       <ViewHeader
@@ -12,5 +13,19 @@ export function RecoveryView() {
         <RecoveryRequests />
       </div>
     </div>
+  )
+}
+
+/**
+ * Guarded, so arriving here with a stale session shows what is needed rather
+ * than firing requests that will be refused — which produced an empty table
+ * under the words "Nobody yet.", a statement about the directory and a false
+ * one.
+ */
+export function RecoveryView() {
+  return (
+    <RequiresFreshAuth>
+      <RecoveryViewBody />
+    </RequiresFreshAuth>
   )
 }

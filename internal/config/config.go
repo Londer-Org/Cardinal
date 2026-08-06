@@ -30,6 +30,7 @@ type Config struct {
 	Server   Server   `toml:"server"`
 	Database Database `toml:"database"`
 	WebAuthn WebAuthn `toml:"webauthn"`
+	Sessions Sessions `toml:"sessions"`
 	Recovery Recovery `toml:"recovery"`
 	OIDC     OIDC     `toml:"oidc"`
 }
@@ -122,6 +123,44 @@ type WebAuthn struct {
 	Origins []string `toml:"origins"`
 }
 
+// Sessions bounds how long being signed in lasts.
+//
+// Two clocks, and they answer different questions. Idle is "how long may
+// somebody stop for before they must prove themselves again" — the number that
+// decides whether a walked-away laptop is a problem. Absolute is "how long may
+// this session exist at all", which is what stops a stolen cookie living
+// forever simply because somebody keeps using it.
+//
+// Neither governs administration. Changing the directory needs a device-bound
+// key used within five minutes regardless of session age, and that rule lives
+// in the policy set where it can be read and changed like every other one.
+type Sessions struct {
+	// Idle defaults to 8 hours: a working day, so signing in once in the
+	// morning carries someone through it.
+	//
+	// The tempting shorter values are the ones that get raised. A control
+	// people route around is worse than a looser one they keep, and an hour is
+	// long enough to be defeated by lunch. Deployments that genuinely need
+	// tighter should set it and mean it.
+	Idle Duration `toml:"idle"`
+
+	// Absolute defaults to 7 days and is never extended.
+	Absolute Duration `toml:"absolute"`
+}
+
+// Effective resolves both clocks, applying defaults to whichever is unset.
+func (s Sessions) Effective() (idle, absolute time.Duration) {
+	return s.Idle.orDefault(DefaultIdleSession),
+		s.Absolute.orDefault(DefaultAbsoluteSession)
+}
+
+// Defaults, stated here so configuration and the store cannot disagree about
+// what "unset" means.
+const (
+	DefaultIdleSession     = 8 * time.Hour
+	DefaultAbsoluteSession = 7 * 24 * time.Hour
+)
+
 // Recovery configures account recovery channels.
 type Recovery struct {
 	// EmailEnabled is off by default. Recovery email makes the mail provider a
@@ -156,6 +195,8 @@ func Load(path string) (*Config, error) {
 	// a security problem.
 	c.Server.Listen = "127.0.0.1:8080"
 	c.Database.MaxConns = 10
+	c.Sessions.Idle = Duration(DefaultIdleSession)
+	c.Sessions.Absolute = Duration(DefaultAbsoluteSession)
 	c.Database.ConnMaxLifetime = time.Hour
 
 	if _, err := toml.DecodeFile(path, &c); err != nil {
@@ -188,6 +229,22 @@ func (c *Config) Validate() error {
 	}
 
 	problems = append(problems, c.validateWebAuthn()...)
+
+	// An absolute cap inside the idle window means every session ends at its
+	// cap, so the idle setting silently does nothing — a configuration that
+	// looks like two controls and behaves like one.
+	//
+	// Compared after defaults, because unset means "use the default" everywhere
+	// else and one of the two being written is the common case. Comparing the
+	// raw values would either reject a config that is fine or miss the pairing
+	// that is not.
+	idle, absolute := c.Sessions.Effective()
+	if absolute <= idle {
+		problems = append(problems, fmt.Errorf(
+			"%w: sessions.absolute (%s) must exceed sessions.idle (%s), or the "+
+				"idle window never applies",
+			ErrInvalid, absolute, idle))
+	}
 
 	if c.Recovery.EmailEnabled && len(c.Recovery.EmailDomains) == 0 {
 		problems = append(problems, fmt.Errorf(

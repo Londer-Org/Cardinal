@@ -7,6 +7,7 @@ import { CreateUser } from '@/features/directory/CreateUser'
 import { useUsers } from '@/features/directory/useDirectory'
 import { usePageState } from '@/features/directory/usePageState'
 import type { DirectoryUser } from '@/lib/api'
+import { RequiresFreshAuth } from '@/features/auth/RequiresFreshAuth'
 import { ViewHeader } from '@/views/ViewHeader'
 
 /** Enrollment state, at a glance. */
@@ -35,7 +36,7 @@ function EnrollmentBadge({ user }: { user: DirectoryUser }) {
   return <span className="text-muted-foreground">—</span>
 }
 
-export function UsersView() {
+function UsersViewBody() {
   const { page, setSearch, setOffset, setLimit } = usePageState()
   const { data, isPending, error } = useUsers(page)
   const navigate = useNavigate()
@@ -106,5 +107,19 @@ export function UsersView() {
         }}
       />
     </div>
+  )
+}
+
+/**
+ * Guarded, so arriving here with a stale session shows what is needed rather
+ * than firing requests that will be refused — which produced an empty table
+ * under the words "Nobody yet.", a statement about the directory and a false
+ * one.
+ */
+export function UsersView() {
+  return (
+    <RequiresFreshAuth>
+      <UsersViewBody />
+    </RequiresFreshAuth>
   )
 }

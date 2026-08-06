@@ -28,14 +28,17 @@ import (
 // useful.
 const CeremonyTTL = 5 * time.Minute
 
-// SessionTTL is how long an ordinary authenticated session lasts.
+// Session lifetime is the store's business, not this package's.
+//
+// It used to be a constant here, which put "how long is somebody signed in" in
+// the package that runs WebAuthn ceremonies — two unrelated questions sharing a
+// file because one of them had to live somewhere. The store owns the session
+// row and the configuration that bounds it, so a zero TTL below means "use the
+// configured idle window".
 //
 // Policy can still demand a *fresh* authentication for privileged actions via
-// Cedar (step-up), so this being a working day does not mean administrative
+// Cedar (step-up), so a working-day session does not mean administrative
 // actions go unchallenged for a working day.
-// Kept as the idle window. The absolute cap lives in the store, because it is
-// a property of the session row rather than of a ceremony.
-const SessionTTL = store.IdleSessionTTL
 
 var (
 	ErrCeremonyNotFound = errors.New("auth: ceremony not found or expired")
@@ -298,7 +301,7 @@ func (s *Service) FinishLogin(
 
 	return s.store.CreateSession(ctx, subject, store.SessionSpec{
 		AuthMethod: "passkey",
-		TTL:        SessionTTL,
+		// Zero: the store applies the configured idle window.
 		// A credential that cannot be backed up stays on its hardware, which is
 		// what lets policy demand a device-bound factor for privileged actions.
 		DeviceBound:  !stored.BackupEligible,

@@ -48,6 +48,12 @@ func runServe(ctx context.Context, args []string) error {
 	}
 	defer st.Close()
 
+	idle, absolute := cfg.Sessions.Effective()
+	st.SetSessionLimits(store.SessionLimits{Idle: idle, Absolute: absolute})
+	// Strings, not durations: slog renders a time.Duration as nanoseconds, and
+	// "28800000000000" is a number nobody reads as eight hours.
+	log.Info("session limits", "idle", idle.String(), "absolute", absolute.String())
+
 	authSvc, err := auth.NewService(st, cfg)
 	if err != nil {
 		return err

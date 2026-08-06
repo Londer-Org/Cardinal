@@ -15,6 +15,7 @@ import { CreateGroup } from '@/features/directory/CreateGroup'
 import { useGroups } from '@/features/directory/useDirectory'
 import { usePageState } from '@/features/directory/usePageState'
 import type { DirectoryGroup, GroupKind } from '@/lib/api'
+import { RequiresFreshAuth } from '@/features/auth/RequiresFreshAuth'
 import { ViewHeader } from '@/views/ViewHeader'
 
 const KINDS: { value: GroupKind; label: string }[] = [
@@ -44,7 +45,7 @@ function Category({ group }: { group: DirectoryGroup }) {
   return <span className="text-muted-foreground">—</span>
 }
 
-export function GroupsView() {
+function GroupsViewBody() {
   const { page, setSearch, setOffset, setLimit } = usePageState()
   const [kind, setKind] = useState<GroupKind>('')
   const { data, isPending, error } = useGroups(page, kind)
@@ -135,5 +136,19 @@ export function GroupsView() {
         }}
       />
     </div>
+  )
+}
+
+/**
+ * Guarded, so arriving here with a stale session shows what is needed rather
+ * than firing requests that will be refused — which produced an empty table
+ * under the words "Nobody yet.", a statement about the directory and a false
+ * one.
+ */
+export function GroupsView() {
+  return (
+    <RequiresFreshAuth>
+      <GroupsViewBody />
+    </RequiresFreshAuth>
   )
 }

@@ -13,9 +13,10 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { ErrorMessage } from '@/components/ErrorMessage'
 import { GrantPeriod } from '@/features/directory/GrantPeriod'
 import { useGroup, useRevokeMembership } from '@/features/directory/useDirectory'
+import { RequiresFreshAuth } from '@/features/auth/RequiresFreshAuth'
 import { ViewHeader } from '@/views/ViewHeader'
 
-export function GroupDetailView() {
+function GroupDetailViewBody() {
   const { name } = useParams({ from: '/admin/groups/$name' })
   const { data: group, isPending, error } = useGroup(name)
   const revoke = useRevokeMembership()
@@ -110,5 +111,19 @@ export function GroupDetailView() {
         </CardContent>
       </Card>
     </div>
+  )
+}
+
+/**
+ * Guarded, so arriving here with a stale session shows what is needed rather
+ * than firing requests that will be refused — which produced an empty table
+ * under the words "Nobody yet.", a statement about the directory and a false
+ * one.
+ */
+export function GroupDetailView() {
+  return (
+    <RequiresFreshAuth>
+      <GroupDetailViewBody />
+    </RequiresFreshAuth>
   )
 }

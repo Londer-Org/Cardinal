@@ -81,8 +81,11 @@ func (s *Server) requirePermission(action types.EntityUID, next http.Handler) ht
 // whichever Cedar returned first.
 func adminDenialMessage(decision policy.Decision) string {
 	if slices.Contains(decision.Reasons, "admin-requires-fresh-device-bound-auth") {
-		return "administering the directory needs a security key used in " +
-			"the last five minutes — sign in again with your key"
+		// No longer "sign in again": that was the only way to become fresh
+		// before step-up existed, and repeating it now would send someone to
+		// sign out of a session that is working.
+		return "this needs a security key used in the last five minutes — " +
+			"confirm with your key to continue"
 	}
 	// No reasons at all means nothing matched, i.e. default-deny. That is a
 	// different sentence from "a rule forbids you", and sends the reader

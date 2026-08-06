@@ -80,6 +80,7 @@ The core thesis was tested before any Go was written:
 | ⬜ | Recovery email delivery (config + circularity guard done; SMTP sending pending) |
 | ✅ | Config loading — no unsafe defaults; enforces the recovery/IdP circularity rule |
 | ✅ | Session management + CSRF — hashed tokens, read-time revocation, double-submit CSRF, security headers |
+| ✅ | **Session lifetime is configurable** — `[sessions] idle`/`absolute`, defaulting to 8 hours and 7 days. Validated against each other, since a cap inside the idle window makes the idle setting silently do nothing |
 | ✅ | **Sliding sessions with an absolute cap** — the idle window moves while a session is used, so nobody is signed out mid-task because of when they started; the cap is never extended, so everyone re-authenticates eventually and a stolen token cannot be kept alive by using it |
 | ✅ | **Step-up asks in place** — a dialog wherever the user is, rather than the section emptying and leaving them to find the passkeys page |
 | ✅ | **Step-up re-authentication** — prove the key again without a new session. The freshness rule had been in the policy since Phase 0 with no way to satisfy it on demand: `auth_at` was set once, at sign-in, so administration expired five minutes later mid-task and only a full sign-out restored it |

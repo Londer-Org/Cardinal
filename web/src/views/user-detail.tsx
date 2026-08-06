@@ -19,9 +19,10 @@ import {
   useRevokeMembership,
   useUser,
 } from '@/features/directory/useDirectory'
+import { RequiresFreshAuth } from '@/features/auth/RequiresFreshAuth'
 import { ViewHeader } from '@/views/ViewHeader'
 
-export function UserDetailView() {
+function UserDetailViewBody() {
   const { login } = useParams({ from: '/admin/users/$login' })
   const { data: user, isPending, error } = useUser(login)
   const disable = useDisableUser()
@@ -161,5 +162,19 @@ export function UserDetailView() {
         </div>
       </div>
     </div>
+  )
+}
+
+/**
+ * Guarded, so arriving here with a stale session shows what is needed rather
+ * than firing requests that will be refused — which produced an empty table
+ * under the words "Nobody yet.", a statement about the directory and a false
+ * one.
+ */
+export function UserDetailView() {
+  return (
+    <RequiresFreshAuth>
+      <UserDetailViewBody />
+    </RequiresFreshAuth>
   )
 }
