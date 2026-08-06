@@ -89,13 +89,26 @@ func (c *client) AccessTokenType() op.AccessTokenType { return op.AccessTokenTyp
 
 func (c *client) IDTokenLifetime() time.Duration { return c.c.IDTokenLifetime }
 
-// IDTokenUserinfoClaimsAssertion returns false: claims go in the ID token only
-// when scopes ask for them, and userinfo is fetched separately.
+// IDTokenUserinfoClaimsAssertion returns true: the ID token carries the claims
+// the granted scopes asked for.
 //
-// Keeping the ID token small matters because it travels in URLs during some
-// flows, and a token stuffed with group memberships can exceed header limits in
-// ways that fail confusingly.
-func (c *client) IDTokenUserinfoClaimsAssertion() bool { return false }
+// This used to return false, with a comment about keeping the ID token small
+// because it can travel in URLs. The reasoning was sound and the behaviour did
+// not follow it: `groups` reached the ID token anyway, via private claims, so
+// the token carried the one claim large enough to blow a header limit and
+// omitted the small ones. An application asking for `profile` got a token with
+// no name and no preferred_username in it, which is not a smaller token so much
+// as a less useful one.
+//
+// Every mainstream provider — Keycloak, Google, Entra — puts profile claims in
+// the ID token, and a great many relying parties read them from there and never
+// call userinfo. Omitting them means those integrations silently show blank
+// usernames, which is exactly how this was found.
+//
+// If token size ever becomes a real constraint, the fix is a per-client flag
+// like the ones registration already has, not a global default that surprises
+// every client.
+func (c *client) IDTokenUserinfoClaimsAssertion() bool { return true }
 
 func (c *client) IsScopeAllowed(scope string) bool {
 	for _, allowed := range c.c.Scopes {

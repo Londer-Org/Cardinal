@@ -136,6 +136,10 @@ type meResponse struct {
 	FullyEnrolled bool      `json:"fullyEnrolled"`
 	RecoveryCodes int       `json:"recoveryCodesRemaining"`
 
+	// Email is empty when unset, which is the normal state: Cardinal does not
+	// require one, and an account with no email is not a broken account.
+	Email string `json:"email"`
+
 	// CanAdminister drives what the UI renders. Not a security boundary — see
 	// canAdminister — and deliberately re-evaluated per request, so an admin
 	// whose authentication has gone stale sees the section disappear rather
@@ -173,6 +177,7 @@ func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
 		Emergency:     session.Emergency(),
 		FullyEnrolled: enrolled,
 		RecoveryCodes: remaining,
+		Email:         entityEmail(entity),
 		// What the UI should offer, not what it is allowed to do. Every admin
 		// endpoint evaluates the policy itself; this only decides whether a
 		// section someone cannot use is rendered at all.
@@ -367,4 +372,14 @@ func sessionBody(s *store.Session) map[string]any {
 		"deviceBound": s.DeviceBound,
 		"expiresAt":   s.ValidUntil,
 	}
+}
+
+// entityEmail reads the address out of the schema-governed attributes.
+//
+// A column would be simpler, but not every entity type has an email and
+// Cardinal does not require one — so it lives in attrs, where the schema
+// registry governs it, and is absent rather than empty when unset.
+func entityEmail(e *directory.Entity) string {
+	email, _ := e.Attrs["email"].(string)
+	return email
 }

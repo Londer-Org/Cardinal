@@ -122,6 +122,12 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("GET /api/auth/me", s.requireAuth(http.HandlerFunc(s.handleMe)))
 	mux.Handle("POST /api/auth/logout", s.requireAuth(http.HandlerFunc(s.handleLogout)))
 
+	// Editing your own name and email. Not behind requireAdmin: correcting a
+	// typo in your own display name is not administering the directory, and
+	// demanding a fresh security key for it would make the step-up rule
+	// something people resent rather than respect.
+	mux.Handle("PATCH /api/auth/me", s.requireAuth(http.HandlerFunc(s.handleUpdateProfile)))
+
 	// ── Credential self-service ────────────────────────────────────────────
 	mux.Handle("POST /api/credentials/register/begin",
 		s.requireAuth(http.HandlerFunc(s.handleRegisterBegin)))

@@ -29,6 +29,16 @@ export const api = {
     logout: () => request('/api/auth/logout', z.undefined(), { method: 'POST' }),
 
     /**
+     * Edits your own display name and email.
+     *
+     * Not the login: that appears in policy and in every audit record a
+     * colleague reads, so renaming stays an administrative act. Fields left
+     * undefined are untouched rather than blanked.
+     */
+    updateProfile: (input: { displayName?: string; email?: string }) =>
+      request('/api/auth/me', meSchema, { method: 'PATCH', body: input }),
+
+    /**
      * Begins a login ceremony.
      *
      * Omitting `login` starts a discoverable (usernameless) ceremony, which is

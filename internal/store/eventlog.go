@@ -154,3 +154,41 @@ func shortHash(h []byte) string {
 	}
 	return fmt.Sprintf("%x…", h)
 }
+
+// EventsForEntity returns an entity's journal entries, newest first.
+//
+// The journal had no read path at all until now: it could be appended to and
+// validated end to end, but not inspected, which made "every mutation is
+// recorded" a claim nobody could check without opening psql. The audit explorer
+// in Phase 5 needs this; so does any test asserting what a mutation wrote.
+//
+// Deliberately not filtered by actor or action. Narrowing belongs to the caller,
+// and an audit read that quietly omits rows is worse than no audit read.
+func (s *Store) EventsForEntity(ctx context.Context, entityID uuid.UUID, limit int) ([]*event.Event, error) {
+	if limit <= 0 || limit > 1000 {
+		limit = 100
+	}
+
+	rows, err := s.pool.Query(ctx, `
+		SELECT seq, id, occurred_at, action, entity_id, actor_id, payload,
+		       prev_hash, hash
+		  FROM events
+		 WHERE entity_id = $1
+		 ORDER BY seq DESC
+		 LIMIT $2`, entityID, limit)
+	if err != nil {
+		return nil, fmt.Errorf("store: reading events: %w", err)
+	}
+	defer rows.Close()
+
+	var out []*event.Event
+	for rows.Next() {
+		var ev event.Event
+		if err := rows.Scan(&ev.Seq, &ev.ID, &ev.OccurredAt, &ev.Action,
+			&ev.EntityID, &ev.ActorID, &ev.Payload, &ev.PrevHash, &ev.Hash); err != nil {
+			return nil, fmt.Errorf("store: scanning event: %w", err)
+		}
+		out = append(out, &ev)
+	}
+	return out, rows.Err()
+}

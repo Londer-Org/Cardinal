@@ -155,3 +155,66 @@ func scanEntity(row scanner) (*directory.Entity, error) {
 	}
 	return &e, nil
 }
+
+// ProfileUpdate is the subset of an entity a person may change about themselves.
+//
+// Deliberately not `name`. The login is what appears in policy, in group
+// listings and in every audit record a colleague reads, so letting someone
+// rename themselves to a colleague's login — even briefly, even reversibly — is
+// an impersonation primitive. Renaming stays an administrative act.
+//
+// Nil means "leave alone", which is what makes a form that submits one field
+// not blank the others.
+type ProfileUpdate struct {
+	DisplayName *string
+	Email       *string
+}
+
+// UpdateProfile changes an entity's own descriptive attributes.
+//
+// ADR 0002 rests on names being mutable attributes rather than identifiers —
+// "renaming a person is an UPDATE, not a migration". Until this existed there
+// was no UPDATE: entities could be created and disabled and nothing in between,
+// so the claim was true of the schema and not of the software.
+//
+// Email lives in attrs rather than a column because not every entity type has
+// one, and the schema registry governs what may go there.
+func (s *Store) UpdateProfile(ctx context.Context, id uuid.UUID, in ProfileUpdate, actorID *uuid.UUID) (*directory.Entity, error) {
+	var updated *directory.Entity
+
+	err := s.InTx(ctx, func(tx pgx.Tx) error {
+		row := tx.QueryRow(ctx, `
+			UPDATE entities
+			   SET display_name = coalesce($2, display_name),
+			       attrs = CASE
+			                 WHEN $3::text IS NULL THEN attrs
+			                 WHEN $3 = ''        THEN attrs - 'email'
+			                 ELSE jsonb_set(attrs, '{email}', to_jsonb($3::text))
+			               END,
+			       updated_at = now()
+			 WHERE id = $1 AND disabled_at IS NULL
+			 RETURNING `+entityColumns,
+			id, in.DisplayName, in.Email)
+
+		e, err := scanEntity(row)
+		if err != nil {
+			return err
+		}
+		updated = e
+
+		// The payload records which fields moved, never their values: an audit
+		// record carrying a display name or an email address would put personal
+		// data in an append-only log that erasure cannot reach (ADR 0010).
+		ev, err := event.New(event.ActionEntityUpdated, &id, actorID,
+			map[string]any{
+				"display_name_changed": in.DisplayName != nil,
+				"email_changed":        in.Email != nil,
+			})
+		if err != nil {
+			return err
+		}
+		return s.AppendEvent(ctx, tx, ev)
+	})
+
+	return updated, err
+}

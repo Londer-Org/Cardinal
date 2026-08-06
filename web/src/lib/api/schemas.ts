@@ -27,6 +27,7 @@ export const meSchema = z.object({
   // Drives what the UI offers, never what it may do — every admin endpoint
   // evaluates the policy itself.
   canAdminister: z.boolean(),
+  email: z.string(),
 })
 export type Me = z.infer<typeof meSchema>
 

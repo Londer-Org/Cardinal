@@ -44,6 +44,14 @@ var allowedPayloadKeys = []string{
 	// Non-identifying scalars.
 	"device_bound",
 	"depth",
+
+	// Which fields a profile update touched, never their values. Booleans
+	// rather than a list of names because slices are rejected outright, and
+	// because a boolean cannot smuggle anything: "the display name changed" is
+	// the whole fact, and the new value is in the entities table where erasure
+	// can reach it.
+	"display_name_changed",
+	"email_changed",
 }
 
 // deniedPayloadKeys are rejected with a pointed message. They would be caught

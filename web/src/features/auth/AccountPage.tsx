@@ -10,6 +10,7 @@ import { CredentialList } from '@/features/credentials/CredentialList'
 import { DecisionExplorer } from '@/features/decisions/DecisionExplorer'
 import { RecoveryCodes } from '@/features/recovery/RecoveryCodes'
 import type { Me } from '@/lib/api'
+import { ProfileCard } from './ProfileCard'
 import { useLogout } from './useAuth'
 
 export function AccountPage({ session }: { session: Me }) {
@@ -85,6 +86,7 @@ export function AccountPage({ session }: { session: Me }) {
           </TabsList>
 
           <TabsContent value="account" className="mt-4 space-y-4">
+            <ProfileCard session={session} />
             <CredentialList />
             <RecoveryCodes remaining={session.recoveryCodesRemaining} />
           </TabsContent>
