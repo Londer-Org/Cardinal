@@ -169,6 +169,15 @@ type adminStatus struct {
 	ManageUsers        bool
 	ManageApplications bool
 
+	// AdministerDirectory is the broad tier, which the narrower two do not
+	// imply. Recovery lives behind it: restoring an account that can already
+	// sign in can mint a credential on an administrator's own account, so a
+	// user-admin is deliberately not allowed to start one. The UI needs to know
+	// that separately, or it asks a question it will be refused for — and a
+	// refusal recorded against someone who only loaded a page makes the
+	// decision log describe an intent nobody had.
+	AdministerDirectory bool
+
 	// NeedsReauth distinguishes "you are not an administrator" from "you are,
 	// but your authentication has gone stale". Without it the section simply
 	// vanishes five minutes after signing in, which reads as a bug rather than
@@ -204,6 +213,7 @@ func (s *Server) adminStatusFor(ctx context.Context, session *store.Session) adm
 	}{
 		{policy.ActionManageUsers, &status.ManageUsers},
 		{policy.ActionManageApplications, &status.ManageApplications},
+		{policy.ActionAdministerData, &status.AdministerDirectory},
 	} {
 		entitled, _, err := s.decideAction(ctx, &fresh, tier.action)
 		if err != nil {

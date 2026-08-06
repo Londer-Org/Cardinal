@@ -153,6 +153,10 @@ type meResponse struct {
 	// permission they lack.
 	CanManageUsers        bool `json:"canManageUsers"`
 	CanManageApplications bool `json:"canManageApplications"`
+
+	// The broad tier. Not implied by either of the two above — recovery sits
+	// behind this one alone.
+	CanAdministerDirectory bool `json:"canAdministerDirectory"`
 }
 
 func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
@@ -189,10 +193,11 @@ func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
 		// What the UI should offer, not what it is allowed to do. Every admin
 		// endpoint evaluates the policy itself; this only decides what is
 		// rendered, and whether to offer a way back in.
-		CanAdminister:         admin.Allowed,
-		AdminNeedsReauth:      admin.NeedsReauth,
-		CanManageUsers:        admin.ManageUsers,
-		CanManageApplications: admin.ManageApplications,
+		CanAdminister:          admin.Allowed,
+		AdminNeedsReauth:       admin.NeedsReauth,
+		CanManageUsers:         admin.ManageUsers,
+		CanManageApplications:  admin.ManageApplications,
+		CanAdministerDirectory: admin.AdministerDirectory,
 	})
 }
 

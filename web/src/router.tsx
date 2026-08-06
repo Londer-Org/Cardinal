@@ -17,9 +17,15 @@ const rootRoute = createRootRoute({ component: AppShell })
 // Views are code-split. The initial bundle is the shell rather than every screen
 // an administrator might eventually open.
 
-const accountRoute = createRoute({
+const homeRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/',
+  component: lazyRouteComponent(() => import('@/views/home'), 'HomeView'),
+})
+
+const accountRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/account',
   component: lazyRouteComponent(() => import('@/views/account'), 'AccountView'),
 })
 
@@ -78,6 +84,7 @@ const recoveryRoute = createRoute({
 })
 
 const routeTree = rootRoute.addChildren([
+  homeRoute,
   accountRoute,
   passkeysRoute,
   connectedRoute,

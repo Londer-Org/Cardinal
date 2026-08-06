@@ -33,6 +33,9 @@ export const meSchema = z.object({
   // someone will be refused reads as a broken system, not a missing permission.
   canManageUsers: z.boolean(),
   canManageApplications: z.boolean(),
+  // The broad tier, which neither of the two above implies. Recovery sits
+  // behind this one alone.
+  canAdministerDirectory: z.boolean(),
   email: z.string(),
 })
 export type Me = z.infer<typeof meSchema>

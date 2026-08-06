@@ -1,5 +1,6 @@
 import {
   AppWindowIcon,
+  HouseIcon,
   KeyRoundIcon,
   LayersIcon,
   LifeBuoyIcon,
@@ -77,8 +78,15 @@ export const NAV: NavSection[] = [
   },
 ]
 
-/** The profile page, which has no section — it is the whole of one. */
-export const ACCOUNT = { label: 'Your account', to: '/' } as const
+/**
+ * The two pages that belong to no section.
+ *
+ * Home is where you land; the account page is reached from the menu at the
+ * foot of the sidebar, beside the identity it describes, rather than from a
+ * section of its own.
+ */
+export const HOME = { label: 'Home', to: '/', icon: HouseIcon } as const
+export const ACCOUNT = { label: 'Your account', to: '/account' } as const
 
 export interface Location {
   section: NavSection
@@ -109,4 +117,45 @@ export function locate(pathname: string): Location | null {
   }
 
   return best
+}
+
+export interface Crumb {
+  key: string
+  label: string
+  /** Absent for headings and for the page you are on. */
+  to?: string
+}
+
+/**
+ * The trail for a path.
+ *
+ * Lives here rather than in the header that draws it, so the breadcrumbs and
+ * the sidebar cannot describe the same page differently — which is exactly
+ * what they used to do.
+ */
+export function crumbsFor(pathname: string): Crumb[] {
+  if (pathname === HOME.to) return [{ key: 'home', label: HOME.label }]
+  if (pathname === ACCOUNT.to) {
+    return [{ key: 'account', label: ACCOUNT.label }]
+  }
+
+  const here = locate(pathname)
+  if (here !== null) {
+    return [
+      // A section is a heading, not a page — it has no route of its own, so it
+      // is deliberately not a link to one.
+      { key: here.section.label, label: here.section.label },
+      { key: here.item.to, label: here.item.label, to: here.item.to },
+      ...here.rest.map((segment) => ({ key: segment, label: segment })),
+    ]
+  }
+
+  // Somewhere the navigation does not describe — a dead link, or a route added
+  // without one. Shown as it is rather than folded into a real page, because a
+  // breadcrumb naming a page you are not on is worse than one admitting it
+  // does not know.
+  return pathname
+    .split('/')
+    .filter(Boolean)
+    .map((segment) => ({ key: segment, label: segment }))
 }

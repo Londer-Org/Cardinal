@@ -95,9 +95,10 @@ func TestTiersAreReportedToTheUI(t *testing.T) {
 	defer drain(resp)
 
 	var me struct {
-		CanAdminister         bool `json:"canAdminister"`
-		CanManageUsers        bool `json:"canManageUsers"`
-		CanManageApplications bool `json:"canManageApplications"`
+		CanAdminister          bool `json:"canAdminister"`
+		CanManageUsers         bool `json:"canManageUsers"`
+		CanManageApplications  bool `json:"canManageApplications"`
+		CanAdministerDirectory bool `json:"canAdministerDirectory"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&me); err != nil {
 		t.Fatal(err)
@@ -113,6 +114,17 @@ func TestTiersAreReportedToTheUI(t *testing.T) {
 	if me.CanManageApplications {
 		t.Error("canManageApplications is true for a user-admin — the console " +
 			"would render a form they will be refused")
+	}
+
+	// The broad tier is not implied by managing users, and the console reads
+	// this to decide whether to ask for the recovery queue at all. Reported
+	// wrongly, a user-admin's home page requests a list it cannot have — and
+	// the refusal is written to the decision log, which then describes an
+	// intent that was the UI's rather than the person's.
+	if me.CanAdministerDirectory {
+		t.Error("canAdministerDirectory is true for a user-admin — recovery " +
+			"can mint a credential on an administrator's own account, and is " +
+			"deliberately out of this tier's reach")
 	}
 }
 

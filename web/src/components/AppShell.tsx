@@ -23,7 +23,7 @@ import { pendingAuthorizationID, useOIDCResume } from '@/features/auth/useOIDCRe
 import { ConsentPrompt } from '@/features/consent/ConsentPrompt'
 import { EnrollPage, invitationToken } from '@/features/enroll/EnrollPage'
 import { StepUpDialog } from '@/features/auth/StepUpDialog'
-import { ACCOUNT, locate } from '@/lib/nav'
+import { HOME, crumbsFor } from '@/lib/nav'
 
 /**
  * Everything that wraps a page: authentication, the OIDC hand-off, and the
@@ -46,6 +46,7 @@ export function AppShell() {
 function Authenticated() {
   const { session, isLoading } = useSession()
   const { state: resume, decide, deciding } = useOIDCResume(session !== null)
+  const pathname = useRouterState({ select: (state) => state.location.pathname })
 
   if (isLoading) {
     return (
@@ -141,8 +142,13 @@ function Authenticated() {
         {/* Outside the scroll area on purpose. A view that wants a
             viewport-height table asks for h-full, and it should get exactly the
             space left over — not that minus however tall this banner is
-            today. */}
-        {!session.fullyEnrolled && (
+            today.
+
+            Not on the home page: that page's whole job is to say what needs
+            doing, and it says this one with a link on it. Two notices about the
+            same passkey, one above the other, reads as a bug rather than as
+            emphasis. */}
+        {!session.fullyEnrolled && pathname !== HOME.to && (
           <div className="shrink-0 px-4 pt-4 md:px-6">
             <Alert className="border-warning/50 text-warning-foreground [&>svg]:text-warning">
               <ShieldQuestionIcon />
@@ -187,29 +193,7 @@ function Authenticated() {
  */
 function Crumbs() {
   const pathname = useRouterState({ select: (state) => state.location.pathname })
-  const here = locate(pathname)
-
-  let crumbs: { key: string; label: string; to?: string }[]
-  if (here !== null) {
-    crumbs = [
-      // The section is a heading, not a page — it has no route of its own, so
-      // it is deliberately not a link to one.
-      { key: here.section.label, label: here.section.label },
-      { key: here.item.to, label: here.item.label, to: here.item.to },
-      ...here.rest.map((segment) => ({ key: segment, label: segment })),
-    ]
-  } else if (pathname === ACCOUNT.to) {
-    crumbs = [{ key: 'account', label: ACCOUNT.label }]
-  } else {
-    // Somewhere the navigation does not describe — a dead link, or a route
-    // added without one. Shown as it is rather than folded into the account
-    // page, because a breadcrumb naming a page you are not on is worse than
-    // one that admits it does not know.
-    crumbs = pathname
-      .split('/')
-      .filter(Boolean)
-      .map((segment) => ({ key: segment, label: segment }))
-  }
+  const crumbs = crumbsFor(pathname)
 
   return (
     <Breadcrumb>

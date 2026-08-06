@@ -22,7 +22,7 @@ import {
 } from '@/components/ui/sidebar'
 import { CardinalMark } from '@/components/CardinalMark'
 import { useLogout, useSession } from '@/features/auth/useAuth'
-import { ACCOUNT, NAV } from '@/lib/nav'
+import { ACCOUNT, HOME, NAV } from '@/lib/nav'
 import type { NavItem } from '@/lib/nav'
 
 /**
@@ -66,6 +66,11 @@ export function AppSidebar() {
       </SidebarHeader>
 
       <SidebarContent>
+        {/* Above the sections and outside them: home is not part of any one of
+            them, and giving it a heading of its own would be a label for a
+            single link. */}
+        <NavGroup items={[HOME]} pathname={pathname} />
+
         {NAV.filter(
           (section) =>
             section.visible === undefined ||
@@ -216,22 +221,26 @@ function NavGroup({
   items,
   pathname,
 }: {
-  label: string
-  items: NavItem[]
+  label?: string
+  items: readonly NavItem[]
   pathname: string
 }) {
   const { setOpenMobile } = useSidebar()
 
   return (
     <SidebarGroup>
-      <SidebarGroupLabel>{label}</SidebarGroupLabel>
+      {label !== undefined && <SidebarGroupLabel>{label}</SidebarGroupLabel>}
       <SidebarMenu>
         {items.map((item) => (
           <SidebarMenuItem key={item.to}>
             <SidebarMenuButton
               asChild
               isActive={
-                pathname === item.to || pathname.startsWith(`${item.to}/`)
+                // Home is every path's prefix, so it alone matches exactly —
+                // otherwise it would light up on every page in the product.
+                item.to === HOME.to
+                  ? pathname === HOME.to
+                  : pathname === item.to || pathname.startsWith(`${item.to}/`)
               }
               tooltip={item.label}
             >
