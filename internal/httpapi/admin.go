@@ -17,8 +17,8 @@ import (
 // This is the row of ADR 0005's table that matters most: Cardinal's own access
 // control runs through the same engine as web access, SSH and sudo, so there is
 // no separate, arcane admin ACL language of the kind LDAP has. Membership of
-// directory-admins is a permit; the forbid rules for freshness, device-bound
-// credentials and break-glass apply on top of it and always win.
+// directory-admins is a permit; the forbid rule for fresh, device-bound
+// credentials applies on top of it and always wins.
 
 // adminResource is what admin actions are evaluated against.
 //
@@ -75,18 +75,10 @@ func (s *Server) requireAdmin(next http.Handler) http.Handler {
 
 // adminDenialMessage turns a decision into something actionable.
 //
-// More than one forbid can fire at once, and which one is reported decides
-// where the reader goes next. A break-glass session trips the freshness rule
-// too — it is not device-bound — but "sign in again with your key" is a dead
-// end there, because no amount of re-authenticating makes an emergency session
-// able to administer. So the rules are checked in order of what they imply
-// about the fix, not in whatever order Cedar returned them.
+// More than one forbid could fire at once, and which one is reported decides
+// where the reader goes next — so this checks by name rather than taking
+// whichever Cedar returned first.
 func adminDenialMessage(decision policy.Decision) string {
-	if slices.Contains(decision.Reasons, "break-glass-cannot-administer") {
-		return "emergency access cannot administer the directory; it exists to " +
-			"restore normal access, not to be worked in. Sign in normally with " +
-			"a security key"
-	}
 	if slices.Contains(decision.Reasons, "admin-requires-fresh-device-bound-auth") {
 		return "administering the directory needs a security key used in " +
 			"the last five minutes — sign in again with your key"
@@ -145,7 +137,6 @@ func (s *Server) logAdminDecision(ctx context.Context, subject *claims.Subject, 
 		Context: map[string]any{
 			"auth_method":  subject.Auth.Method,
 			"device_bound": subject.Auth.DeviceBound,
-			"emergency":    subject.Auth.Emergency,
 			"groups":       subject.GroupNames(),
 		},
 		Duration: decision.Duration,

@@ -1,4 +1,4 @@
-import { LogOutIcon, ShieldAlertIcon, ShieldQuestionIcon } from 'lucide-react'
+import { LogOutIcon, ShieldQuestionIcon } from 'lucide-react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -44,17 +44,6 @@ export function AccountPage({ session }: { session: Me }) {
             simply re-enabling says nothing. Silence here is how "sign out did
             nothing" gets mistaken for "sign out worked". */}
         {logout.error !== null && <ErrorMessage error={logout.error} />}
-
-        {session.emergency && (
-          <Alert variant="destructive">
-            <ShieldAlertIcon />
-            <AlertTitle>Emergency access in progress</AlertTitle>
-            <AlertDescription>
-              This session was opened with the break-glass key and is being
-              audited. Restore normal access and sign out as soon as you can.
-            </AlertDescription>
-          </Alert>
-        )}
 
         {/* A nudge, not a failure — hence warning rather than destructive.
             Colouring routine advice as an error trains people to ignore the

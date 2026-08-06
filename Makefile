@@ -91,7 +91,7 @@ COMPOSE_E2E := docker compose -f examples/compose.yml
 e2e-seed: ## Create the end-to-end user and activate the policy set
 	@# Errors are NOT swallowed here. An earlier version used `|| true`, and a
 	@# failed user creation then surfaced much later as a confusing
-	@# "emergency access failed" from break-glass.
+	@# "session invalid" much later, from a seeded session pointing at nothing.
 	@$(COMPOSE_E2E) exec -T cardinal \
 		cardinal user create e2e-user -display 'End-to-end User' 2>&1 \
 		| grep -qE 'created|already exists' \

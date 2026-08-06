@@ -106,7 +106,6 @@ func (s *Server) handleForwardAuth(w http.ResponseWriter, r *http.Request) {
 			"method":       original.Method,
 			"auth_method":  subject.Auth.Method,
 			"device_bound": subject.Auth.DeviceBound,
-			"emergency":    subject.Auth.Emergency,
 			"groups":       subject.GroupNames(),
 		},
 		Duration: decision.Duration,

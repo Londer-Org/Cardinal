@@ -5,7 +5,6 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"os/exec"
 	"strings"
 	"testing"
 )
@@ -14,18 +13,22 @@ import (
 //
 // Cardinal's own administration runs through the same policy engine as web
 // access, SSH and sudo (ADR 0005) — there is no separate admin ACL of the kind
-// LDAP has. These tests exercise the refusals, because the e2e suite signs in
-// with break-glass, and break-glass is explicitly forbidden from administering.
-// That makes it exactly the credential this gate must hold against.
+// LDAP has. Most of these exercise refusals, because that is the half worth
+// being sure about: an ordinary signed-in user must not be able to register an
+// OIDC client, and the suite keeps a separate account for the admin case so the
+// refusals cannot pass vacuously.
 
-// TestBreakGlassCannotReachTheAdminAPI.
+// TestOrdinaryUserCannotReachTheAdminAPI.
 //
-// The whole point of ADR 0009's emergency key is restoring access, not working
-// with it. If a break-glass session could register OIDC clients, a stolen
-// offline key would go from serious to catastrophic: register a client with a
-// redirect URI you control and you have an identity provider phishing its own
-// users, with the organisation's real domain in the address bar.
-func TestBreakGlassCannotReachTheAdminAPI(t *testing.T) {
+// Being signed in is not being an administrator. Anyone who can register an
+// OIDC client chooses its redirect URIs, which is enough to stand up a
+// convincing phishing surface inside the organisation's own identity provider —
+// so this is the boundary that matters most on the whole admin API.
+func TestOrdinaryUserCannotReachTheAdminAPI(t *testing.T) {
+	// Ensures the admin account exists and the ordinary one is demoted,
+	// whatever previous runs left behind.
+	adminClient(t)
+
 	c := signedInClient(t)
 	csrf := csrfToken(t, c)
 
@@ -66,13 +69,15 @@ func TestBreakGlassCannotReachTheAdminAPI(t *testing.T) {
 			if err := json.Unmarshal(body, &denial); err != nil {
 				t.Fatalf("denial was not JSON: %s", body)
 			}
-			if !contains(denial.Policy, "break-glass-cannot-administer") {
-				t.Errorf("denial named %v, expected the break-glass rule — a refusal "+
-					"that cannot say which policy fired is not explicable", denial.Policy)
+			// Nothing matched, so nothing is named: this is default-deny, and
+			// the message has to say so rather than implying a rule fired.
+			if len(denial.Policy) != 0 {
+				t.Errorf("denial named %v, but no policy should match an ordinary "+
+					"user asking to administer", denial.Policy)
 			}
-			if !strings.Contains(denial.Error, "emergency") {
-				t.Errorf("denial message %q does not mention emergency access, so "+
-					"the reader cannot tell why they were refused", denial.Error)
+			if !strings.Contains(denial.Error, "directory-admins") {
+				t.Errorf("denial message %q does not say what is missing, so the "+
+					"reader cannot tell why they were refused", denial.Error)
 			}
 		})
 	}
@@ -84,6 +89,8 @@ func TestBreakGlassCannotReachTheAdminAPI(t *testing.T) {
 // decision explorer must be able to answer "why was I denied?" for the admin
 // API exactly as it does for web access.
 func TestAdminDenialIsLoggedAsADecision(t *testing.T) {
+	adminClient(t) // demotes the ordinary account
+
 	c := signedInClient(t)
 
 	//nolint:bodyclose // drain closes it
@@ -108,7 +115,7 @@ func TestAdminDenialIsLoggedAsADecision(t *testing.T) {
 	for _, record := range records {
 		if record.DecisionPoint == "adminAPI" && record.Action == "AdministerDirectory" {
 			if record.Allowed {
-				t.Fatal("a break-glass session was allowed to administer the directory")
+				continue
 			}
 			if record.Explanation == "" {
 				t.Error("the decision carries no explanation, so the explorer has nothing to show")
@@ -137,33 +144,44 @@ func TestUnauthenticatedAdminAPIIsUnauthorized(t *testing.T) {
 
 // adminClient returns a client holding a session that can actually administer.
 //
-// The session is inserted straight into the database rather than obtained by
-// signing in, because the only credential that satisfies the policy is a
-// device-bound passkey, and tapping one needs a human with a security key. What
-// is inserted is exactly what a passkey sign-in would produce — auth_method
-// passkey, device_bound true, authenticated now — so everything downstream of
-// authentication is genuinely exercised. Only the WebAuthn ceremony is skipped,
-// and that is covered by its own tests plus a human in a browser.
+// A different account from the one establishSession uses, deliberately.
+// Promoting the shared account would make every "this is refused" test pass
+// vacuously the moment an admin test had run — the suite would still be green
+// and would be checking nothing.
 //
-// The subject is also granted directory-admins, the ordinary way, because the
-// permit rule is what is under test.
+// The session is inserted straight into the database rather than obtained by
+// signing in, because the only credential Cardinal accepts is a passkey and
+// tapping one needs a human. What is inserted is exactly what a passkey sign-in
+// produces, so everything downstream of authentication is genuinely exercised.
 func adminClient(t *testing.T) (*http.Client, string) {
 	t.Helper()
 
 	//nolint:gosec // a session token for a throwaway container, not a credential
 	const token = "e2e-admin-session-token-with-plenty-of-entropy-0123456789"
+	const login = "e2e-admin"
 
-	psql(t, `INSERT INTO group_members (group_id, member_id, granted_by, valid_period)
-	         SELECT '`+adminGroupID+`', e.id, e.id, tstzrange(now(), 'infinity')
-	           FROM entities e WHERE e.name = 'e2e-user'
-	         ON CONFLICT DO NOTHING`)
+	seedSQL(t, `INSERT INTO entities (type, name, display_name)
+	            VALUES ('user', '`+login+`', 'End-to-end Administrator')
+	            ON CONFLICT (type, name) DO UPDATE SET disabled_at = NULL`)
 
-	psql(t, `DELETE FROM sessions WHERE token_hash = sha256('`+token+`'::bytea)`)
-	psql(t, `INSERT INTO sessions
-	           (subject_id, token_hash, valid_period, auth_method, auth_at, device_bound)
-	         SELECT e.id, sha256('`+token+`'::bytea),
-	                tstzrange(now(), now() + interval '1 hour'), 'passkey', now(), true
-	           FROM entities e WHERE e.name = 'e2e-user'`)
+	seedSQL(t, `INSERT INTO group_members (group_id, member_id, granted_by, valid_period)
+	            SELECT '`+adminGroupID+`', e.id, e.id, tstzrange(now(), 'infinity')
+	              FROM entities e WHERE e.name = '`+login+`'
+	            ON CONFLICT DO NOTHING`)
+
+	// The ordinary account must never be an administrator, or the refusal
+	// tests stop testing anything. Previous runs granted it, so this undoes
+	// that rather than assuming a clean database.
+	seedSQL(t, `DELETE FROM group_members
+	             WHERE group_id = '`+adminGroupID+`'
+	               AND member_id = (SELECT id FROM entities WHERE name = 'e2e-user')`)
+
+	seedSQL(t, `DELETE FROM sessions WHERE token_hash = sha256('`+token+`'::bytea)`)
+	seedSQL(t, `INSERT INTO sessions
+	              (subject_id, token_hash, valid_period, auth_method, auth_at, device_bound)
+	            SELECT e.id, sha256('`+token+`'::bytea),
+	                   tstzrange(now(), now() + interval '1 hour'), 'passkey', now(), true
+	              FROM entities e WHERE e.name = '`+login+`'`)
 
 	c := client(t)
 	c.Jar.SetCookies(&url.URL{Scheme: "http", Host: hostCardinal},
@@ -176,19 +194,6 @@ func adminClient(t *testing.T) (*http.Client, string) {
 // asserts the shipped policy agrees; this is the third copy, and if it drifts
 // these tests fail loudly rather than quietly testing nothing.
 const adminGroupID = "00000000-0000-7000-8000-00000000ad11"
-
-func psql(t *testing.T, statement string) {
-	t.Helper()
-
-	//nolint:gosec // the statement is written in this file, not taken from input
-	out, err := exec.CommandContext(t.Context(), "docker", "compose",
-		"-f", "../../examples/compose.yml",
-		"exec", "-T", "postgres", "psql", "-U", "cardinal", "-d", "cardinal",
-		"-v", "ON_ERROR_STOP=1", "-c", statement).CombinedOutput()
-	if err != nil {
-		t.Fatalf("psql: %v\n%s", err, out)
-	}
-}
 
 // TestAdminCanManageApplications is the allowed path, end to end.
 func TestAdminCanManageApplications(t *testing.T) {
@@ -213,7 +218,7 @@ func TestAdminCanManageApplications(t *testing.T) {
 	// with its own id rather than a fixed suffix, so this stays idempotent
 	// however many times the suite runs.
 	name := "e2e-managed-app"
-	psql(t, `UPDATE entities SET name = name || '-' || id WHERE name = '`+name+`'`)
+	seedSQL(t, `UPDATE entities SET name = name || '-' || id WHERE name = '`+name+`'`)
 
 	var registered struct {
 		ClientID string `json:"clientId"`

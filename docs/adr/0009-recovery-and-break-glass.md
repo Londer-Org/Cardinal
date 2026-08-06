@@ -1,7 +1,15 @@
 # ADR 0009: Account recovery and break-glass
 
-- **Status:** Accepted
+- **Status:** Accepted, break-glass half superseded by [ADR 0014](0014-break-glass-removed.md)
 - **Date:** 2026-08-05
+
+> **Amended 2026-08-06.** The break-glass mechanism described below was
+> removed by [ADR 0014](0014-break-glass-removed.md): enrollment invitations
+> took over its bootstrap role, the CLI already performed the same recovery
+> unauthenticated, and its stated "works with the database down" property was
+> never true, since challenges were persisted in the database. Everything here
+> about recovery email, the IdP circularity rule, ≥2 passkeys, and never storing
+> recoverable credentials still holds.
 
 ## Context
 

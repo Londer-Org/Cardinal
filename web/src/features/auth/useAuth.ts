@@ -17,8 +17,8 @@ export function useSession() {
   // is right for a flaky endpoint and wrong for this one: a 401 means the
   // session is gone, and continuing to render the account page from stale data
   // would leave someone looking at an account they are no longer signed in to
-  // while every request behind it fails. That is exactly what a break-glass
-  // session does after fifteen minutes.
+  // while every request behind it fails — which is what any session does the
+  // moment it expires or is revoked.
   const signedOut =
     query.error instanceof ApiError && query.error.isUnauthenticated
 
@@ -32,8 +32,8 @@ export function useSession() {
     // user because the query errors. With refetchOnWindowFocus on, that made
     // isPending true every time the window regained focus, so the app swapped
     // in its loading skeleton and remounted the login page — discarding a
-    // break-glass ceremony mid-flight, which is the one moment the user has
-    // deliberately alt-tabbed away to sign a challenge.
+    // work in progress mid-flight, including a form the user had alt-tabbed
+    // away from to fetch something.
     isLoading: query.isPending && !query.isFetched,
 
     isSignedIn: query.isSuccess && !signedOut,

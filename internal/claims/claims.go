@@ -74,11 +74,6 @@ type AuthContext struct {
 	// require it for privileged actions.
 	DeviceBound bool
 
-	// Emergency means this came from break-glass. Such a session bypassed
-	// normal authentication entirely and should be treated as an incident in
-	// progress, not as ordinary access.
-	Emergency bool
-
 	SessionID uuid.UUID
 }
 
@@ -152,7 +147,6 @@ func (r *Resolver) Resolve(ctx context.Context, session *store.Session) (*Subjec
 			Method:      session.AuthMethod,
 			At:          session.AuthAt,
 			DeviceBound: session.DeviceBound,
-			Emergency:   session.Emergency(),
 			SessionID:   session.ID,
 		},
 		ResolvedAt: time.Now().UTC(),

@@ -3,11 +3,11 @@
 // Two principles run through this file.
 //
 // First, **no unsafe defaults.** Values whose wrong choice is a security
-// problem — the WebAuthn relying party, the break-glass key — have no default
+// problem — the WebAuthn relying party, the token signing key — have no default
 // at all. Cardinal refuses to start rather than guessing. A system that boots
 // with a plausible-looking wrong value is worse than one that will not boot.
 //
-// Second, **the config file is a trust anchor.** The break-glass public key
+// Second, **the config file is a trust anchor.** The signing-key encryption key
 // lives here rather than in the database precisely so that a database
 // compromise cannot substitute it and a restore cannot roll it back
 // (ADR 0009).
@@ -27,12 +27,11 @@ import (
 )
 
 type Config struct {
-	Server     Server     `toml:"server"`
-	Database   Database   `toml:"database"`
-	WebAuthn   WebAuthn   `toml:"webauthn"`
-	BreakGlass BreakGlass `toml:"break_glass"`
-	Recovery   Recovery   `toml:"recovery"`
-	OIDC       OIDC       `toml:"oidc"`
+	Server   Server   `toml:"server"`
+	Database Database `toml:"database"`
+	WebAuthn WebAuthn `toml:"webauthn"`
+	Recovery Recovery `toml:"recovery"`
+	OIDC     OIDC     `toml:"oidc"`
 }
 
 // OIDC configures the OpenID Connect provider.
@@ -43,8 +42,8 @@ type OIDC struct {
 
 	// SigningKeyEncryptionKey encrypts the token-signing key at rest.
 	//
-	// It lives in configuration rather than the database, following the
-	// break-glass reasoning (ADR 0009). The signing key can forge tokens for
+	// It lives in configuration rather than the database on purpose: a
+	// database read must not be enough. The signing key can forge tokens for
 	// every registered application, so storing it in the clear would make a
 	// database read a complete compromise of every downstream system —
 	// arguably worse than losing the directory itself. With this, an attacker
@@ -123,13 +122,6 @@ type WebAuthn struct {
 	Origins []string `toml:"origins"`
 }
 
-type BreakGlass struct {
-	// PublicKey is the offline emergency key, cardinal-bg-v1: encoded.
-	//
-	// Deliberately here and not in the database. See ADR 0009.
-	PublicKey string `toml:"public_key"`
-}
-
 // Recovery configures account recovery channels.
 type Recovery struct {
 	// EmailEnabled is off by default. Recovery email makes the mail provider a
@@ -196,13 +188,6 @@ func (c *Config) Validate() error {
 	}
 
 	problems = append(problems, c.validateWebAuthn()...)
-
-	if c.BreakGlass.PublicKey == "" {
-		problems = append(problems, fmt.Errorf(
-			"%w: break_glass.public_key — generate one with `cardinal break-glass generate`. "+
-				"Without it there is no way back in if administrative access is lost",
-			ErrMissing))
-	}
 
 	if c.Recovery.EmailEnabled && len(c.Recovery.EmailDomains) == 0 {
 		problems = append(problems, fmt.Errorf(

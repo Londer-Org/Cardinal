@@ -1,0 +1,21 @@
+-- Cardinal 0010: remove break-glass.
+--
+-- Break-glass was the bootstrap path because nothing else existed: enrolling a
+-- first passkey needed a session, and getting a session needed a passkey. ADR
+-- 0013 gave that job to enrollment invitations, which left break-glass as a
+-- second internet-facing credential that could impersonate any user, kept for a
+-- recovery the CLI could already perform.
+--
+-- Two things settled it (ADR 0014). The CLI reaches the database directly and
+-- has no authentication at all — `cardinal invite <admin>` already restores
+-- access to anyone who can run it — so break-glass was never the last resort;
+-- the database credential is. And the property that justified keeping both, "a
+-- break-glass procedure that works with the database down", was never true:
+-- challenges were persisted here, so the ceremony needed exactly the thing that
+-- might be unavailable.
+--
+-- The challenges table goes. Events recording past use do not: the journal is
+-- append-only, and "emergency access was used on this date" is exactly the kind
+-- of thing that must survive the removal of the feature that wrote it.
+
+DROP TABLE IF EXISTS break_glass_challenges;

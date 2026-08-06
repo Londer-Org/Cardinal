@@ -46,10 +46,6 @@ type Session struct {
 	CredentialID *uuid.UUID
 }
 
-// Emergency reports whether this session came from break-glass. Such sessions
-// bypass normal authentication and must be treated as an incident in progress.
-func (s *Session) Emergency() bool { return s.AuthMethod == "break_glass" }
-
 // Expired reports whether the session has passed its validity window.
 //
 // Callers must check this at read time and not rely on cache invalidation:
@@ -212,16 +208,6 @@ func (s *Store) RevokeAllSessions(ctx context.Context, subjectID uuid.UUID, acto
 		return s.AppendEvent(ctx, tx, ev)
 	})
 	return count, err
-}
-
-// newBreakGlassEvent records emergency access. Separate from ordinary session
-// creation so it is trivial to alert on.
-func newBreakGlassEvent(subjectID, sessionID uuid.UUID) (*event.Event, error) {
-	return event.New(event.ActionBreakGlassUsed, &subjectID, &subjectID,
-		map[string]any{
-			"session_id":  sessionID,
-			"auth_method": "break_glass",
-		})
 }
 
 // ConstantTimeCompare is used where a secret is compared outside the database.

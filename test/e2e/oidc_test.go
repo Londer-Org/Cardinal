@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -123,8 +124,10 @@ func TestFullOIDCLogin(t *testing.T) {
 	if !ok || len(amr) == 0 {
 		t.Fatalf("amr missing or empty: %v", result.Claims["amr"])
 	}
-	if amr[0] != "break_glass" {
-		t.Errorf("amr = %v, want break_glass for an emergency session", amr)
+	if !slices.Contains(amr, any("hwk")) {
+		t.Errorf("amr = %v, want hwk for a device-bound passkey session — a "+
+			"relying party uses this to make its own step-up decision rather "+
+			"than trusting that Cardinal's policy matched its needs", amr)
 	}
 }
 

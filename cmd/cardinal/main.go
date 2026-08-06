@@ -81,8 +81,6 @@ func run(ctx context.Context, args []string) error {
 		return runPolicy(ctx, rest)
 	case "serve":
 		return runServe(ctx, rest)
-	case "break-glass":
-		return runBreakGlass(rest)
 	case "redact":
 		return runRedact(ctx, rest)
 	case "audit":
@@ -125,9 +123,6 @@ MEMBERSHIP
   history <group> <member>                 Every grant ever, including expired
 
 EMERGENCY ACCESS
-  break-glass generate                     Bootstrap ceremony: create the
-                                           offline emergency keypair
-  break-glass sign <challenge> -key <f>    Sign a challenge with the offline key
 
 PRIVACY
   redact <type> <name> [-yes]              Erase personal data (GDPR Art. 17).
@@ -190,8 +185,8 @@ var configSearchPaths = []string{
 // dsnFromConfig reads just the DSN, tolerating a config that is otherwise
 // incomplete.
 //
-// config.Load validates everything and refuses a file missing, say, a
-// break-glass key — correct for starting a server, wrong here. `cardinal
+// config.Load validates everything and refuses a file missing, say, the
+// WebAuthn origins — correct for starting a server, wrong here. `cardinal
 // migrate` must work against a half-configured deployment, since applying the
 // schema is often the first thing done.
 func dsnFromConfig() string {

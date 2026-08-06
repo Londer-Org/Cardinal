@@ -110,15 +110,6 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("POST /api/auth/login/finish",
 		s.rateLimit(store.LimitLoginFinish)(http.HandlerFunc(s.handleLoginFinish)))
 
-	// ── Emergency access ───────────────────────────────────────────────────
-	// Also the bootstrap path: enrolling a first passkey needs a session, and
-	// the offline key is what breaks that circle (ADR 0009).
-	mux.Handle("POST /api/auth/break-glass/begin",
-		s.rateLimit(store.LimitBreakGlass)(http.HandlerFunc(s.handleBreakGlassBegin)))
-	mux.Handle("POST /api/auth/break-glass/finish",
-		s.rateLimit(store.LimitBreakGlass)(http.HandlerFunc(s.handleBreakGlassFinish)))
-
-	// ── Session ────────────────────────────────────────────────────────────
 	mux.Handle("GET /api/auth/me", s.requireAuth(http.HandlerFunc(s.handleMe)))
 	mux.Handle("POST /api/auth/logout", s.requireAuth(http.HandlerFunc(s.handleLogout)))
 

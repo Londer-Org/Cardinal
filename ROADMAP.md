@@ -39,7 +39,7 @@ someone with a device.
 | ✅ | CI pipeline | lint · vet · gofumpt · govulncheck · tidy check · PG matrix |
 | ⬜ | Schema registry enforcement (Go) | Table exists; validation logic not yet wired |
 | ✅ | Backup + restore verification | `make restore-drill` — verified tampering is caught in a restored dump |
-| ✅ | **Break-glass design** | [ADR 0009](docs/adr/0009-recovery-and-break-glass.md) — offline key, public half in config not the DB |
+| ➖ | ~~Break-glass design~~ | [ADR 0009](docs/adr/0009-recovery-and-break-glass.md), removed by [ADR 0014](docs/adr/0014-break-glass-removed.md). Recovery is `cardinal invite <admin>` on the host |
 | ✅ | **GDPR erasure vs. append-only chain** | [ADR 0010](docs/adr/0010-personal-data-and-erasure.md) — enforced in code, `cardinal redact` works |
 | ✅ | Threat model document | [docs/threat-model.md](docs/threat-model.md) — includes an honest known-gaps list |
 
@@ -75,15 +75,15 @@ The core thesis was tested before any Go was written:
 | | Item |
 |---|---|
 | ✅ | WebAuthn — registration and login ceremonies, discoverable (usernameless) login, clone detection |
-| ✅ | Break-glass — keypair, ceremony, challenge/response, HTTP endpoints, UI flow. **Emergencies only** since ADR 0013; enrollment invitations took over the bootstrap path it was being misused for |
+| ➖ | ~~Break-glass~~ — **removed** (ADR 0014). Invitations took over the bootstrap role; the CLI already performed the same recovery unauthenticated, so it was a second internet-facing credential of last resort. Its "works with the database down" promise was never true — challenges were persisted in the database |
 | ⬜ | TOTP (migration aid + second factor; never for admin actions) |
 | ⬜ | Recovery email delivery (config + circularity guard done; SMTP sending pending) |
 | ✅ | Config loading — no unsafe defaults; enforces the recovery/IdP circularity rule |
 | ✅ | Session management + CSRF — hashed tokens, read-time revocation, double-submit CSRF, security headers |
 | ✅ | Recovery codes (Argon2id, single-use) and ≥2 passkeys enforced |
 | ⬜ | Dual-control admin recovery |
-| ⬜ | **First-run setup — creating the first administrator deliberately** rather than by break-glassing into an account the CLI made |
-| ✅ | **Enrollment invitations** (ADR 0013) — single-use, 24h, revocable, hashed at rest, no session granted; the enrollment screen is also where a user sets their own name and email. Break-glass is demoted to emergencies, which is what ADR 0009 always said it was |
+| ⬜ | **First-run setup** — one deliberate step for `user create` + `grant directory-admins` + `invite`, instead of three commands a newcomer has to know about |
+| ✅ | **Enrollment invitations** (ADR 0013) — single-use, 24h, revocable, hashed at rest, no session granted; the enrollment screen is also where a user sets their own name and email. **Recovery is `cardinal invite <admin>` on the host** (ADR 0014) |
 | ✅ | **Self-service profile** — display name and email, with the recovery/IdP circularity guard applied here too. The login stays administrative |
 | ✅ | Rate limiting — fixed-window, fails closed, trusted-proxy aware |
 | ✅ | Frontend — React 19, Vite 7, Tailwind v4, **shadcn/ui (vendored)**, TanStack Query, zod, strict TS with `any` banned |
@@ -259,6 +259,6 @@ Tracked openly, from [the threat model](docs/threat-model.md):
 | Risk | Mitigation |
 |---|---|
 | PG19 not GA until ~Sept/Oct 2026 | Pinned to `19beta2`; no production release before GA, then full re-test |
-| Locking ourselves out | Break-glass designed in Phase 0, tested quarterly |
+| Locking ourselves out | ≥2 passkeys enforced; recovery is `cardinal invite <admin>` on the host, which needs database access rather than a second internet-facing credential (ADR 0014). Rehearse it, do not assume it |
 | Kanidm may already solve this | Deploy it and confirm — one day of evaluation against months of build |
 | Scope is large for part-time | Every phase is independently useful; stopping after Phase 3 still leaves a working SSO IdP |

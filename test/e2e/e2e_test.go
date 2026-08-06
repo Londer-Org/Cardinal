@@ -236,14 +236,28 @@ func TestUnprotectedRouteProvesTheMiddlewareIsWhatMatters(t *testing.T) {
 // established at id.example.com is simply never sent to app.example.com and
 // sign-in loops forever.
 func TestSessionCookieIsScopedToTheParentDomain(t *testing.T) {
-	cookie := establishSession(t)
+	// Asserted on the CSRF cookie rather than the session cookie, because the
+	// suite now seeds its session directly and so never sees a Set-Cookie for
+	// it. Both are issued with the same Domain from the same setting, so this
+	// still fails if cookie_domain is wrong — which is the thing worth
+	// catching.
+	c := client(t)
+	resp := request(t, c, http.MethodGet, hostCardinal, "/api/health", "")
+	defer drain(resp)
 
-	if cookie.Domain == "" {
-		t.Fatal("session cookie is host-only — forwardAuth SSO cannot work, " +
+	var domain string
+	for _, cookie := range resp.Cookies() {
+		if cookie.Name == "cardinal_csrf" {
+			domain = cookie.Domain
+		}
+	}
+
+	if domain == "" {
+		t.Fatal("cookies are host-only — forwardAuth SSO cannot work, " +
 			"set server.cookie_domain")
 	}
-	if !strings.HasSuffix(hostProtected, cookie.Domain) {
-		t.Fatalf("cookie domain %q does not cover %q", cookie.Domain, hostProtected)
+	if !strings.HasSuffix(hostProtected, domain) {
+		t.Fatalf("cookie domain %q does not cover %q", domain, hostProtected)
 	}
 }
 
@@ -285,10 +299,12 @@ func TestAuthenticatedRequestCarriesIdentity(t *testing.T) {
 		t.Errorf("policy = %q, want staff-web-access — if empty, the header is "+
 			"missing from authResponseHeaders in traefik/dynamic.yml", identity.Policy)
 	}
-	// Break-glass is not device-bound, and the backend must see that rather
-	// than a default.
-	if identity.DeviceBound {
-		t.Error("deviceBound = true for a break-glass session")
+	// The seeded session is device-bound, and the backend must see that rather
+	// than a default — this header is what lets an application make its own
+	// step-up decision without asking Cardinal again.
+	if !identity.DeviceBound {
+		t.Error("deviceBound = false for a device-bound session; the backend " +
+			"cannot make its own step-up decisions if this is wrong")
 	}
 }
 
@@ -332,8 +348,17 @@ func withSession(t *testing.T, c *http.Client) {
 	}
 }
 
-// establishSession signs in once, via break-glass — the only non-interactive
-// path, since a passkey needs a human and a device.
+// establishSession seeds a signed-in session directly in the database.
+//
+// The only credential Cardinal accepts is a passkey, and tapping one needs a
+// human with a key — so a headless suite has to start from a session rather
+// than earn one. What is inserted is exactly what a passkey sign-in produces,
+// so everything downstream of authentication is genuinely exercised.
+//
+// This used to sign in with break-glass, which was the only non-interactive
+// path. Removing break-glass (ADR 0014) took that away, and seeding is the
+// honest replacement: it skips the same ceremony, without a production
+// mechanism existing solely to make tests convenient.
 func establishSession(t *testing.T) *http.Cookie {
 	t.Helper()
 
@@ -341,31 +366,32 @@ func establishSession(t *testing.T) *http.Cookie {
 		return sessionCookie
 	}
 
-	c := client(t)
-	csrf := csrfToken(t, c)
+	//nolint:gosec // a session token for a throwaway container, not a credential
+	const token = "e2e-session-token-with-plenty-of-entropy-0123456789abcdef"
 
-	var challenge struct {
-		Challenge string `json:"challenge"`
+	seedSQL(t, `DELETE FROM sessions WHERE token_hash = sha256('`+token+`'::bytea)`)
+	seedSQL(t, `INSERT INTO sessions
+	              (subject_id, token_hash, valid_period, auth_method, auth_at, device_bound)
+	            SELECT e.id, sha256('`+token+`'::bytea),
+	                   tstzrange(now(), now() + interval '1 hour'), 'passkey', now(), true
+	              FROM entities e WHERE e.name = 'e2e-user'`)
+
+	sessionCookie = &http.Cookie{Name: "cardinal_session", Value: token, Path: "/"}
+	return sessionCookie
+}
+
+// seedSQL runs a statement against the stack's database.
+func seedSQL(t *testing.T, statement string) {
+	t.Helper()
+
+	//nolint:gosec // the statement is written in this file, not taken from input
+	out, err := exec.CommandContext(t.Context(), "docker", "compose",
+		"-f", "../../examples/compose.yml",
+		"exec", "-T", "postgres", "psql", "-U", "cardinal", "-d", "cardinal",
+		"-v", "ON_ERROR_STOP=1", "-c", statement).CombinedOutput()
+	if err != nil {
+		t.Fatalf("seeding: %v\n%s", err, out)
 	}
-	postJSON(t, c, "/api/auth/break-glass/begin", csrf, nil, &challenge)
-
-	signature := strings.TrimSpace(cardinalCLI(t, "break-glass", "sign",
-		challenge.Challenge, "-key", "/etc/cardinal/break-glass.key"))
-
-	resp := postJSON(t, c, "/api/auth/break-glass/finish", csrf, map[string]string{
-		"challenge": challenge.Challenge,
-		"signature": signature,
-		"login":     "e2e-user",
-	}, nil)
-
-	for _, cookie := range resp.Cookies() {
-		if cookie.Name == "cardinal_session" {
-			sessionCookie = cookie
-			return cookie
-		}
-	}
-	t.Fatal("break-glass succeeded but set no session cookie")
-	return nil
 }
 
 func csrfToken(t *testing.T, c *http.Client) string {

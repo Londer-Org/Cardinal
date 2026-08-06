@@ -155,11 +155,6 @@ func backgroundMaintenance(ctx context.Context, st *store.Store, log *slog.Logge
 			} else if n > 0 {
 				log.DebugContext(ctx, "purged ceremonies", "count", n)
 			}
-			// Consumed break-glass challenges are deliberately kept: they are
-			// evidence that emergency access was attempted.
-			if _, err := st.PurgeExpiredChallenges(ctx); err != nil {
-				log.WarnContext(ctx, "purging challenges failed", "error", err)
-			}
 			if _, err := st.PurgeRateLimits(ctx, time.Hour); err != nil {
 				log.WarnContext(ctx, "purging rate limits failed", "error", err)
 			}

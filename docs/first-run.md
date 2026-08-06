@@ -11,24 +11,13 @@ make migrate
 make release            # builds the React UI and embeds it in the binary
 ```
 
-## 2. The break-glass ceremony
-
-This is a real ceremony, not a formality. The private key is printed once and
-never stored by Cardinal.
-
-```sh
-./bin/cardinal break-glass generate > break-glass.key
-```
-
-The public key goes in `cardinal.toml`; the private key would normally go
-offline. For a local test, leaving it in the working directory is fine — it is
-gitignored, and you should delete it afterwards.
+## 2. Configuration
 
 ```sh
 cp cardinal.example.toml cardinal.toml
 ```
 
-Edit it: paste the public key, and for local testing set
+Edit it: for local testing set
 
 ```toml
 [server]
@@ -42,6 +31,11 @@ origins = ["http://localhost:8099"]
 `rp_id = "localhost"` matters. Browsers treat `http://localhost` as a secure
 context, so WebAuthn works there without TLS — which is true of no other
 hostname.
+
+There is no emergency key to generate. Cardinal used to ship an offline
+break-glass keypair; [ADR 0014](adr/0014-break-glass-removed.md) removed it,
+because the CLI already performed the same recovery and doing it twice meant two
+credentials of last resort instead of one.
 
 ## 3. The directory, from the CLI
 
@@ -106,26 +100,28 @@ audit versus GDPR Article 17 (ADR 0010).
 
 Open <http://localhost:8099>.
 
-There is a chicken-and-egg problem here, and break-glass is the designed answer
-to it: enrolling a passkey needs a session, and getting a session needs a
-passkey. Rather than a bootstrap mode someone could forget to disable, the
-offline key breaks the circle.
+Enrolling a passkey needs a session, and getting a session needs a passkey.
+Enrollment invitations break that circle ([ADR 0013](adr/0013-enrollment-invitations.md)):
+an administrator issues a link, and the holder registers their own credential.
+Cardinal used to solve it with an offline break-glass key instead, which is
+gone ([ADR 0014](adr/0014-break-glass-removed.md)).
 
-1. Click **Emergency access**, then **Request a challenge**.
-2. **Copy** the command it shows — it names the running binary by its real path,
-   so it works without `cardinal` being on `PATH` — and replace
-   `/path/to/break-glass.key` with wherever you put the private half.
-3. Paste the signature, enter `alonfils`, open the session.
+```sh
+./bin/cardinal invite alonfils -config cardinal.toml
+```
 
-The challenge is good for fifteen minutes and the dialog counts down, because
-the key is meant to live in a safe and walking to one takes longer than the five
-minutes this used to allow.
-4. You are in, with a red banner saying so. The session lasts 15 minutes.
-5. Name a passkey and click **Add** — your laptop's biometric or a security key.
-6. Add a second one. The warning banner clears at two.
-7. Generate recovery codes.
-8. Sign out, then **Sign in**. No username field: your authenticator offers the
-   account, so there is nothing to enumerate.
+1. Open the link it prints. It names the account, so you can see whose it is.
+2. Fill in your name and email — this is where the account stops being blank,
+   and what every connected application will see.
+3. Name the device and click **Register a passkey**. Tap your key.
+4. Sign in with the passkey you just made. No username field: your authenticator
+   offers the account, so there is nothing to enumerate.
+5. Add a second passkey from **Your details → Passkeys**. The warning banner
+   clears at two.
+6. Generate recovery codes.
+
+The link is single use — open it twice and the second attempt refuses, with the
+same message an expired or made-up link gets.
 
 ### Becoming an administrator
 
@@ -141,11 +137,8 @@ be a backdoor with a changelog entry:
 Sign in again with your passkey and an **Applications** tab appears, where
 relying parties can be registered, inspected and retired.
 
-Three things will refuse you, all deliberately:
+Two things will refuse you, both deliberately:
 
-- **A break-glass session cannot administer.** Emergency access exists to
-  restore normal access, not to be worked in. Do the grant above with the CLI,
-  which talks to the database directly.
 - **A synced passkey is not enough.** Administration needs a device-bound
   credential — a hardware key, not one living in a cloud account.
 - **A session older than five minutes is not enough.** Sign in again; the tab
@@ -183,7 +176,6 @@ exist?" for anyone willing to guess.
 
 ## What to look for
 
-- The break-glass session shows `authMethod: break_glass` and a red banner.
 - The server logs `BREAK-GLASS SESSION OPENED` at error level. That is
   deliberate — it should page someone.
 - Revoking your only passkey is refused, because that would be a lockout.
@@ -230,6 +222,5 @@ make e2e-down
 ## Cleanup
 
 ```sh
-rm break-glass.key
 make down
 ```

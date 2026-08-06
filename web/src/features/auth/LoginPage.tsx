@@ -1,4 +1,3 @@
-import { useState } from 'react'
 import { KeyRoundIcon, ShieldAlertIcon } from 'lucide-react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
@@ -12,7 +11,6 @@ import {
 import { CardinalMark } from '@/components/CardinalMark'
 import { ErrorMessage } from '@/components/ErrorMessage'
 import { isSupported } from '@/lib/webauthn'
-import { BreakGlassDialog } from './BreakGlassDialog'
 import { useLogin } from './useAuth'
 
 export function LoginPage({
@@ -22,7 +20,6 @@ export function LoginPage({
   continuingToApplication?: boolean
 }) {
   const login = useLogin()
-  const [emergency, setEmergency] = useState(false)
 
   if (!isSupported()) {
     return (
@@ -73,17 +70,12 @@ export function LoginPage({
 
           <ErrorMessage error={login.error} />
 
-          {emergency ? (
-            <BreakGlassDialog onClose={() => { setEmergency(false) }} />
-          ) : (
-            <button
-              type="button"
-              onClick={() => { setEmergency(true) }}
-              className="mt-6 w-full text-center text-xs text-muted-foreground underline-offset-4 hover:underline"
-            >
-              Emergency access
-            </button>
-          )}
+          <p className="mt-6 text-center text-xs text-muted-foreground">
+            {/* No emergency entry point. Recovery is an administrator issuing
+                an enrollment invitation (ADR 0014), which needs access to the
+                server rather than a second internet-facing credential. */}
+            Lost your device? Ask an administrator for a new enrollment link.
+          </p>
         </CardContent>
       </Card>
     </Shell>

@@ -3,7 +3,6 @@ import { request } from './client'
 import {
   applicationDetailSchema,
   applicationsSchema,
-  breakGlassChallengeSchema,
   ceremonySchema,
   consentsSchema,
   credentialSchema,
@@ -53,23 +52,6 @@ export const api = {
       request('/api/auth/login/begin', ceremonySchema, {
         method: 'POST',
         body: login === undefined ? {} : { login },
-      }),
-
-    /**
-     * Requests an emergency-access challenge.
-     *
-     * Also the bootstrap path: enrolling a first passkey needs a session, and
-     * the offline key is what breaks that circle.
-     */
-    breakGlassBegin: () =>
-      request('/api/auth/break-glass/begin', breakGlassChallengeSchema, {
-        method: 'POST',
-      }),
-
-    breakGlassFinish: (challenge: string, signature: string, login: string) =>
-      request('/api/auth/break-glass/finish', z.looseObject({}), {
-        method: 'POST',
-        body: { challenge, signature, login },
       }),
 
     /**

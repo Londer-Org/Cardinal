@@ -73,11 +73,18 @@ See **[docs/first-run.md](docs/first-run.md)** for a ten-minute walkthrough.
 To run it:
 
 ```sh
-./bin/cardinal break-glass generate > /media/usb/break-glass.key
-cp cardinal.example.toml cardinal.toml   # paste in the public key
+cp cardinal.example.toml cardinal.toml   # set rp_id and origins
 make release                             # UI + binary, one artifact
+make migrate
+./bin/cardinal user create you -display "Your Name"
+./bin/cardinal grant directory-admins you
+./bin/cardinal invite you                # prints an enrollment link
 ./bin/cardinal serve -config cardinal.toml -dev
 ```
+
+Open the link, register a passkey, sign in. There is no password at any point,
+and no emergency key to store — recovery is another `cardinal invite` from the
+host ([ADR 0014](docs/adr/0014-break-glass-removed.md)).
 
 `make release` compiles the React UI and embeds it in the binary, so deployment
 is one file plus a database. The container image is distroless, static and runs

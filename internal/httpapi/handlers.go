@@ -132,7 +132,6 @@ type meResponse struct {
 	AuthMethod    string    `json:"authMethod"`
 	AuthAt        time.Time `json:"authAt"`
 	DeviceBound   bool      `json:"deviceBound"`
-	Emergency     bool      `json:"emergency"`
 	FullyEnrolled bool      `json:"fullyEnrolled"`
 	RecoveryCodes int       `json:"recoveryCodesRemaining"`
 
@@ -174,7 +173,6 @@ func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
 		AuthMethod:    session.AuthMethod,
 		AuthAt:        session.AuthAt,
 		DeviceBound:   session.DeviceBound,
-		Emergency:     session.Emergency(),
 		FullyEnrolled: enrolled,
 		RecoveryCodes: remaining,
 		Email:         entityEmail(entity),

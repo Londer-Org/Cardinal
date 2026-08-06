@@ -21,7 +21,6 @@ export const meSchema = z.object({
   authMethod: z.string(),
   authAt: z.string(),
   deviceBound: z.boolean(),
-  emergency: z.boolean(),
   fullyEnrolled: z.boolean(),
   recoveryCodesRemaining: z.number(),
   // Drives what the UI offers, never what it may do — every admin endpoint
@@ -58,13 +57,6 @@ export const recoveryCodesSchema = z.object({
   note: z.string(),
 })
 export type RecoveryCodes = z.infer<typeof recoveryCodesSchema>
-
-export const breakGlassChallengeSchema = z.object({
-  challenge: z.string(),
-  expiresAt: z.string(),
-  command: z.string(),
-})
-export type BreakGlassChallenge = z.infer<typeof breakGlassChallengeSchema>
 
 export const decisionSchema = z.object({
   decisionPoint: z.string(),

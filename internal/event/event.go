@@ -34,11 +34,10 @@ const (
 	ActionSessionCreated = "session.created"
 	ActionSessionRevoked = "session.revoked"
 
-	// ActionBreakGlassUsed is deliberately its own action rather than a
-	// session.created variant, so that alerting on emergency access is a
-	// trivial predicate rather than a payload inspection. Break-glass that
-	// nobody notices is just a backdoor (ADR 0009).
-	ActionBreakGlassUsed = "breakglass.used"
+	// Nothing emits "breakglass.used" any more (ADR 0014), but journals written
+	// before that removal still contain it. The constant is gone; the string
+	// must never be reused for anything else, because it appears in hashes that
+	// cannot be rewritten.
 
 	ActionCredentialRegistered = "credential.registered"
 	ActionCredentialRevoked    = "credential.revoked"

@@ -147,7 +147,6 @@ func buildEntities(s *claims.Subject) types.EntityMap {
 			// recovery codes, and only policy should decide where that line is.
 			"authMethod":  types.String(s.Auth.Method),
 			"deviceBound": types.Boolean(s.Auth.DeviceBound),
-			"emergency":   types.Boolean(s.Auth.Emergency),
 			"authAgeSeconds": types.Long(
 				max(0, int64(s.Auth.Age().Seconds()))),
 		}),

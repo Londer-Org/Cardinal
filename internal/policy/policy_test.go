@@ -31,7 +31,6 @@ func engine(t *testing.T) *policy.Engine {
 
 type subjectOpts struct {
 	deviceBound bool
-	emergency   bool
 	authAge     time.Duration
 	groups      []claims.Group
 }
@@ -45,7 +44,6 @@ func subject(opts subjectOpts) *claims.Subject {
 			Method:      "passkey",
 			At:          time.Now().Add(-opts.authAge),
 			DeviceBound: opts.deviceBound,
-			Emergency:   opts.emergency,
 		},
 	}
 }
@@ -174,12 +172,6 @@ func TestDirectoryAdminsMayAdminister(t *testing.T) {
 			reason:  "admin-requires-fresh-device-bound-auth",
 			because: "a synced passkey is only as strong as the cloud account holding it",
 		},
-		{
-			name:    "break-glass session",
-			opts:    subjectOpts{deviceBound: true, emergency: true, authAge: time.Second, groups: admins},
-			reason:  "break-glass-cannot-administer",
-			because: "emergency access exists to restore normal access, not to be worked in",
-		},
 	}
 
 	for _, tc := range refusals {
@@ -209,44 +201,6 @@ func TestAdminGroupIDMatchesTheShippedPolicy(t *testing.T) {
 	assert.Contains(t, string(source), policy.AdminGroupID,
 		"policies/cardinal.cedar must reference policy.AdminGroupID; "+
 			"if this fails, migration 0008 needs checking too")
-}
-
-// TestBreakGlassCannotAdminister.
-//
-// Someone holding the offline key can already assume any account. Letting that
-// session also rewrite the directory would make a stolen key catastrophic
-// rather than merely serious, and changes made during an incident are the least
-// likely to be reviewed.
-func TestBreakGlassCannotAdminister(t *testing.T) {
-	e := engine(t)
-
-	decision := e.Evaluate(policy.Request{
-		// Fresh and device-bound — every other requirement satisfied.
-		Subject: subject(subjectOpts{
-			deviceBound: true, emergency: true, authAge: time.Second,
-		}),
-		Action:   policy.ActionAdministerData,
-		Resource: types.NewEntityUID(policy.TypeApplication, "directory"),
-	})
-
-	require.False(t, decision.Allowed)
-	assert.True(t, decision.ExplicitlyDenied(),
-		"this must be an explicit forbid, so the decision log shows the emergency rule fired")
-	assert.Contains(t, decision.Reasons, "break-glass-cannot-administer")
-}
-
-func TestBreakGlassCannotReachProductionSSH(t *testing.T) {
-	e := engine(t)
-
-	decision := e.Evaluate(policy.Request{
-		Subject:  subject(subjectOpts{deviceBound: true, emergency: true}),
-		Action:   policy.ActionSSHLogin,
-		Resource: types.NewEntityUID(policy.TypeHost, "web-01.prod"),
-	})
-
-	require.False(t, decision.Allowed)
-	assert.Contains(t, decision.Reasons, "break-glass-no-production-ssh",
-		"the emergency is in Cardinal, not necessarily in the fleet")
 }
 
 func TestSSHRequiresDeviceBoundCredential(t *testing.T) {

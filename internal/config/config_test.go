@@ -8,9 +8,8 @@ import (
 
 func valid() *Config {
 	return &Config{
-		Database:   Database{DSN: "postgres://localhost/cardinal"},
-		WebAuthn:   WebAuthn{RPID: "example.com", Origins: []string{"https://id.example.com"}},
-		BreakGlass: BreakGlass{PublicKey: "cardinal-bg-v1:AAAA"},
+		Database: Database{DSN: "postgres://localhost/cardinal"},
+		WebAuthn: WebAuthn{RPID: "example.com", Origins: []string{"https://id.example.com"}},
 	}
 }
 
@@ -31,7 +30,6 @@ func TestNoUnsafeDefaults(t *testing.T) {
 	}{
 		{"missing rp_id", func(c *Config) { c.WebAuthn.RPID = "" }, "rp_id"},
 		{"missing origins", func(c *Config) { c.WebAuthn.Origins = nil }, "origins"},
-		{"missing break-glass key", func(c *Config) { c.BreakGlass.PublicKey = "" }, "break_glass.public_key"},
 		{"missing dsn", func(c *Config) { c.Database.DSN = "" }, "database.dsn"},
 	}
 
@@ -193,7 +191,7 @@ func TestValidateReportsEveryProblem(t *testing.T) {
 	if err == nil {
 		t.Fatal("an empty config was accepted")
 	}
-	for _, want := range []string{"database.dsn", "rp_id", "origins", "break_glass.public_key"} {
+	for _, want := range []string{"database.dsn", "rp_id", "origins"} {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("error should mention %q; got:\n%v", want, err)
 		}

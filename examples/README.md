@@ -33,16 +33,16 @@ verified against Cardinal's published JWKS.
 | `compose.yml` | The whole stack |
 | `cardinal.e2e.toml` | Configuration, annotated |
 
-## ⚠️ `e2e-break-glass.key`
+## How the suite signs in
 
-**A break-glass private key, committed to git on purpose.**
+There is no non-interactive way to authenticate: the only credential Cardinal
+accepts is a passkey, and tapping one needs a human. So the end-to-end tests
+seed a session row directly, containing exactly what a passkey sign-in produces.
 
-It exists so this stack is reproducible without a setup ritual. It grants
-emergency access to any account *in this throwaway stack* and nowhere else,
-because the matching public key appears only in `cardinal.e2e.toml`.
-
-Never reuse it. Generate your own with `cardinal break-glass generate` and keep
-the private half offline — see [ADR 0009](../docs/adr/0009-recovery-and-break-glass.md).
+This used to be done with a committed break-glass key. Removing break-glass
+([ADR 0014](../docs/adr/0014-break-glass-removed.md)) took that away, and
+seeding is the more honest replacement — it skips the same ceremony without a
+production mechanism existing partly to make tests convenient.
 
 ## Two things the protected app demonstrates
 

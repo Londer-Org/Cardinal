@@ -18,8 +18,8 @@
 // Anyone authenticated may reach applications marked public-to-staff.
 //
 // The forbid rules below still apply — in Cedar, a forbid always beats a
-// permit, which is what makes the emergency and freshness rules below
-// trustworthy rather than merely conventional.
+// permit, which is what makes the freshness rules below trustworthy rather
+// than merely conventional.
 @id("staff-web-access")
 permit (
     principal,
@@ -42,10 +42,9 @@ when {
 //
 //     cardinal grant directory-admins alice
 //
-// This is a permit, and the two forbid rules below still apply to it — in
-// Cedar a forbid always beats a permit, so membership alone is not enough:
-// the session must also be device-bound, recently authenticated, and not
-// break-glass.
+// This is a permit, and the forbid rule below still applies to it — in Cedar a
+// forbid always beats a permit, so membership alone is not enough: the session
+// must also be device-bound and recently authenticated.
 @id("directory-admins-may-administer")
 permit (
     principal in Cardinal::Group::"00000000-0000-7000-8000-00000000ad11",
@@ -71,45 +70,6 @@ forbid (
 )
 unless {
     principal.deviceBound && principal.authAgeSeconds <= 300
-};
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Emergency access
-// ─────────────────────────────────────────────────────────────────────────────
-
-// A break-glass session may not administer the directory.
-//
-// Break-glass exists to restore normal access, not to be worked in. Someone
-// holding the offline key can already assume any account; letting that session
-// also rewrite the directory would turn a recovery mechanism into an
-// unaudited-in-practice superuser, because nobody reviews changes made during
-// an incident.
-//
-// Enrolling a passkey remains possible — that is the bootstrap path — because
-// it is not this action.
-@id("break-glass-cannot-administer")
-forbid (
-    principal,
-    action == Cardinal::Action::"AdministerDirectory",
-    resource
-)
-when {
-    principal.emergency
-};
-
-// A break-glass session may not obtain SSH access to production hosts.
-//
-// The emergency is in Cardinal. It is not, without separate evidence, in the
-// fleet — and an emergency credential that also opens every server makes the
-// blast radius of a stolen offline key considerably worse.
-@id("break-glass-no-production-ssh")
-forbid (
-    principal,
-    action == Cardinal::Action::"SSHLogin",
-    resource
-)
-when {
-    principal.emergency
 };
 
 // ─────────────────────────────────────────────────────────────────────────────

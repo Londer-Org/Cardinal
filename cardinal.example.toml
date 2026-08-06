@@ -72,17 +72,6 @@ rp_display_name = "Example Corp"
 # what may authenticate. Each must fall within rp_id.
 origins = ["https://id.example.com"]
 
-[break_glass]
-# Generated offline with `cardinal break-glass generate`.
-#
-# This lives in the config file and NOT the database, deliberately: a database
-# compromise cannot substitute an attacker's key here, and a restore cannot
-# silently roll it back to an older one. See docs/adr/0009.
-#
-# The matching private key must never touch this host. Store it offline,
-# reachable by at least two people, and test it quarterly.
-public_key = "cardinal-bg-v1:REPLACE_ME"
-
 [recovery]
 # Recovery email is OFF by default, and that default is a security position
 # rather than laziness.
@@ -98,7 +87,7 @@ public_key = "cardinal-bg-v1:REPLACE_ME"
 #
 # It is never sufficient alone, and never available for administrators:
 # consequence (2) would place Cardinal's admin tier beneath your mail
-# platform's. Admin recovery is dual-control or break-glass.
+# platform's. Administrative recovery is `cardinal invite <admin>` on the host.
 email_enabled = false
 
 # Domains acceptable for recovery addresses. Required when enabled — an
@@ -119,7 +108,7 @@ enabled = false
 
 # Encrypts the token-signing key at rest.
 #
-# Held here rather than in the database, following the break-glass reasoning
+# Held here rather than in the database, so a database read alone is not enough
 # (ADR 0009). The signing key can forge tokens for EVERY registered
 # application, so storing it in the clear would make a database read a complete
 # compromise of every downstream system — arguably worse than losing the

@@ -17,7 +17,7 @@ In descending order of consequence:
 
 | Asset | Why it matters | Where it lives |
 |---|---|---|
-| **Break-glass private key** | Grants unrestricted administrative access | Offline only, never on the server |
+| **Database credential** | Grants everything: the CLI reaches Postgres directly and can issue an enrollment invitation for any account | Treat as the credential of last resort. Cardinal used to have a second one — an offline break-glass key — until [ADR 0014](adr/0014-break-glass-removed.md) removed it as redundant and internet-facing |
 | **SSH certificate authority key** | Signs certificates for every host in the fleet | Phase 4 — key management undecided |
 | **Authorization policy** | Decides who reaches what | Cedar policies in git, loaded into Postgres |
 | **Temporal grants** | The authoritative record of who has access | `group_members` |
@@ -162,8 +162,9 @@ Stated plainly, because unexamined assumptions are where threat models fail:
 
 1. **The Cardinal host is not compromised.** Root there defeats everything.
 2. **PostgreSQL superuser access is restricted** to a small, trusted set.
-3. **The offline break-glass key is stored securely** and reachable by at least
-   two people.
+3. **Host and database access is treated as the credential of last resort** —
+   anyone with it can issue an enrollment invitation for any account, so it is
+   guarded, logged, and held by more than one person.
 4. **Google Workspace is well-administered** — accepted as a dependency for
    ordinary-user recovery (ADR 0009).
 5. **Hosts have working NTP.** Short-lived certificates depend on time, so clock

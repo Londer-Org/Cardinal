@@ -94,10 +94,13 @@ func TestInvitationDoesNotLeakWhetherAnAccountExists(t *testing.T) {
 
 // TestIssuingAnInvitationIsAdministration.
 //
-// Anyone who can issue one can take over the named account, so it sits behind
-// the same Cedar gate as everything else — and the break-glass session the
-// suite runs with is refused, which is the case that matters most.
+// Anyone who can issue an invitation can take over the named account, so it
+// sits behind the same Cedar gate as everything else. An ordinary signed-in
+// user must be refused: otherwise any employee could mint a credential on a
+// colleague's account.
 func TestIssuingAnInvitationIsAdministration(t *testing.T) {
+	adminClient(t) // ensures the ordinary account is not an administrator
+
 	c := signedInClient(t)
 	csrf := csrfToken(t, c)
 
@@ -118,8 +121,8 @@ func TestIssuingAnInvitationIsAdministration(t *testing.T) {
 
 	if resp.StatusCode != http.StatusForbidden {
 		payload, _ := io.ReadAll(resp.Body)
-		t.Fatalf("a break-glass session issued an invitation (%d): %s — an "+
-			"emergency key could then mint a permanent credential on any account",
+		t.Fatalf("an ordinary user issued an invitation (%d): %s — any employee "+
+			"could then mint a credential on a colleague's account",
 			resp.StatusCode, payload)
 	}
 }
@@ -131,7 +134,7 @@ func TestAdminCanIssueAndRevokeAnInvitation(t *testing.T) {
 	// A throwaway account, created directly so the test does not depend on the
 	// user-creation API existing yet.
 	const login = "e2e-invitee"
-	psql(t, `INSERT INTO entities (type, name) VALUES ('user', '`+login+`')
+	seedSQL(t, `INSERT INTO entities (type, name) VALUES ('user', '`+login+`')
 	         ON CONFLICT (type, name) DO UPDATE SET disabled_at = NULL`)
 
 	var issued struct {

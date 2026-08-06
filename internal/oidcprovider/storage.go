@@ -181,11 +181,6 @@ func (s *Storage) CompleteAuthentication(ctx context.Context, requestID, subject
 		if session.DeviceBound {
 			amr = append(amr, "hwk")
 		}
-	case "break_glass":
-		// Deliberately visible. A relying party may reasonably refuse an
-		// emergency session for a sensitive operation, and it can only do that
-		// if we say so.
-		amr = append(amr, "break_glass")
 	case "recovery_code":
 		amr = append(amr, "rba")
 	}
