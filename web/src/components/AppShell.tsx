@@ -23,6 +23,7 @@ import { pendingAuthorizationID, useOIDCResume } from '@/features/auth/useOIDCRe
 import { ConsentPrompt } from '@/features/consent/ConsentPrompt'
 import { EnrollPage, invitationToken } from '@/features/enroll/EnrollPage'
 import { StepUpDialog } from '@/features/auth/StepUpDialog'
+import { ReauthPrompt } from '@/features/auth/ReauthPrompt'
 import { HOME, crumbsFor } from '@/lib/nav'
 
 /**
@@ -45,7 +46,8 @@ export function AppShell() {
 
 function Authenticated() {
   const { session, isLoading } = useSession()
-  const { state: resume, decide, deciding } = useOIDCResume(session !== null)
+  const { state: resume, decide, deciding, resumeAfterReauthentication } =
+    useOIDCResume(session !== null)
   const pathname = useRouterState({ select: (state) => state.location.pathname })
 
   if (isLoading) {
@@ -68,6 +70,17 @@ function Authenticated() {
         onDecide={decide}
         deciding={deciding}
       />
+    )
+  }
+
+  if (resume.status === 'reauth') {
+    return (
+      <Centered>
+        <ReauthPrompt
+          application={resume.application}
+          onAuthenticated={resumeAfterReauthentication}
+        />
+      </Centered>
     )
   }
 

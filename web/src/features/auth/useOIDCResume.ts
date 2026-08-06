@@ -20,10 +20,23 @@ export function pendingAuthorizationID(): string | null {
   return new URLSearchParams(window.location.search).get('oidc_auth')
 }
 
+/**
+ * Whether the provider said an existing session is not enough.
+ *
+ * Set when the client asked for `prompt=login` or a `max_age` this session no
+ * longer satisfies. Without it the SPA would see a signed-in user with a
+ * pending request and resume it silently — which is the exact thing the client
+ * asked us not to do.
+ */
+function reauthenticationRequested(): boolean {
+  return new URLSearchParams(window.location.search).get('reauth') === '1'
+}
+
 export type ResumeState =
   | { status: 'idle' }
   | { status: 'resuming' }
   | { status: 'consent'; pending: PendingAuthorization }
+  | { status: 'reauth'; application: string }
   | { status: 'refused'; application: string }
   | { status: 'denied'; application: string; reason: string; policies: string[] }
   | { status: 'failed'; message: string }
@@ -33,6 +46,8 @@ export interface Resume {
   /** Records the user's answer. Approving continues the flow. */
   decide: (approve: boolean) => void
   deciding: boolean
+  /** Continues after a step-up, for a request that demanded a fresh ceremony. */
+  resumeAfterReauthentication: () => void
 }
 
 function messageOf(error: unknown): string {
@@ -89,6 +104,10 @@ export function useOIDCResume(isSignedIn: boolean): Resume {
           setState({ status: 'consent', pending })
           return
         }
+        if (reauthenticationRequested()) {
+          setState({ status: 'reauth', application: pending.application })
+          return
+        }
         await complete(authID)
       } catch (error) {
         // Landing back on the account page with no explanation would leave
@@ -126,5 +145,19 @@ export function useOIDCResume(isSignedIn: boolean): Resume {
     })()
   }, [state, complete])
 
-  return { state, decide, deciding }
+  const resumeAfterReauthentication = useCallback(() => {
+    const authID = pendingAuthorizationID()
+    if (authID === null) return
+
+    setState({ status: 'resuming' })
+    void (async () => {
+      try {
+        await complete(authID)
+      } catch (error) {
+        setState({ status: 'failed', message: messageOf(error) })
+      }
+    })()
+  }, [complete])
+
+  return { state, decide, deciding, resumeAfterReauthentication }
 }

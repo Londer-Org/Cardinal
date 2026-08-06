@@ -233,7 +233,10 @@ func (s *Server) Handler() http.Handler {
 		// handlers are registered after, and the more specific pattern wins in
 		// Go's ServeMux.
 		oidcHandler := s.oidc.Handler()
-		mux.Handle("/.well-known/openid-configuration", oidcHandler)
+
+		// Cardinal's own discovery document, not the library's: the library
+		// hardcodes response and grant types that no client here can use.
+		mux.Handle("/.well-known/openid-configuration", s.oidc.DiscoveryHandler())
 		mux.Handle("/oidc/", oidcHandler)
 
 		// The hand-off between the library and Cardinal's own authentication.

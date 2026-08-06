@@ -10,6 +10,7 @@ import (
 	"github.com/arthur-lonfils/cardinal/internal/claims"
 	"github.com/arthur-lonfils/cardinal/internal/config"
 	"github.com/arthur-lonfils/cardinal/internal/store"
+	"github.com/zitadel/oidc/v3/pkg/oidc"
 	"github.com/zitadel/oidc/v3/pkg/op"
 )
 
@@ -110,9 +111,86 @@ func New(ctx context.Context, s *store.Store, resolver *claims.Resolver, cfg *co
 	return &Provider{provider: provider, storage: storage}, nil
 }
 
-// Handler serves the OIDC endpoints: discovery, authorize, token, userinfo and
-// JWKS.
+// Handler serves the OIDC endpoints: authorize, token, userinfo and JWKS.
+//
+// Discovery is served by DiscoveryHandler instead — see there for why.
 func (p *Provider) Handler() http.Handler { return p.provider }
+
+// DiscoveryHandler serves /.well-known/openid-configuration.
+//
+// Cardinal's own, rather than the library's, because the library's answer is
+// not about Cardinal. `ResponseTypes` is a hardcoded list carrying the comment
+// "TODO: ok for now, check later if dynamic needed", `GrantTypes` always
+// includes implicit, and `GrantTypeJWTAuthorizationSupported` is a method whose
+// entire body is `return true`. None of it consults the configuration, so the
+// document advertised the implicit flow, `id_token token`, a JWT-bearer grant
+// and a device authorization endpoint — four things no client here can use, and
+// the device endpoint answered with Cardinal's CSRF error rather than anything
+// resembling OAuth.
+//
+// That is worse than untidy. Discovery is a contract: a relying party reads it
+// to decide which flow to run, and a conformance suite reads it to decide which
+// tests to run. Advertising a flow that every registered client refuses means
+// the first honest reader of the document is the one who finds out.
+//
+// Everything else is still derived from the library, so endpoints, claims and
+// signing algorithms cannot drift from what is actually mounted. Only the
+// fields it will not compute are overridden.
+func (p *Provider) DiscoveryHandler() http.Handler {
+	// Wrapped in the library's issuer interceptor, which is what puts the
+	// issuer into the request context. Every endpoint in the document is
+	// rendered as `.Absolute(issuer)`, so without it they all come out as bare
+	// paths — /oidc/token rather than https://host/oidc/token — and a relying
+	// party has nothing to resolve them against. The provider applies this to
+	// its own handlers; registering one on the mux directly bypasses it.
+	issuer := op.NewIssuerInterceptor(p.provider.IssuerFromRequest)
+
+	return issuer.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		cfg := op.CreateDiscoveryConfig(r.Context(), p.provider, p.storage)
+
+		// Authorization code only, and PKCE is required for every client
+		// (OAuth 2.1). The implicit flow returns tokens in a URL fragment,
+		// which lands them in browser history and referrers.
+		cfg.ResponseTypesSupported = []string{string(oidc.ResponseTypeCode)}
+		cfg.GrantTypesSupported = []oidc.GrantType{
+			oidc.GrantTypeCode,
+			oidc.GrantTypeRefreshToken,
+		}
+
+		// Not implemented. Advertising the endpoint made a client's first
+		// discovery of that fact a CSRF error on a POST.
+		cfg.DeviceAuthorizationEndpoint = ""
+
+		// The library's default scope list is openid/profile/email/phone/
+		// address/offline_access regardless of what the provider can answer.
+		// Cardinal holds no telephone number and no postal address, so those
+		// two scopes were an invitation to ask for nothing — and `groups`,
+		// which it does implement and which is the whole point of a directory
+		// as an identity provider, was missing.
+		cfg.ScopesSupported = []string{
+			oidc.ScopeOpenID,
+			oidc.ScopeProfile,
+			oidc.ScopeEmail,
+			oidc.ScopeOfflineAccess,
+			"groups",
+		}
+
+		// Likewise the claims. This is the set Cardinal can actually put in a
+		// token, rather than the union of everything the specification defines.
+		cfg.ClaimsSupported = []string{
+			"iss", "sub", "aud", "exp", "iat", "auth_time", "nonce",
+			"azp", "at_hash", "c_hash",
+			"name", "preferred_username",
+			// Always false: Cardinal performs no verification, and a relying
+			// party linking accounts on a claim we invented would be trusting
+			// nothing.
+			"email", "email_verified",
+			"groups",
+		}
+
+		op.Discover(w, cfg)
+	}))
+}
 
 // Storage exposes the storage layer, so Cardinal's login flow can complete an
 // authorization request once the user has signed in.

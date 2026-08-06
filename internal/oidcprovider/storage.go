@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"math"
 	"time"
 
 	"github.com/arthur-lonfils/cardinal/internal/claims"
@@ -82,6 +83,26 @@ func (s *Storage) CreateAuthRequest(ctx context.Context, req *oidc.AuthRequest, 
 		Nonce:               req.Nonce,
 		CodeChallenge:       req.CodeChallenge,
 		CodeChallengeMethod: string(req.CodeChallengeMethod),
+
+		// Kept because they constrain how the user must authenticate, and the
+		// decision belongs at completion time rather than here. Dropping them
+		// let Cardinal answer "yes, they authenticated" to a client that had
+		// asked for a fresh ceremony and never got one.
+		Prompt: []string(req.Prompt),
+	}
+	if req.MaxAge != nil {
+		// Clamped rather than converted. max_age arrives as an unbounded
+		// unsigned integer and is compared as a time.Duration, which counts
+		// nanoseconds in an int64 and so overflows past roughly 292 years — a
+		// wrapped negative would turn "any age is acceptable" into "always
+		// re-authenticate". Sixty-eight years is beyond any real policy and
+		// well clear of the overflow.
+		const ceiling = uint64(math.MaxInt32)
+		maxAge := int64(math.MaxInt32)
+		if uint64(*req.MaxAge) < ceiling {
+			maxAge = int64(*req.MaxAge)
+		}
+		stored.MaxAge = &maxAge
 	}
 
 	if err := s.store.CreateAuthRequest(ctx, stored); err != nil {

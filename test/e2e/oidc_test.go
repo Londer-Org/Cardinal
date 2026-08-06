@@ -279,3 +279,84 @@ func parkedAuthorizationID(t *testing.T, raw string) string {
 	}
 	return id
 }
+
+// TestDiscoveryDescribesThisDeployment.
+//
+// Discovery is a contract. A relying party reads it to choose a flow and a
+// conformance suite reads it to choose tests, so a document that overstates the
+// provider is not untidy — it is a promise that breaks at the first honest
+// reader.
+//
+// zitadel/oidc will not compute these three. `ResponseTypes` is a fixed list
+// carrying the comment "TODO: ok for now, check later if dynamic needed",
+// `GrantTypes` always includes implicit, and `GrantTypeJWTAuthorizationSupported`
+// is a method whose whole body is `return true`. So Cardinal serves its own
+// document, and this test exists to catch the upgrade that quietly hands the
+// job back to the library.
+func TestDiscoveryDescribesThisDeployment(t *testing.T) {
+	resp := request(t, client(t), http.MethodGet, hostCardinal,
+		"/.well-known/openid-configuration", "application/json")
+	defer drain(resp)
+
+	var doc struct {
+		Issuer                      string   `json:"issuer"`
+		AuthorizationEndpoint       string   `json:"authorization_endpoint"`
+		TokenEndpoint               string   `json:"token_endpoint"`
+		JwksURI                     string   `json:"jwks_uri"`
+		ResponseTypesSupported      []string `json:"response_types_supported"`
+		GrantTypesSupported         []string `json:"grant_types_supported"`
+		CodeChallengeMethods        []string `json:"code_challenge_methods_supported"`
+		DeviceAuthorizationEndpoint string   `json:"device_authorization_endpoint"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&doc); err != nil {
+		t.Fatal(err)
+	}
+
+	// Authorization code only. The implicit flow returns tokens in a URL
+	// fragment, where they land in browser history and referrer headers, and no
+	// client registered here will accept a request for it.
+	if !slices.Equal(doc.ResponseTypesSupported, []string{"code"}) {
+		t.Errorf("response_types_supported is %v — anything beyond `code` "+
+			"advertises a flow every client refuses", doc.ResponseTypesSupported)
+	}
+
+	for _, unsupported := range []string{
+		"implicit",
+		"urn:ietf:params:oauth:grant-type:jwt-bearer",
+		"urn:ietf:params:oauth:grant-type:device_code",
+		"client_credentials",
+		"urn:ietf:params:oauth:grant-type:token-exchange",
+	} {
+		if slices.Contains(doc.GrantTypesSupported, unsupported) {
+			t.Errorf("grant_types_supported advertises %q, which Cardinal does "+
+				"not implement", unsupported)
+		}
+	}
+
+	// PKCE is required of every client, and only S256: `plain` lets anyone who
+	// intercepted the challenge derive the verifier.
+	if !slices.Equal(doc.CodeChallengeMethods, []string{"S256"}) {
+		t.Errorf("code_challenge_methods_supported is %v, want [S256]",
+			doc.CodeChallengeMethods)
+	}
+
+	if doc.DeviceAuthorizationEndpoint != "" {
+		t.Errorf("device_authorization_endpoint is advertised as %q, but the "+
+			"device flow is not implemented — a client following it got "+
+			"Cardinal's CSRF error", doc.DeviceAuthorizationEndpoint)
+	}
+
+	// Serving discovery outside the library's issuer interceptor renders every
+	// endpoint as a bare path, leaving a relying party nothing to resolve them
+	// against. Absolute is not a stylistic preference here.
+	for name, endpoint := range map[string]string{
+		"authorization_endpoint": doc.AuthorizationEndpoint,
+		"token_endpoint":         doc.TokenEndpoint,
+		"jwks_uri":               doc.JwksURI,
+	} {
+		if !strings.HasPrefix(endpoint, doc.Issuer+"/") {
+			t.Errorf("%s is %q, which is not absolute against issuer %q",
+				name, endpoint, doc.Issuer)
+		}
+	}
+}

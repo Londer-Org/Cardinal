@@ -197,7 +197,7 @@ works.
 | ✅ | **A home page** — what needs your attention first, where everything is second. Gated on entitlement *and* freshness, which is not the same test: `canManageUsers` reports what a fresh key would allow, deliberately, so sections do not vanish when authentication goes stale — so gating on it alone meant a stale administrator was met by a security-key prompt for the crime of loading a page. Console reads are filtered out of its decision list; every table this UI draws is itself an authorized action, and they buried everything that meant anything |
 | ✅ | **A palette taken from the mark** — contrast computed rather than eyeballed, which changed a decision: the dark-mode primary takes dark text at 6.4:1 because white on it falls to 2.9:1. Fixed a defect hiding in plain sight — the sidebar palette was never defined, and an undefined custom property compiles to nothing rather than to something wrong, so the console had no hover and no highlight on the page you were on |
 | ✅ | **Account enrollment for a new user** — done in Phase 1 via invitations (ADR 0013) |
-| ⬜ | OpenID Foundation conformance suite |
+| ✅ | **OpenID Foundation conformance suite** — run locally against a TLS-fronted instance. The **config certification plan passes outright** (34 checks, no failures). Of the basic plan's 35 modules: 19 pass, 6 warn, 5 are skipped as not offered, 4 need a human to upload a screenshot of a page the suite already confirmed was shown, and 1 needs a per-variant client block the suite's config takes rather than anything Cardinal does — that capability (`client_secret_post`) was verified by hand instead. **No module fails on Cardinal's behaviour.** Found and fixed two real defects: a discovery document describing the library rather than this deployment ([ADR 0016](docs/adr/0016-cardinal-serves-its-own-discovery-document.md)), and `prompt`/`max_age` accepted but never honoured ([ADR 0017](docs/adr/0017-prompt-and-max-age-are-honoured.md)). The suite's own browser automation cannot sign in here — it fills a username and password, and Cardinal has neither — so the browser half is driven by a virtual WebAuthn authenticator |
 
 ---
 
@@ -262,6 +262,8 @@ Tracked openly, from [the threat model](docs/threat-model.md):
 | SSH CA key management undecided | Highest-stakes remaining decision | Blocks Phase 4 |
 | No account lockout | Nothing guessable is unlimited today; reopens with TOTP | With TOTP |
 | The `sensitive` flag is declared and unread | The registry lets an operator mark an attribute sensitive; nothing encrypts or redacts on it | Phase 1 |
+| No `acr` claim, and no assurance levels defined | A client sending `acr_values` gets no `acr` back. Cardinal has the raw material — a device-bound passkey is a stronger assertion than a synced one — but has not defined what its levels *mean*, and inventing one would assert an assurance it has not specified. Same reasoning as refusing to claim `email_verified` | Phase 5 |
+| Replayed authorization codes do not revoke tokens already issued | OIDC Core says the server MUST deny the replay (it does) and SHOULD revoke tokens issued from that code (it does not). `oidc_tokens` has no link back to the authorization request, so the fix is a column plus plumbing through token creation | Phase 5 |
 | No external security review | Self-assessment only | Before production |
 
 ## Standing risks

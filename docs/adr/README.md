@@ -25,6 +25,8 @@ isn't finished.
 | [0013](0013-enrollment-invitations.md) | Enrollment invitations replace break-glass as the bootstrap path | Accepted |
 | [0014](0014-break-glass-removed.md) | Break-glass removed; the CLI is the recovery path | Accepted |
 | [0015](0015-dual-control-recovery.md) | Recovery takes two administrators | Accepted |
+| [0016](0016-cardinal-serves-its-own-discovery-document.md) | Cardinal serves its own discovery document | Accepted |
+| [0017](0017-prompt-and-max-age-are-honoured.md) | `prompt` and `max_age` are honoured, not accepted | Accepted |
 
 ## Conventions
 

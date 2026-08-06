@@ -131,8 +131,6 @@ MEMBERSHIP
   memberships <user> [-at <RFC3339>]       Which groups someone is in, transitively
   history <group> <member>                 Every grant ever, including expired
 
-EMERGENCY ACCESS
-
 PRIVACY
   redact <type> <name> [-yes]              Erase personal data (GDPR Art. 17).
                                            Membership history and the audit

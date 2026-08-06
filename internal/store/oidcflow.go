@@ -42,8 +42,43 @@ type AuthRequest struct {
 	AuthTime time.Time
 	AMR      []string
 
+	// What the client asked for about authentication itself, rather than about
+	// who is authenticating. Empty and nil mean "no constraint" — see
+	// migration 0015.
+	Prompt []string
+	MaxAge *int64
+
 	Done      bool
 	ExpiresAt time.Time
+}
+
+// RequiresFreshAuthentication reports whether this request may be completed
+// from an authentication performed at `authAt`.
+//
+// `prompt=login` is unconditional: the client asked for the ceremony, not for
+// an opinion about whether one was needed. `max_age` is a bound on age, and a
+// zero max_age means every completion needs a new authentication — which is
+// what the specification says and what oidcc-max-age-1 checks.
+func (a *AuthRequest) RequiresFreshAuthentication(authAt time.Time) bool {
+	for _, p := range a.Prompt {
+		if p == "login" {
+			return true
+		}
+	}
+	if a.MaxAge == nil {
+		return false
+	}
+	return time.Since(authAt) > time.Duration(*a.MaxAge)*time.Second
+}
+
+// PromptedFor reports whether the client asked for a given prompt value.
+func (a *AuthRequest) PromptedFor(value string) bool {
+	for _, p := range a.Prompt {
+		if p == value {
+			return true
+		}
+	}
+	return false
 }
 
 // Authenticated reports whether a user has completed sign-in for this request.
@@ -59,12 +94,14 @@ func (s *Store) CreateAuthRequest(ctx context.Context, r *AuthRequest) error {
 	err := s.pool.QueryRow(ctx, `
 		INSERT INTO oidc_auth_requests
 			(client_id, subject_id, scopes, response_type, redirect_uri, state,
-			 nonce, code_challenge, code_challenge_method, expires_at)
+			 nonce, code_challenge, code_challenge_method, expires_at,
+			 prompt, max_age)
 		VALUES ($1, $2, $3, $4, $5, nullif($6,''), nullif($7,''),
-		        nullif($8,''), nullif($9,''), $10)
+		        nullif($8,''), nullif($9,''), $10, $11, $12)
 		RETURNING id`,
 		r.ClientID, r.SubjectID, orEmpty(r.Scopes), r.ResponseType, r.RedirectURI,
 		r.State, r.Nonce, r.CodeChallenge, r.CodeChallengeMethod, r.ExpiresAt,
+		orEmpty(r.Prompt), r.MaxAge,
 	).Scan(&r.ID)
 	if err != nil {
 		return fmt.Errorf("store: creating authorization request: %w", err)
@@ -78,7 +115,8 @@ func (s *Store) AuthRequestByID(ctx context.Context, id uuid.UUID) (*AuthRequest
 		SELECT id, client_id, subject_id, scopes, response_type, redirect_uri,
 		       coalesce(state,''), coalesce(nonce,''),
 		       coalesce(code_challenge,''), coalesce(code_challenge_method,''),
-		       coalesce(auth_time, 'epoch'::timestamptz), amr, done, expires_at
+		       coalesce(auth_time, 'epoch'::timestamptz), amr, done, expires_at,
+		       coalesce(prompt, '{}'), max_age
 		  FROM oidc_auth_requests
 		 WHERE id = $1 AND expires_at > now() AND consumed_at IS NULL`, id))
 }
@@ -137,7 +175,8 @@ func (s *Store) RedeemAuthCode(ctx context.Context, code string) (*AuthRequest, 
 		 RETURNING id, client_id, subject_id, scopes, response_type, redirect_uri,
 		           coalesce(state,''), coalesce(nonce,''),
 		           coalesce(code_challenge,''), coalesce(code_challenge_method,''),
-		           coalesce(auth_time,'epoch'::timestamptz), amr, done, expires_at`,
+		           coalesce(auth_time,'epoch'::timestamptz), amr, done, expires_at,
+		           coalesce(prompt, '{}'), max_age`,
 		sum[:]))
 
 	if errors.Is(err, ErrAuthRequestNotFound) {
@@ -166,7 +205,8 @@ func (s *Store) scanAuthRequest(row pgx.Row) (*AuthRequest, error) {
 	var r AuthRequest
 	err := row.Scan(&r.ID, &r.ClientID, &r.SubjectID, &r.Scopes, &r.ResponseType,
 		&r.RedirectURI, &r.State, &r.Nonce, &r.CodeChallenge,
-		&r.CodeChallengeMethod, &r.AuthTime, &r.AMR, &r.Done, &r.ExpiresAt)
+		&r.CodeChallengeMethod, &r.AuthTime, &r.AMR, &r.Done, &r.ExpiresAt,
+		&r.Prompt, &r.MaxAge)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrAuthRequestNotFound
 	}
