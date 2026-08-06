@@ -80,6 +80,7 @@ The core thesis was tested before any Go was written:
 | ⬜ | Recovery email delivery (config + circularity guard done; SMTP sending pending) |
 | ✅ | Config loading — no unsafe defaults; enforces the recovery/IdP circularity rule |
 | ✅ | Session management + CSRF — hashed tokens, read-time revocation, double-submit CSRF, security headers |
+| ✅ | **Step-up re-authentication** — prove the key again without a new session. The freshness rule had been in the policy since Phase 0 with no way to satisfy it on demand: `auth_at` was set once, at sign-in, so administration expired five minutes later mid-task and only a full sign-out restored it |
 | ✅ | Recovery codes (Argon2id, single-use) and ≥2 passkeys enforced |
 | ⬜ | Dual-control admin recovery |
 | ⬜ | **First-run setup** — one deliberate step for `user create` + `grant directory-admins` + `invite`, instead of three commands a newcomer has to know about |

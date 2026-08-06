@@ -26,6 +26,9 @@ export const meSchema = z.object({
   // Drives what the UI offers, never what it may do — every admin endpoint
   // evaluates the policy itself.
   canAdminister: z.boolean(),
+  // True when membership is fine and only freshness is missing, so the UI can
+  // offer a security key rather than hiding a section the user is entitled to.
+  adminNeedsReauth: z.boolean(),
   email: z.string(),
 })
 export type Me = z.infer<typeof meSchema>

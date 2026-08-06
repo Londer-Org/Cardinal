@@ -215,3 +215,39 @@ func (s *Store) RevokeAllSessions(ctx context.Context, subjectID uuid.UUID, acto
 func ConstantTimeCompare(a, b []byte) bool {
 	return subtle.ConstantTimeCompare(a, b) == 1
 }
+
+// RefreshSessionAuth records that a live session re-proved its credential.
+//
+// Updates auth_at and device_bound without minting a new session, so the
+// browser keeps the cookie it has and policy sees a fresh authentication. The
+// alternative — issuing a new session — would mean every step-up rotated the
+// cookie, and anything holding the old one (another tab, an in-flight request)
+// would be signed out by an action that was supposed to grant access.
+//
+// device_bound is taken from the credential actually presented, not carried
+// over: someone may sign in with a synced passkey and step up with a hardware
+// key, which is exactly the flow the freshness rule exists to allow.
+func (s *Store) RefreshSessionAuth(ctx context.Context, sessionID uuid.UUID, deviceBound bool) error {
+	return s.InTx(ctx, func(tx pgx.Tx) error {
+		tag, err := tx.Exec(ctx, `
+			UPDATE sessions SET auth_at = now(), device_bound = $2
+			 WHERE id = $1 AND valid_period @> now()`,
+			sessionID, deviceBound)
+		if err != nil {
+			return fmt.Errorf("store: refreshing session authentication: %w", err)
+		}
+		if tag.RowsAffected() == 0 {
+			return ErrNoSuchSession
+		}
+
+		// Its own action, not session.created: a step-up is a distinct event
+		// worth being able to find, and counting it as a sign-in would make
+		// "how often does this person authenticate" meaningless.
+		ev, err := event.New(event.ActionSessionReauthenticated, nil, nil,
+			map[string]any{"session_id": sessionID, "device_bound": deviceBound})
+		if err != nil {
+			return err
+		}
+		return s.AppendEvent(ctx, tx, ev)
+	})
+}

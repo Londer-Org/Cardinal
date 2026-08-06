@@ -324,3 +324,53 @@ func (s *Service) consumeCeremony(ctx context.Context, id uuid.UUID, kind string
 	}
 	return &data, entityID, nil
 }
+
+// ReAuthenticate proves possession of a credential without starting a session.
+//
+// The missing half of step-up. Policy can demand a device-bound credential used
+// in the last five minutes (ADR 0005), and until this existed the only way to
+// satisfy that was to sign out and sign in again — after which the window
+// closed five minutes later, usually in the middle of the task it was opened
+// for. A rule nobody can satisfy on demand is a rule people route around.
+//
+// Returns whether the credential used was device-bound, because that is the
+// other half of what policy asks and it is a property of the credential rather
+// than of the account.
+func (s *Service) ReAuthenticate(
+	ctx context.Context, ceremonyID uuid.UUID,
+	response *protocol.ParsedCredentialAssertionData, expected uuid.UUID,
+) (deviceBound bool, err error) {
+	sessionData, entityID, err := s.consumeCeremony(ctx, ceremonyID, "authentication")
+	if err != nil {
+		return false, err
+	}
+
+	// The ceremony must have been started for the session's own subject. A
+	// discoverable ceremony would let someone present any account's credential
+	// and refresh this session's freshness with it.
+	if entityID == nil || *entityID != expected {
+		return false, fmt.Errorf("%w: this ceremony belongs to another account", ErrUnknownUser)
+	}
+
+	u, err := s.loadUser(ctx, expected)
+	if err != nil {
+		return false, err
+	}
+
+	cred, err := s.wa.ValidateLogin(u, *sessionData, response)
+	if err != nil {
+		return false, fmt.Errorf("auth: verifying re-authentication: %w", err)
+	}
+
+	// Clone detection applies here exactly as it does at login: a sign-count
+	// regression means two authenticators are presenting one credential.
+	if err := s.store.UpdateSignCount(ctx, cred.ID, cred.Authenticator.SignCount); err != nil {
+		return false, err
+	}
+
+	stored, err := s.store.CredentialByID(ctx, cred.ID)
+	if err != nil {
+		return false, err
+	}
+	return !stored.BackupEligible, nil
+}

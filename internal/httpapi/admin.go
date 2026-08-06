@@ -152,12 +152,36 @@ func (s *Server) logAdminDecision(ctx context.Context, subject *claims.Subject, 
 	}
 }
 
-// canAdminister answers the same question without the HTTP shape, for /api/auth/me.
+// adminStatus is what the UI needs to render the admin section sensibly.
+type adminStatus struct {
+	// Allowed is the answer right now.
+	Allowed bool
+
+	// NeedsReauth distinguishes "you are not an administrator" from "you are,
+	// but your authentication has gone stale". Without it the section simply
+	// vanishes five minutes after signing in, which reads as a bug rather than
+	// as a policy — and leaves the user with no idea that tapping their key
+	// would bring it back.
+	NeedsReauth bool
+}
+
+// adminStatusFor answers without the HTTP shape, for /api/auth/me.
 //
-// The UI uses it to decide what to show. It is not a security boundary — every
-// admin endpoint evaluates the policy itself — but hiding a section someone
-// cannot use beats letting them find out by being refused.
-func (s *Server) canAdminister(ctx context.Context, session *store.Session) bool {
+// Not a security boundary — every admin endpoint evaluates the policy itself —
+// but a section someone cannot use should say why rather than disappear.
+func (s *Server) adminStatusFor(ctx context.Context, session *store.Session) adminStatus {
 	decision, _, err := s.decideAdmin(ctx, session)
-	return err == nil && decision.Allowed
+	if err != nil {
+		return adminStatus{}
+	}
+	if decision.Allowed {
+		return adminStatus{Allowed: true}
+	}
+
+	// Only the freshness rule is recoverable by the user. Not being a member is
+	// not something tapping a key will fix, and offering it would be a lie.
+	return adminStatus{
+		NeedsReauth: slices.Contains(decision.Reasons,
+			"admin-requires-fresh-device-bound-auth"),
+	}
 }

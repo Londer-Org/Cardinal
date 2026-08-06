@@ -140,10 +140,13 @@ type meResponse struct {
 	Email string `json:"email"`
 
 	// CanAdminister drives what the UI renders. Not a security boundary — see
-	// canAdminister — and deliberately re-evaluated per request, so an admin
-	// whose authentication has gone stale sees the section disappear rather
-	// than discovering it by being refused.
+	// adminStatusFor — and deliberately re-evaluated per request.
 	CanAdminister bool `json:"canAdminister"`
+
+	// AdminNeedsReauth is true when membership is fine and only freshness is
+	// missing, so the UI can offer a security key rather than hiding a section
+	// the user is entitled to.
+	AdminNeedsReauth bool `json:"adminNeedsReauth"`
 }
 
 func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
@@ -165,6 +168,7 @@ func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "could not load account")
 		return
 	}
+	admin := s.adminStatusFor(ctx, session)
 
 	writeJSON(w, http.StatusOK, meResponse{
 		ID:            entity.ID.String(),
@@ -177,9 +181,10 @@ func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
 		RecoveryCodes: remaining,
 		Email:         entityEmail(entity),
 		// What the UI should offer, not what it is allowed to do. Every admin
-		// endpoint evaluates the policy itself; this only decides whether a
-		// section someone cannot use is rendered at all.
-		CanAdminister: s.canAdminister(ctx, session),
+		// endpoint evaluates the policy itself; this only decides what is
+		// rendered, and whether to offer a way back in.
+		CanAdminister:    admin.Allowed,
+		AdminNeedsReauth: admin.NeedsReauth,
 	})
 }
 

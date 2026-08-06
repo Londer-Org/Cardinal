@@ -34,6 +34,11 @@ const (
 	ActionSessionCreated = "session.created"
 	ActionSessionRevoked = "session.revoked"
 
+	// ActionSessionReauthenticated is a step-up: an existing session re-proved
+	// its credential to satisfy a freshness rule. Distinct from session.created
+	// so that counting sign-ins stays meaningful.
+	ActionSessionReauthenticated = "session.reauthenticated"
+
 	// Nothing emits "breakglass.used" any more (ADR 0014), but journals written
 	// before that removal still contain it. The constant is gone; the string
 	// must never be reused for anything else, because it appears in hashes that

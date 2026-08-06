@@ -119,6 +119,13 @@ func (s *Server) Handler() http.Handler {
 	// something people resent rather than respect.
 	mux.Handle("PATCH /api/auth/me", s.requireAuth(http.HandlerFunc(s.handleUpdateProfile)))
 
+	// Step-up. Rate-limited like login, because it is a login in everything but
+	// the session it does not create.
+	mux.Handle("POST /api/auth/reauth/begin",
+		s.requireAuth(s.rateLimit(store.LimitLoginBegin)(http.HandlerFunc(s.handleReAuthBegin))))
+	mux.Handle("POST /api/auth/reauth/finish",
+		s.requireAuth(s.rateLimit(store.LimitLoginFinish)(http.HandlerFunc(s.handleReAuthFinish))))
+
 	// Enrollment. Unauthenticated by necessity — the whole point is that the
 	// account has no credential yet — so each of these carries its own rate
 	// limit and the invitation token is the only thing that authorises them.

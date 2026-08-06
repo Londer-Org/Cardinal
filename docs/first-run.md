@@ -141,8 +141,9 @@ Two things will refuse you, both deliberately:
 
 - **A synced passkey is not enough.** Administration needs a device-bound
   credential — a hardware key, not one living in a cloud account.
-- **A session older than five minutes is not enough.** Sign in again; the tab
-  reappears.
+- **A session older than five minutes is not enough.** The tab stays, but shows
+  **Confirm it is you** instead of the application list. Tap your key and it
+  comes back — your session is kept, only the key is re-proved.
 
 ### Deciding who may use which application
 

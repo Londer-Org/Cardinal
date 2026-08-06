@@ -41,6 +41,22 @@ export const api = {
       request('/api/auth/me', meSchema, { method: 'PATCH', body: input }),
 
     /**
+     * Step-up: re-prove the credential without starting a new session.
+     *
+     * Policy can demand a device-bound key used in the last five minutes.
+     * Without this the only way to satisfy that is to sign out and back in,
+     * after which the window closes again five minutes later.
+     */
+    reauthBegin: () =>
+      request('/api/auth/reauth/begin', ceremonySchema, { method: 'POST' }),
+
+    reauthFinish: (ceremonyId: string, response: unknown) =>
+      request('/api/auth/reauth/finish', meSchema, {
+        method: 'POST',
+        body: { ceremonyId, response },
+      }),
+
+    /**
      * Begins a login ceremony.
      *
      * Omitting `login` starts a discoverable (usernameless) ceremony, which is

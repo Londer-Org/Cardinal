@@ -11,6 +11,7 @@ import { DecisionExplorer } from '@/features/decisions/DecisionExplorer'
 import { RecoveryCodes } from '@/features/recovery/RecoveryCodes'
 import type { Me } from '@/lib/api'
 import { ProfileCard } from './ProfileCard'
+import { StepUpPrompt } from './StepUpPrompt'
 import { useLogout } from './useAuth'
 
 export function AccountPage({ session }: { session: Me }) {
@@ -67,9 +68,12 @@ export function AccountPage({ session }: { session: Me }) {
           <TabsList>
             <TabsTrigger value="account">Account</TabsTrigger>
             <TabsTrigger value="access">Access</TabsTrigger>
-            {/* Hidden for everyone else, but that is presentation only: the
-                endpoints behind it evaluate AdministerDirectory themselves. */}
-            {session.canAdminister && (
+            {/* Shown to administrators whose authentication has gone stale as
+                well as to those who are ready, so the tab does not silently
+                vanish five minutes after signing in — which reads as a bug
+                rather than as a policy. Presentation only: the endpoints behind
+                it evaluate AdministerDirectory themselves. */}
+            {(session.canAdminister || session.adminNeedsReauth) && (
               <TabsTrigger value="admin">Applications</TabsTrigger>
             )}
           </TabsList>
@@ -85,9 +89,9 @@ export function AccountPage({ session }: { session: Me }) {
             <DecisionExplorer />
           </TabsContent>
 
-          {session.canAdminister && (
+          {(session.canAdminister || session.adminNeedsReauth) && (
             <TabsContent value="admin" className="mt-4">
-              <ApplicationList />
+              {session.canAdminister ? <ApplicationList /> : <StepUpPrompt />}
             </TabsContent>
           )}
         </Tabs>
