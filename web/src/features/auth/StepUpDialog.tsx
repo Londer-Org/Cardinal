@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react'
-import { useQueryClient } from '@tanstack/react-query'
 import { KeyRoundIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
@@ -12,7 +11,7 @@ import {
 } from '@/components/ui/dialog'
 import { ErrorMessage } from '@/components/ErrorMessage'
 import { onStepUpNeeded } from '@/lib/api'
-import { useReAuth } from './useReAuth'
+import { useStepUp } from './useStepUp'
 
 /**
  * Asks for the security key when something a user did was refused.
@@ -39,8 +38,7 @@ import { useReAuth } from './useReAuth'
  */
 export function StepUpDialog() {
   const [open, setOpen] = useState(false)
-  const reauth = useReAuth()
-  const queryClient = useQueryClient()
+  const stepUp = useStepUp()
 
   useEffect(() => onStepUpNeeded(() => { setOpen(true) }), [])
 
@@ -49,7 +47,7 @@ export function StepUpDialog() {
       open={open}
       onOpenChange={(next) => {
         setOpen(next)
-        if (!next) reauth.reset()
+        if (!next) stepUp.reset()
       }}
     >
       <DialogContent className="sm:max-w-md">
@@ -62,31 +60,26 @@ export function StepUpDialog() {
           </DialogDescription>
         </DialogHeader>
 
-        <ErrorMessage error={reauth.error} />
+        <ErrorMessage error={stepUp.error} />
 
         <DialogFooter>
           <Button
             variant="outline"
             onClick={() => { setOpen(false) }}
-            disabled={reauth.isPending}
+            disabled={stepUp.isPending}
           >
             Cancel
           </Button>
           <Button
-            disabled={reauth.isPending}
+            disabled={stepUp.isPending}
             onClick={() => {
-              reauth.mutate(undefined, {
-                onSuccess: () => {
-                  setOpen(false)
-                  // Everything the page was refused, asked again. The user is
-                  // left looking at the screen they were on, populated.
-                  void queryClient.invalidateQueries()
-                },
+              stepUp.mutate(undefined, {
+                onSuccess: () => { setOpen(false) },
               })
             }}
           >
             <KeyRoundIcon />
-            {reauth.isPending ? 'Waiting for your device…' : 'Use my security key'}
+            {stepUp.isPending ? 'Waiting for your device…' : 'Use my security key'}
           </Button>
         </DialogFooter>
       </DialogContent>

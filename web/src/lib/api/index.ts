@@ -333,7 +333,7 @@ export interface RegisterApplicationInput {
   devMode: boolean
 }
 
-export { ApiError, onStepUpNeeded, requestStepUp } from './client'
+export { ApiError, onStepUpNeeded } from './client'
 export type {
   ApprovedRecovery,
   Application,

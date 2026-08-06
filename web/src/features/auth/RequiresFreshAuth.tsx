@@ -7,8 +7,9 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
-import { requestStepUp } from '@/lib/api'
+import { ErrorMessage } from '@/components/ErrorMessage'
 import { useSession } from './useAuth'
+import { useStepUp } from './useStepUp'
 
 /**
  * Guards a view that needs a recently-used key.
@@ -25,6 +26,7 @@ import { useSession } from './useAuth'
  */
 export function RequiresFreshAuth({ children }: { children: React.ReactNode }) {
   const { session } = useSession()
+  const stepUp = useStepUp()
 
   if (session === null || !session.adminNeedsReauth) {
     return <>{children}</>
@@ -40,10 +42,18 @@ export function RequiresFreshAuth({ children }: { children: React.ReactNode }) {
         </CardDescription>
       </CardHeader>
       <CardContent>
-        <Button onClick={() => { requestStepUp() }}>
+        {/* Asks the device directly. This used to open the dialog, which put
+            the same words and the same button in front of somebody who had just
+            read them and pressed it — two clicks for one decision. */}
+        <Button
+          onClick={() => { stepUp.mutate() }}
+          disabled={stepUp.isPending}
+        >
           <KeyRoundIcon />
-          Use my security key
+          {stepUp.isPending ? 'Waiting for your device…' : 'Use my security key'}
         </Button>
+
+        <ErrorMessage error={stepUp.error} />
         <p className="mt-4 text-xs text-muted-foreground">
           {/* Said once, plainly. A step-up nobody understands is one they
               resent, and a rule people resent is one that gets removed. */}
