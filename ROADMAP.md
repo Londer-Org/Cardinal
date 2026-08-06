@@ -224,14 +224,14 @@ Cardinal.
 |---|---|
 | ⬜ | SSH certificate authority |
 | ⬜ | Host enrollment |
-| ⬜ | `cardinal-agent` |
-| ❓ | **systemd-userdbd spike** — validate before committing; fallback is an NSS module |
+| ⬜ | `cardinal-agent` — serves POSIX identity over varlink (ADR 0020), renders sudoers, caches for offline |
+| ✅ | **systemd-userdbd validated** ([ADR 0020](docs/adr/0020-posix-identity-over-varlink.md)) — the interface is three varlink methods over NUL-terminated JSON, implementable in ~200 lines of Go with no dependency and no C. Proven end to end: `getent passwd`, lookup by uid, group lookup and `id` all resolve a user that exists only in a Go process. **The NSS module fallback is dropped** |
 | ⬜ | sudoers rendering (`visudo -c` before atomic install) |
 | ⬜ | Offline cache |
 | ⬜ | **Shadow mode** — the critical migration feature |
 | ⬜ | FreeIPA importer |
 | ⬜ | `.deb`/`.rpm` via goreleaser |
-| ❓ | **Key management** — where the CA private key lives |
+| ✅ | **CA key custody decided** ([ADR 0021](docs/adr/0021-ssh-ca-key-custody.md)) — the signing path takes a `crypto.Signer`, so the key material is configuration rather than a permanent choice. Default is envelope encryption in the database under its *own* key, PKCS#11 supported for anyone with an HSM, TPM sealing rejected because it would bind issuance to one host and break the standby failover plan. Rotation designed in from the start, since `TrustedUserCAKeys` holds several keys and the agent manages that file |
 
 ---
 
@@ -274,7 +274,7 @@ Tracked openly, from [the threat model](docs/threat-model.md):
 |---|---|---|
 | No external anchor for the hash chain | A superuser could rewrite it wholesale and pass validation | Post-1.0 |
 | No decision cache yet, so nothing to invalidate | When the agent caches offline, a cached decision could outlive a revocation | Phase 4 |
-| SSH CA key management undecided | Highest-stakes remaining decision | Blocks Phase 4 |
+| SSH CA key custody is only as strong as the host | Decided ([ADR 0021](docs/adr/0021-ssh-ca-key-custody.md)): by default an attacker holding both the database and the configuration file holds the CA. Mitigated by 5–15 minute certificates, logged issuance and automated rotation; PKCS#11 available for deployments wanting more | Ongoing |
 | No account lockout | Nothing guessable is unlimited today; reopens with TOTP | With TOTP |
 | The `sensitive` flag is declared and unread | The registry lets an operator mark an attribute sensitive; nothing encrypts or redacts on it | Phase 1 |
 | An application is two Cedar resources depending on the door | `forwardAuth` decides against `Application::"<host>"` and OIDC against `Application::"<registered name>"`, because nothing links a registered application to the hostnames it answers on. An application using both integration styles needs a policy under each name, and granting one does not grant the other | Phase 5 |

@@ -29,6 +29,8 @@ isn't finished.
 | [0017](0017-prompt-and-max-age-are-honoured.md) | `prompt` and `max_age` are honoured, not accepted | Accepted |
 | [0018](0018-access-tokens-are-a-weaker-credential.md) | Access tokens are a weaker credential, not a second principal | Accepted |
 | [0019](0019-in-app-authorization.md) | In-app authorization, if it happens, is a local decision | **Proposed** — design only |
+| [0020](0020-posix-identity-over-varlink.md) | POSIX identity is served over systemd's varlink interface | Accepted |
+| [0021](0021-ssh-ca-key-custody.md) | Where the SSH CA private key lives | Accepted |
 
 ## Conventions
 
