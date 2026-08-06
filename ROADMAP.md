@@ -75,7 +75,7 @@ The core thesis was tested before any Go was written:
 | | Item |
 |---|---|
 | ✅ | WebAuthn — registration and login ceremonies, discoverable (usernameless) login, clone detection |
-| ✅ | Break-glass — keypair, ceremony, challenge/response, HTTP endpoints, UI flow; also the first-credential bootstrap path |
+| ✅ | Break-glass — keypair, ceremony, challenge/response, HTTP endpoints, UI flow. **Emergencies only** since ADR 0013; enrollment invitations took over the bootstrap path it was being misused for |
 | ⬜ | TOTP (migration aid + second factor; never for admin actions) |
 | ⬜ | Recovery email delivery (config + circularity guard done; SMTP sending pending) |
 | ✅ | Config loading — no unsafe defaults; enforces the recovery/IdP circularity rule |
@@ -83,7 +83,8 @@ The core thesis was tested before any Go was written:
 | ✅ | Recovery codes (Argon2id, single-use) and ≥2 passkeys enforced |
 | ⬜ | Dual-control admin recovery |
 | ⬜ | **First-run setup — creating the first administrator deliberately** rather than by break-glassing into an account the CLI made |
-| ⬜ | **Enrollment invitations** — a single-use, short-lived, admin-issued link that lets a new user register their own first passkey. The missing piece: `cardinal user create` makes an account nobody can sign in to, and break-glass is an emergency key, not an onboarding tool |
+| ✅ | **Enrollment invitations** (ADR 0013) — single-use, 24h, revocable, hashed at rest, no session granted; the enrollment screen is also where a user sets their own name and email. Break-glass is demoted to emergencies, which is what ADR 0009 always said it was |
+| ✅ | **Self-service profile** — display name and email, with the recovery/IdP circularity guard applied here too. The login stays administrative |
 | ✅ | Rate limiting — fixed-window, fails closed, trusted-proxy aware |
 | ✅ | Frontend — React 19, Vite 7, Tailwind v4, **shadcn/ui (vendored)**, TanStack Query, zod, strict TS with `any` banned |
 | ✅ | `embed.FS` release build — `make release` yields one self-contained binary |
@@ -185,7 +186,7 @@ works.
 | ✅ | **Client management UI** — register, inspect and retire relying parties from the admin UI; secret shown once |
 | ✅ | **The admin API is Cedar-gated** (ADR 0012) — `directory-admins` is a built-in group, membership is an ordinary temporal grant, and every refusal names the deciding policy |
 | ⬜ | **Who may use which application** — an `AccessApplication` decision at `/oidc/authorize`, so a policy can say only `grafana-users` may sign in to Grafana. **Currently any authenticated user can sign in to any registered application.** The claims carry `groups` so an app can enforce its own rules, but Cardinal does not gate it, and that is the first thing anyone coming from Keycloak will look for |
-| ⬜ | **Account enrollment for a new user** — today the only route to a first passkey is break-glass, which is the emergency key that can assume *any* account. Onboarding a second person therefore has no safe path. See Phase 1 |
+| ✅ | **Account enrollment for a new user** — done in Phase 1 via invitations (ADR 0013) |
 | ⬜ | OpenID Foundation conformance suite |
 
 ---

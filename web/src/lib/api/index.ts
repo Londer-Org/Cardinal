@@ -7,10 +7,13 @@ import {
   ceremonySchema,
   consentsSchema,
   credentialSchema,
+  invitationSchema,
+  issuedInvitationSchema,
   credentialsSchema,
   decisionsSchema,
   meSchema,
   pendingAuthorizationSchema,
+  pendingInvitationsSchema,
   policySchema,
   recoveryCodesSchema,
   registeredApplicationSchema,
@@ -130,6 +133,48 @@ export const api = {
         { method: 'DELETE' }),
   },
 
+  /**
+   * Enrollment: the unauthenticated path a new account takes to its first
+   * passkey. The invitation token is the only thing authorising any of it.
+   */
+  enroll: {
+    details: (token: string) =>
+      request(`/api/enroll?token=${encodeURIComponent(token)}`, invitationSchema),
+
+    begin: (token: string) =>
+      request('/api/enroll/begin', ceremonySchema, {
+        method: 'POST',
+        body: { token },
+      }),
+
+    finish: (input: {
+      token: string
+      ceremonyId: string
+      response: unknown
+      name: string
+      displayName: string
+      email: string
+    }) =>
+      request('/api/enroll/finish', z.looseObject({}), {
+        method: 'POST',
+        body: input,
+      }),
+  },
+
+  invitations: {
+    list: () => request('/api/invitations', pendingInvitationsSchema),
+
+    issue: (login: string) =>
+      request('/api/invitations', issuedInvitationSchema, {
+        method: 'POST',
+        body: { login },
+      }),
+
+    revoke: (login: string) =>
+      request(`/api/invitations/${encodeURIComponent(login)}`, z.undefined(),
+        { method: 'DELETE' }),
+  },
+
   consents: {
     /** Applications this user has granted access to. */
     list: () => request('/api/consents', consentsSchema),
@@ -196,6 +241,9 @@ export type {
   ApplicationDetail,
   Consent,
   Credential,
+  Invitation,
+  IssuedInvitation,
+  PendingInvitation,
   Decision,
   Me,
   PendingAuthorization,
@@ -211,6 +259,7 @@ export const queryKeys = {
   applications: ['applications'] as const,
   application: (clientID: string) => ['applications', clientID] as const,
   consents: ['consents'] as const,
+  invitations: ['invitations'] as const,
   credentials: ['credentials'] as const,
   decisions: (deniedOnly: boolean) => ['decisions', deniedOnly] as const,
   policy: ['policy'] as const,

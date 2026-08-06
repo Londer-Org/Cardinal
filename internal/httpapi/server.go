@@ -128,6 +128,21 @@ func (s *Server) Handler() http.Handler {
 	// something people resent rather than respect.
 	mux.Handle("PATCH /api/auth/me", s.requireAuth(http.HandlerFunc(s.handleUpdateProfile)))
 
+	// Enrollment. Unauthenticated by necessity — the whole point is that the
+	// account has no credential yet — so each of these carries its own rate
+	// limit and the invitation token is the only thing that authorises them.
+	mux.HandleFunc("GET /api/enroll", s.handleInvitationDetails)
+	mux.HandleFunc("POST /api/enroll/begin", s.handleEnrollBegin)
+	mux.HandleFunc("POST /api/enroll/finish", s.handleEnrollFinish)
+
+	// Issuing them is administration.
+	mux.Handle("POST /api/invitations",
+		s.requireAuth(s.requireAdmin(http.HandlerFunc(s.handleIssueInvitation))))
+	mux.Handle("GET /api/invitations",
+		s.requireAuth(s.requireAdmin(http.HandlerFunc(s.handleListInvitations))))
+	mux.Handle("DELETE /api/invitations/{login}",
+		s.requireAuth(s.requireAdmin(http.HandlerFunc(s.handleRevokeInvitation))))
+
 	// ── Credential self-service ────────────────────────────────────────────
 	mux.Handle("POST /api/credentials/register/begin",
 		s.requireAuth(http.HandlerFunc(s.handleRegisterBegin)))

@@ -130,6 +130,31 @@ export const registeredApplicationSchema = applicationSchema.extend({
 })
 export type RegisteredApplication = z.infer<typeof registeredApplicationSchema>
 
+export const invitationSchema = z.object({
+  login: z.string(),
+  displayName: z.string(),
+  expiresAt: z.string(),
+  alreadyEnrolled: z.boolean(),
+})
+export type Invitation = z.infer<typeof invitationSchema>
+
+export const issuedInvitationSchema = z.object({
+  login: z.string(),
+  url: z.string(),
+  expiresAt: z.string(),
+  recovery: z.boolean(),
+})
+export type IssuedInvitation = z.infer<typeof issuedInvitationSchema>
+
+export const pendingInvitationsSchema = z.array(
+  z.object({
+    login: z.string(),
+    displayName: z.string(),
+    expiresAt: z.string(),
+  }),
+)
+export type PendingInvitation = z.infer<typeof pendingInvitationsSchema>[number]
+
 export const errorSchema = z.object({ error: z.string() })
 
 /**

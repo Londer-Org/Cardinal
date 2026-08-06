@@ -73,6 +73,8 @@ func run(ctx context.Context, args []string) error {
 		return runHistory(ctx, rest)
 	case "migrate":
 		return runMigrate(ctx, rest)
+	case "invite":
+		return runInvite(ctx, args[1:])
 	case "app":
 		return runApp(ctx, rest)
 	case "policy":

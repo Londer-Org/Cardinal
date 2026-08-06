@@ -48,6 +48,15 @@ const (
 
 	ActionConsentGranted = "consent.granted"
 	ActionConsentRevoked = "consent.revoked"
+
+	// Enrollment invitations. Issue and redemption are separate actions rather
+	// than one with a status, because "an invitation was issued for this
+	// account" and "someone used it" are different facts with different
+	// actors, and alerting on the second is not the same as alerting on the
+	// first.
+	ActionInvitationIssued   = "invitation.issued"
+	ActionInvitationRedeemed = "invitation.redeemed"
+	ActionInvitationRevoked  = "invitation.revoked"
 )
 
 // Event is one immutable record in the journal.

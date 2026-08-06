@@ -6,6 +6,7 @@ import { LoginPage } from '@/features/auth/LoginPage'
 import { useSession } from '@/features/auth/useAuth'
 import { pendingAuthorizationID, useOIDCResume } from '@/features/auth/useOIDCResume'
 import { ConsentPrompt } from '@/features/consent/ConsentPrompt'
+import { EnrollPage, invitationToken } from '@/features/enroll/EnrollPage'
 
 /**
  * Routing is a branch on session state plus one special case: an OIDC
@@ -16,6 +17,20 @@ import { ConsentPrompt } from '@/features/consent/ConsentPrompt'
  * arrives when deep-linking to a specific decision is wanted.
  */
 export function App() {
+  // Enrollment is checked before anything else, and before the session query
+  // has said anything. Someone following an invitation has no session by
+  // definition, and making them wait for a request that is certain to 401 —
+  // or worse, briefly showing them a sign-in page they cannot use — is a poor
+  // first impression of the system they are joining.
+  const token = invitationToken()
+  if (token !== null) {
+    return <EnrollPage token={token} />
+  }
+
+  return <AuthenticatedApp />
+}
+
+function AuthenticatedApp() {
   const { session, isLoading } = useSession()
 
   // An application may have sent the user here to sign in. If so, the

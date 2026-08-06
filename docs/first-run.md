@@ -155,6 +155,32 @@ Each refusal names the policy that produced it, in the response and in
 **Access → decisions**. That is the demo worth showing someone: neither FreeIPA
 nor Keycloak can tell you *which rule* denied you.
 
+### Adding a second person
+
+This is the part that had no safe answer until ADR 0013. Break-glass is the
+emergency key — it can assume *any* account — so it is not an onboarding tool.
+An invitation is:
+
+```sh
+./bin/cardinal user create jdoe
+./bin/cardinal invite jdoe -config cardinal.toml
+```
+
+The link goes to stdout and everything explanatory to stderr, so it pipes
+cleanly into a message. Send it however you like: it is single use, expires in
+24 hours, grants no session, cannot administer anything, and lets the holder
+register exactly one passkey on that one account. `cardinal invite revoke jdoe`
+kills it; issuing another supersedes the first.
+
+Opening it shows whose account it is, takes their name and email, and registers
+their passkey. Then they sign in with the key they just made — which proves it
+works while they are still at the screen.
+
+**Watch for:** the link stops working the moment it is used. Open it twice and
+the second attempt should refuse, with the same message an expired or made-up
+link gets, because telling the holder which would answer "does this account
+exist?" for anyone willing to guess.
+
 ## What to look for
 
 - The break-glass session shows `authMethod: break_glass` and a red banner.
