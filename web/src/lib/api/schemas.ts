@@ -186,6 +186,9 @@ export type Grant = z.infer<typeof grantSchema>
 
 export const directoryUserDetailSchema = directoryUserSchema.extend({
   memberships: z.array(grantSchema),
+  // Set while a link is outstanding. "issued" and "issued yesterday, expiring
+  // in an hour" call for different actions.
+  invitationExpiresAt: z.string().nullable(),
 })
 export type DirectoryUserDetail = z.infer<typeof directoryUserDetailSchema>
 

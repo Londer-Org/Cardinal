@@ -269,3 +269,31 @@ func (s *Store) HasCredentials(ctx context.Context, subjectID uuid.UUID) (bool, 
 	}
 	return n > 0, nil
 }
+
+// PendingInvitationFor returns the outstanding invitation for an account.
+//
+// Distinct from InvitationByToken, which answers "is this link usable" for
+// whoever holds one. This answers "is someone expected to arrive", which is the
+// question an administrator looking at an account is asking.
+func (s *Store) PendingInvitationFor(ctx context.Context, subjectID uuid.UUID) (*Invitation, error) {
+	var inv Invitation
+	err := s.pool.QueryRow(ctx, `
+		SELECT i.id, i.subject_id, e.name, coalesce(e.display_name, ''),
+		       i.issued_by, i.issued_at, i.expires_at
+		  FROM enrollment_invitations i
+		  JOIN entities e ON e.id = i.subject_id
+		 WHERE i.subject_id = $1
+		   AND i.redeemed_at IS NULL AND i.revoked_at IS NULL
+		   AND i.expires_at > now()`,
+		subjectID,
+	).Scan(&inv.ID, &inv.SubjectID, &inv.Login, &inv.DisplayName,
+		&inv.IssuedBy, &inv.IssuedAt, &inv.ExpiresAt)
+
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrInvitationNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("store: reading invitation: %w", err)
+	}
+	return &inv, nil
+}

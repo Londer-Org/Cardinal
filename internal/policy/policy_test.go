@@ -536,3 +536,36 @@ func TestBuiltInGroupIDsMatchTheShippedPolicy(t *testing.T) {
 				"the migration needs checking too", name, id)
 	}
 }
+
+// TestUngovernedActionsCatchesAnUpgradeGap.
+//
+// The failure it exists to prevent: Cardinal gains an action, a deployment
+// keeps running its existing policy set, and an administrator is told they are
+// not a member of a group they are a member of. Cedar is default-deny, so the
+// refusal is correct and looks exactly like a bug.
+func TestUngovernedActionsCatchesAnUpgradeGap(t *testing.T) {
+	t.Run("the shipped set governs everything Cardinal evaluates", func(t *testing.T) {
+		e := engine(t)
+		assert.Empty(t, e.UngovernedActions(),
+			"every action Cardinal can evaluate must appear in the default policy "+
+				"set, or a fresh install refuses it for everyone")
+	})
+
+	t.Run("an older set is reported", func(t *testing.T) {
+		// A policy set from before the tiers existed.
+		const old = `
+@id("directory-admins-may-administer")
+permit (
+    principal,
+    action == Cardinal::Action::"AdministerDirectory",
+    resource
+);`
+		e, err := policy.NewEngine([]byte(old), 1)
+		require.NoError(t, err)
+
+		missing := e.UngovernedActions()
+		assert.Contains(t, missing, "ManageUsers")
+		assert.Contains(t, missing, "ManageApplications")
+		assert.NotContains(t, missing, "AdministerDirectory")
+	})
+}

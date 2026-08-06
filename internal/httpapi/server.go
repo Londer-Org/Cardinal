@@ -57,6 +57,22 @@ func (s *Server) ReloadPolicy(engine *policy.Engine) {
 	if engine != nil {
 		s.log.Info("policy set loaded",
 			"version", engine.Version(), "policies", len(engine.PolicyIDs()))
+
+		// Cedar is default-deny, so an action this set never mentions is one
+		// that will be refused every time — correct, and indistinguishable from
+		// a bug to whoever hits it.
+		//
+		// The case worth catching is an upgrade: Cardinal gains an action, the
+		// deployment keeps running its existing policy set, and an
+		// administrator is told they are not a member of a group they are a
+		// member of. Warning rather than refusing to start, because a
+		// deliberately narrow policy set is a legitimate thing to run.
+		if missing := engine.UngovernedActions(); len(missing) > 0 {
+			s.log.Warn("the active policy set never mentions some actions, "+
+				"so they will be refused for everyone — republish "+
+				"policies/cardinal.cedar if this deployment was upgraded",
+				"actions", missing, "version", engine.Version())
+		}
 	}
 }
 

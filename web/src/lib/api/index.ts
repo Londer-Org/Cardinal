@@ -167,6 +167,7 @@ export const api = {
   invitations: {
     list: () => request('/api/invitations', pendingInvitationsSchema),
 
+    /** Issuing again supersedes any outstanding link, so the old one dies. */
     issue: (login: string) =>
       request('/api/invitations', issuedInvitationSchema, {
         method: 'POST',

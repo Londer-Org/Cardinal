@@ -211,6 +211,10 @@ type Engine struct {
 	// policy above it. The annotation is the stable, meaningful name, and
 	// NewEngine refuses a policy that lacks one.
 	names map[cedar.PolicyID]string
+
+	// document is kept so UngovernedActions can report which actions this set
+	// never mentions. Cheap: policy sets are small and loaded once.
+	document string
 }
 
 // NewEngine compiles a Cedar document.
@@ -244,7 +248,12 @@ func NewEngine(document []byte, version int64) (*Engine, error) {
 				"missing on: %s", strings.Join(unnamed, ", "))
 	}
 
-	return &Engine{policies: policies, version: version, names: names}, nil
+	return &Engine{
+		policies: policies,
+		version:  version,
+		names:    names,
+		document: string(document),
+	}, nil
 }
 
 // name resolves a Cedar policy ID to its readable @id.
@@ -322,4 +331,46 @@ func (e *Engine) Source(name string) (string, bool) {
 		}
 	}
 	return "", false
+}
+
+// evaluatedActions are every action Cardinal asks about.
+//
+// Kept beside the constants rather than derived, because the check below is
+// only useful if it is exhaustive, and a list that drifts silently is worse
+// than no list.
+var evaluatedActions = []types.EntityUID{
+	ActionAccessURL,
+	ActionAccessApplication,
+	ActionAdministerData,
+	ActionManageUsers,
+	ActionManageApplications,
+	ActionSSHLogin,
+	ActionRunAsRoot,
+}
+
+// UngovernedActions names the actions this policy set never mentions.
+//
+// Cedar is default-deny, so an action no policy refers to is one that will be
+// refused every time — which is correct, and which looks exactly like a bug to
+// whoever hits it. The case that matters is an upgrade: Cardinal gains an
+// action, the deployment keeps running its existing policy set, and an
+// administrator is told "you are not a member of directory-admins" while being
+// a member of directory-admins.
+//
+// This is a text search rather than an evaluation, deliberately. Asking Cedar
+// whether an action is reachable would mean constructing a principal and a
+// resource that might be permitted, which is the question policy exists to
+// answer and not one this should guess at. Whether the action is *named* is a
+// weaker claim and the right one: a policy set that never mentions an action
+// certainly cannot permit it.
+func (e *Engine) UngovernedActions() []string {
+	var missing []string
+	for _, action := range evaluatedActions {
+		name := string(action.ID)
+		if !strings.Contains(e.document, `"`+name+`"`) {
+			missing = append(missing, name)
+		}
+	}
+	sort.Strings(missing)
+	return missing
 }

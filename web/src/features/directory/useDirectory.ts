@@ -46,6 +46,39 @@ export function useDisableUser() {
   })
 }
 
+/**
+ * Issuing or re-issuing an enrollment link.
+ *
+ * Re-issuing supersedes the outstanding one server-side, so a link that went to
+ * the wrong person, expired, or was simply lost stops working the moment a
+ * replacement is made.
+ */
+export function useIssueInvitation() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: api.invitations.issue,
+    onSuccess: async (_result, login) => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.users }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.user(login) }),
+      ])
+    },
+  })
+}
+
+export function useRevokeInvitation() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: api.invitations.revoke,
+    onSuccess: async (_result, login) => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.users }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.user(login) }),
+      ])
+    },
+  })
+}
+
 export function useCreateGroup() {
   const queryClient = useQueryClient()
   return useMutation({

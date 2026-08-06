@@ -3,6 +3,28 @@
 Everything below works today. It takes about ten minutes, and the last section
 is the part nobody has done yet — a real passkey against a real browser.
 
+## Upgrading
+
+Cardinal evaluates a fixed set of Cedar actions, and new ones arrive with new
+features. Cedar is default-deny, so an action your active policy set never
+mentions is refused for everyone — which looks like a bug rather than a policy:
+an administrator gets "you are not a member of directory-admins" while being a
+member of directory-admins.
+
+The server warns about exactly this at startup, naming the actions:
+
+```
+WARN the active policy set never mentions some actions, so they will be
+     refused for everyone — republish policies/cardinal.cedar if this
+     deployment was upgraded  actions=[ManageApplications ManageUsers]
+```
+
+The fix is to merge the new rules into your policy set and republish:
+
+```sh
+cardinal policy publish policies/cardinal.cedar -activate
+```
+
 ## 0. Starting over
 
 If the development database fills up with experiments:
@@ -195,6 +217,16 @@ the rule, instead of a sign-in that appears to work and then stops.
 Each refusal names the policy that produced it, in the response and in
 **Access → decisions**. That is the demo worth showing someone: neither FreeIPA
 nor Keycloak can tell you *which rule* denied you.
+
+### If a link goes astray
+
+Issue another. Re-issuing supersedes the outstanding one, so the first stops
+working immediately — from the console, on the person's row under **Enrollment**,
+or with `cardinal invite <login>`. `cardinal invite revoke <login>` withdraws one
+without issuing a replacement.
+
+That only applies to an account with no passkeys. Once someone is enrolled, a
+new link would restore access rather than grant it, which is the next section.
 
 ### Recovering an account
 

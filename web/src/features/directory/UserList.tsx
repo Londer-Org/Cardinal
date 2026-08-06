@@ -34,6 +34,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { ErrorMessage } from '@/components/ErrorMessage'
 import type { CreatedUser, DirectoryUser, Grant } from '@/lib/api'
 import { GrantForm } from './GrantForm'
+import { InvitationPanel } from './InvitationPanel'
 import {
   useCreateUser,
   useDisableUser,
@@ -210,6 +211,8 @@ function UserDetail({ login }: { login: string }) {
           </ul>
         )}
       </div>
+
+      <InvitationPanel user={user} />
 
       <GrantForm member={login} />
 

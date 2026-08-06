@@ -94,6 +94,11 @@ type userDetailResponse struct {
 	userResponse
 
 	Memberships []grantResponse `json:"memberships"`
+
+	// InvitationExpiresAt is set while a link is outstanding, so the console can
+	// say how long is left rather than only that one exists — "issued" and
+	// "issued yesterday and expiring in an hour" call for different actions.
+	InvitationExpiresAt *time.Time `json:"invitationExpiresAt"`
 }
 
 func (s *Server) handleGetUser(w http.ResponseWriter, r *http.Request) {
@@ -118,17 +123,36 @@ func (s *Server) handleGetUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Credentials and invitation state were previously left at their zero
+	// values here, so the detail view reported "no passkeys, not invited" for an
+	// account the list showed as invited. Nothing rendered them, so nothing
+	// noticed — until something did.
+	credentials, err := s.store.CredentialsFor(ctx, entity.ID)
+	if err != nil {
+		s.log.ErrorContext(ctx, "listing credentials failed", "error", err)
+		writeError(w, http.StatusInternalServerError, "could not load the account")
+		return
+	}
+
+	var invitationExpiry *time.Time
+	if inv, err := s.store.PendingInvitationFor(ctx, entity.ID); err == nil {
+		invitationExpiry = &inv.ExpiresAt
+	}
+
 	email, _ := entity.Attrs["email"].(string)
 	writeJSON(w, http.StatusOK, userDetailResponse{
 		userResponse: userResponse{
-			Login:         entity.Name,
-			DisplayName:   entity.DisplayName,
-			Email:         email,
-			FullyEnrolled: enrolled,
-			Groups:        len(memberships),
-			CreatedAt:     entity.CreatedAt,
+			Login:             entity.Name,
+			DisplayName:       entity.DisplayName,
+			Email:             email,
+			Credentials:       len(credentials),
+			FullyEnrolled:     enrolled,
+			Groups:            len(memberships),
+			InvitationPending: invitationExpiry != nil,
+			CreatedAt:         entity.CreatedAt,
 		},
-		Memberships: describeGrants(memberships),
+		Memberships:         describeGrants(memberships),
+		InvitationExpiresAt: invitationExpiry,
 	})
 }
 
