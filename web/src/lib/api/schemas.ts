@@ -166,7 +166,18 @@ export const directoryUserSchema = z.object({
 })
 export type DirectoryUser = z.infer<typeof directoryUserSchema>
 
-export const directoryUsersSchema = z.array(directoryUserSchema)
+/** A page, and how much there is. The total is what lets a table say "25 of
+ *  412" rather than only showing what it was handed. */
+function paged<T extends z.ZodType>(item: T) {
+  return z.object({
+    items: z.array(item),
+    total: z.number(),
+    limit: z.number(),
+    offset: z.number(),
+  })
+}
+
+export const directoryUsersSchema = paged(directoryUserSchema)
 
 /**
  * A membership, with its period.
@@ -199,7 +210,7 @@ export const directoryGroupSchema = z.object({
 })
 export type DirectoryGroup = z.infer<typeof directoryGroupSchema>
 
-export const directoryGroupsSchema = z.array(directoryGroupSchema)
+export const directoryGroupsSchema = paged(directoryGroupSchema)
 
 export const directoryGroupDetailSchema = z.object({
   name: z.string(),
@@ -214,6 +225,28 @@ export const createdUserSchema = z.object({
   expiresAt: z.string().optional(),
 })
 export type CreatedUser = z.infer<typeof createdUserSchema>
+
+export const recoveryRequestSchema = z.object({
+  subject: z.string(),
+  requestedBy: z.string(),
+  requestedAt: z.string(),
+  expiresAt: z.string(),
+  reason: z.string(),
+  // Named so a second administrator can see who else has agreed. Approving
+  // because someone you trust already did is a real part of how this decision
+  // gets made, and hiding it does not stop it happening.
+  approvers: z.array(z.string()),
+  required: z.number(),
+  satisfied: z.boolean(),
+})
+export type RecoveryRequest = z.infer<typeof recoveryRequestSchema>
+
+export const recoveryRequestsSchema = z.array(recoveryRequestSchema)
+
+export const approvedRecoverySchema = recoveryRequestSchema.extend({
+  invitationUrl: z.string().optional(),
+})
+export type ApprovedRecovery = z.infer<typeof approvedRecoverySchema>
 
 export const errorSchema = z.object({ error: z.string() })
 

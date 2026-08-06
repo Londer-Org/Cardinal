@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -40,8 +41,58 @@ func (u *UserSummary) FullyEnrolled() bool {
 	return u.Credentials >= MinCredentialsForFullEnrollment
 }
 
-// ListUsers returns every active user with the counts the console shows.
-func (s *Store) ListUsers(ctx context.Context) ([]*UserSummary, error) {
+// Page bounds a listing.
+//
+// Offset rather than a cursor, because these lists are ordered by name and a
+// directory's names do not churn between page turns the way a feed's do. Offset
+// also gives a total, and "3 of 412 people" is worth more to an administrator
+// than an opaque next-page token.
+type Page struct {
+	// Search matches login, display name and email. Empty matches everything.
+	Search string
+
+	Limit  int
+	Offset int
+}
+
+// normalise clamps a page to something safe to put in a query.
+func (p Page) normalise() Page {
+	if p.Limit <= 0 || p.Limit > 200 {
+		// A caller asking for everything gets a page anyway. An unbounded list
+		// endpoint is a denial of service with a friendly name.
+		p.Limit = 25
+	}
+	if p.Offset < 0 {
+		p.Offset = 0
+	}
+	p.Search = strings.TrimSpace(p.Search)
+	return p
+}
+
+// ListUsers returns a page of active users with the counts the console shows.
+//
+// Returns the total as well, so the caller can say how many there are rather
+// than only how many it was given.
+func (s *Store) ListUsers(ctx context.Context, page Page) ([]*UserSummary, int, error) {
+	page = page.normalise()
+
+	// One pattern, applied to login, display name and email. Deliberately not
+	// full-text search: an administrator typing "alon" expects to find
+	// "alonfils", and to_tsquery would not match a prefix of a single token
+	// without more machinery than the problem deserves at this size.
+	pattern := "%" + strings.ToLower(page.Search) + "%"
+
+	var total int
+	if err := s.pool.QueryRow(ctx, `
+		SELECT count(*) FROM entities e
+		 WHERE e.type = 'user' AND e.disabled_at IS NULL
+		   AND ($1 = '' OR lower(e.name) LIKE $2
+		        OR lower(coalesce(e.display_name, '')) LIKE $2
+		        OR lower(coalesce(e.attrs->>'email', '')) LIKE $2)`,
+		page.Search, pattern).Scan(&total); err != nil {
+		return nil, 0, fmt.Errorf("store: counting users: %w", err)
+	}
+
 	rows, err := s.pool.Query(ctx, `
 		SELECT e.id, e.name, coalesce(e.display_name, ''),
 		       coalesce(e.attrs->>'email', ''),
@@ -56,9 +107,13 @@ func (s *Store) ListUsers(ctx context.Context) ([]*UserSummary, error) {
 		       e.created_at
 		  FROM entities e
 		 WHERE e.type = 'user' AND e.disabled_at IS NULL
-		 ORDER BY e.name`)
+		   AND ($1 = '' OR lower(e.name) LIKE $2
+		        OR lower(coalesce(e.display_name, '')) LIKE $2
+		        OR lower(coalesce(e.attrs->>'email', '')) LIKE $2)
+		 ORDER BY e.name
+		 LIMIT $3 OFFSET $4`, page.Search, pattern, page.Limit, page.Offset)
 	if err != nil {
-		return nil, fmt.Errorf("store: listing users: %w", err)
+		return nil, 0, fmt.Errorf("store: listing users: %w", err)
 	}
 	defer rows.Close()
 
@@ -67,11 +122,11 @@ func (s *Store) ListUsers(ctx context.Context) ([]*UserSummary, error) {
 		var u UserSummary
 		if err := rows.Scan(&u.ID, &u.Login, &u.DisplayName, &u.Email,
 			&u.Credentials, &u.Groups, &u.InvitationPending, &u.CreatedAt); err != nil {
-			return nil, fmt.Errorf("store: scanning user: %w", err)
+			return nil, 0, fmt.Errorf("store: scanning user: %w", err)
 		}
 		out = append(out, &u)
 	}
-	return out, rows.Err()
+	return out, total, rows.Err()
 }
 
 // GroupSummary is one row of the groups list.
@@ -86,17 +141,33 @@ type GroupSummary struct {
 	Members int
 }
 
-// ListGroups returns every active group with its current member count.
-func (s *Store) ListGroups(ctx context.Context) ([]*GroupSummary, error) {
+// ListGroups returns a page of active groups with their current member counts.
+func (s *Store) ListGroups(ctx context.Context, page Page) ([]*GroupSummary, int, error) {
+	page = page.normalise()
+	pattern := "%" + strings.ToLower(page.Search) + "%"
+
+	var total int
+	if err := s.pool.QueryRow(ctx, `
+		SELECT count(*) FROM entities e
+		 WHERE e.type = 'group' AND e.disabled_at IS NULL
+		   AND ($1 = '' OR lower(e.name) LIKE $2
+		        OR lower(coalesce(e.display_name, '')) LIKE $2)`,
+		page.Search, pattern).Scan(&total); err != nil {
+		return nil, 0, fmt.Errorf("store: counting groups: %w", err)
+	}
+
 	rows, err := s.pool.Query(ctx, `
 		SELECT e.id, e.name, coalesce(e.display_name, ''),
 		       (SELECT count(*) FROM group_members m
 		         WHERE m.group_id = e.id AND m.valid_period @> now())
 		  FROM entities e
 		 WHERE e.type = 'group' AND e.disabled_at IS NULL
-		 ORDER BY e.name`)
+		   AND ($1 = '' OR lower(e.name) LIKE $2
+		        OR lower(coalesce(e.display_name, '')) LIKE $2)
+		 ORDER BY e.name
+		 LIMIT $3 OFFSET $4`, page.Search, pattern, page.Limit, page.Offset)
 	if err != nil {
-		return nil, fmt.Errorf("store: listing groups: %w", err)
+		return nil, 0, fmt.Errorf("store: listing groups: %w", err)
 	}
 	defer rows.Close()
 
@@ -104,11 +175,11 @@ func (s *Store) ListGroups(ctx context.Context) ([]*GroupSummary, error) {
 	for rows.Next() {
 		var g GroupSummary
 		if err := rows.Scan(&g.ID, &g.Name, &g.DisplayName, &g.Members); err != nil {
-			return nil, fmt.Errorf("store: scanning group: %w", err)
+			return nil, 0, fmt.Errorf("store: scanning group: %w", err)
 		}
 		out = append(out, &g)
 	}
-	return out, rows.Err()
+	return out, total, rows.Err()
 }
 
 // NamedGrant is a membership with both ends resolved to names.

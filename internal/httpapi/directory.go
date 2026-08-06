@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -39,10 +40,35 @@ type userResponse struct {
 	CreatedAt         time.Time `json:"createdAt"`
 }
 
+// pageFrom reads paging and search from the query string.
+//
+// Bad numbers are ignored rather than refused: a stray `?limit=abc` should show
+// the first page, not an error, because nobody typed it deliberately and the
+// safe interpretation is obvious.
+func pageFrom(r *http.Request) store.Page {
+	q := r.URL.Query()
+	limit, _ := strconv.Atoi(q.Get("limit"))
+	offset, _ := strconv.Atoi(q.Get("offset"))
+	return store.Page{Search: q.Get("q"), Limit: limit, Offset: offset}
+}
+
+// pagedResponse carries the page and how much there is.
+//
+// The total is what lets the console say "25 of 412" rather than only showing
+// what it was handed — which is the difference between a list an administrator
+// can navigate and one they have to guess at.
+type pagedResponse[T any] struct {
+	Items  []T `json:"items"`
+	Total  int `json:"total"`
+	Limit  int `json:"limit"`
+	Offset int `json:"offset"`
+}
+
 func (s *Server) handleListUsers(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
+	page := pageFrom(r)
 
-	users, err := s.store.ListUsers(ctx)
+	users, total, err := s.store.ListUsers(ctx, page)
 	if err != nil {
 		s.log.ErrorContext(ctx, "listing users failed", "error", err)
 		writeError(w, http.StatusInternalServerError, "could not list users")
@@ -62,7 +88,11 @@ func (s *Server) handleListUsers(w http.ResponseWriter, r *http.Request) {
 			CreatedAt:         u.CreatedAt,
 		})
 	}
-	writeJSON(w, http.StatusOK, out)
+
+	writeJSON(w, http.StatusOK, pagedResponse[userResponse]{
+		Items: out, Total: total,
+		Limit: len(out), Offset: page.Offset,
+	})
 }
 
 type grantResponse struct {
@@ -268,7 +298,9 @@ type groupResponse struct {
 func (s *Server) handleListGroups(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	groups, err := s.store.ListGroups(ctx)
+	page := pageFrom(r)
+
+	groups, total, err := s.store.ListGroups(ctx, page)
 	if err != nil {
 		s.log.ErrorContext(ctx, "listing groups failed", "error", err)
 		writeError(w, http.StatusInternalServerError, "could not list groups")
@@ -281,7 +313,11 @@ func (s *Server) handleListGroups(w http.ResponseWriter, r *http.Request) {
 			Name: g.Name, DisplayName: g.DisplayName, Members: g.Members,
 		})
 	}
-	writeJSON(w, http.StatusOK, out)
+
+	writeJSON(w, http.StatusOK, pagedResponse[groupResponse]{
+		Items: out, Total: total,
+		Limit: len(out), Offset: page.Offset,
+	})
 }
 
 func (s *Server) handleGetGroup(w http.ResponseWriter, r *http.Request) {

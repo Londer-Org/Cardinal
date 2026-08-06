@@ -1,10 +1,12 @@
 package store_test
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
 	"github.com/arthur-lonfils/cardinal/internal/directory"
+	"github.com/arthur-lonfils/cardinal/internal/store"
 	"github.com/arthur-lonfils/cardinal/internal/temporal"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -31,7 +33,7 @@ func TestListUsersCountsWhatTheConsoleShows(t *testing.T) {
 	issued, err := s.IssueInvitation(ctx, alice.ID, &alice.ID, 0)
 	require.NoError(t, err)
 
-	users, err := s.ListUsers(ctx)
+	users, total, err := s.ListUsers(ctx, store.Page{})
 	require.NoError(t, err)
 
 	byLogin := map[string]int{}
@@ -49,13 +51,14 @@ func TestListUsersCountsWhatTheConsoleShows(t *testing.T) {
 	}
 	require.Contains(t, byLogin, "alice")
 	require.Contains(t, byLogin, "bob")
+	assert.Equal(t, len(users), total, "an unpaged listing must report its own size")
 
 	// Redeeming clears the pending flag, so the list stops advertising a link
 	// that no longer works.
 	_, err = s.RedeemInvitation(ctx, issued.Token, testIP)
 	require.NoError(t, err)
 
-	users, err = s.ListUsers(ctx)
+	users, _, err = s.ListUsers(ctx, store.Page{})
 	require.NoError(t, err)
 	for _, u := range users {
 		if u.Login == "alice" {
@@ -90,7 +93,7 @@ func TestExpiredGrantsLeaveTheMemberList(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, members, "an expired grant must not appear as membership")
 
-	groups, err := s.ListGroups(ctx)
+	groups, _, err := s.ListGroups(ctx, store.Page{})
 	require.NoError(t, err)
 	for _, g := range groups {
 		if g.Name == "contractors" {
@@ -153,4 +156,77 @@ func TestMemberListResolvesNamesAndPeriods(t *testing.T) {
 			assert.Nil(t, g.Until, "unbounded must be nil, not a far-future date")
 		}
 	}
+}
+
+// TestListUsersPagesAndSearches.
+//
+// Client-side paging over a full payload still ships every row, which misses
+// the point of paginating a directory that grows. So the page is a real one,
+// and the total is what lets a console say "25 of 412" rather than only showing
+// what it was handed.
+func TestListUsersPagesAndSearches(t *testing.T) {
+	s := newStore(t)
+	ctx := t.Context()
+
+	for _, name := range []string{"anna", "bob", "carol", "dave", "erin"} {
+		mustCreate(t, s, directory.TypeUser, name)
+	}
+
+	first, total, err := s.ListUsers(ctx, store.Page{Limit: 2})
+	require.NoError(t, err)
+	require.Len(t, first, 2)
+	assert.Equal(t, 5, total, "the total must count everything, not the page")
+	assert.Equal(t, "anna", first[0].Login, "ordering must be stable across pages")
+
+	second, _, err := s.ListUsers(ctx, store.Page{Limit: 2, Offset: 2})
+	require.NoError(t, err)
+	require.Len(t, second, 2)
+	assert.Equal(t, "carol", second[0].Login)
+
+	last, _, err := s.ListUsers(ctx, store.Page{Limit: 2, Offset: 4})
+	require.NoError(t, err)
+	assert.Len(t, last, 1, "the final page is short, not empty")
+
+	beyond, _, err := s.ListUsers(ctx, store.Page{Limit: 2, Offset: 99})
+	require.NoError(t, err)
+	assert.Empty(t, beyond, "reading past the end is empty, not an error")
+
+	// Search narrows the total too, or the console would report a count that
+	// disagrees with what it is showing.
+	found, foundTotal, err := s.ListUsers(ctx, store.Page{Search: "ar"})
+	require.NoError(t, err)
+	assert.Equal(t, foundTotal, len(found))
+	logins := make([]string, 0, len(found))
+	for _, u := range found {
+		logins = append(logins, u.Login)
+	}
+	assert.ElementsMatch(t, []string{"carol"}, logins)
+
+	// A prefix must match, because an administrator typing "ann" expects anna.
+	prefix, _, err := s.ListUsers(ctx, store.Page{Search: "ann"})
+	require.NoError(t, err)
+	require.Len(t, prefix, 1)
+	assert.Equal(t, "anna", prefix[0].Login)
+}
+
+// TestUnboundedListingIsStillPaged.
+//
+// A caller asking for everything gets a page anyway: an unbounded list endpoint
+// is a denial of service with a friendly name.
+func TestUnboundedListingIsStillPaged(t *testing.T) {
+	s := newStore(t)
+	ctx := t.Context()
+
+	for i := range 40 {
+		mustCreate(t, s, directory.TypeUser, fmt.Sprintf("user-%02d", i))
+	}
+
+	users, total, err := s.ListUsers(ctx, store.Page{Limit: 0})
+	require.NoError(t, err)
+	assert.Equal(t, 40, total)
+	assert.LessOrEqual(t, len(users), 25, "a limit of zero must not mean no limit")
+
+	huge, _, err := s.ListUsers(ctx, store.Page{Limit: 100_000})
+	require.NoError(t, err)
+	assert.LessOrEqual(t, len(huge), 25, "an absurd limit must be clamped")
 }

@@ -1,8 +1,14 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { api, queryKeys } from '@/lib/api'
+import { api, queryKeys, type PageQuery } from '@/lib/api'
 
-export function useUsers() {
-  return useQuery({ queryKey: queryKeys.users, queryFn: api.directory.users })
+export function useUsers(page: PageQuery) {
+  return useQuery({
+    queryKey: queryKeys.users(page),
+    queryFn: () => api.directory.users(page),
+    // Keeps the previous page on screen while the next loads, so paging does
+    // not flash an empty table on every click.
+    placeholderData: (previous) => previous,
+  })
 }
 
 /** One person's detail, fetched only when their row is opened. */
@@ -14,8 +20,12 @@ export function useUser(login: string | null) {
   })
 }
 
-export function useGroups() {
-  return useQuery({ queryKey: queryKeys.groups, queryFn: api.directory.groups })
+export function useGroups(page: PageQuery) {
+  return useQuery({
+    queryKey: queryKeys.groups(page),
+    queryFn: () => api.directory.groups(page),
+    placeholderData: (previous) => previous,
+  })
 }
 
 export function useGroup(name: string | null) {
@@ -31,7 +41,7 @@ export function useCreateUser() {
   return useMutation({
     mutationFn: api.directory.createUser,
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: queryKeys.users })
+      await queryClient.invalidateQueries({ queryKey: ['directory', 'users'] })
     },
   })
 }
@@ -41,7 +51,7 @@ export function useDisableUser() {
   return useMutation({
     mutationFn: api.directory.disableUser,
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: queryKeys.users })
+      await queryClient.invalidateQueries({ queryKey: ['directory', 'users'] })
     },
   })
 }
@@ -59,7 +69,7 @@ export function useIssueInvitation() {
     mutationFn: api.invitations.issue,
     onSuccess: async (_result, login) => {
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: queryKeys.users }),
+        queryClient.invalidateQueries({ queryKey: ['directory', 'users'] }),
         queryClient.invalidateQueries({ queryKey: queryKeys.user(login) }),
       ])
     },
@@ -72,7 +82,7 @@ export function useRevokeInvitation() {
     mutationFn: api.invitations.revoke,
     onSuccess: async (_result, login) => {
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: queryKeys.users }),
+        queryClient.invalidateQueries({ queryKey: ['directory', 'users'] }),
         queryClient.invalidateQueries({ queryKey: queryKeys.user(login) }),
       ])
     },
@@ -84,7 +94,7 @@ export function useCreateGroup() {
   return useMutation({
     mutationFn: api.directory.createGroup,
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: queryKeys.groups })
+      await queryClient.invalidateQueries({ queryKey: ['directory', 'groups'] })
     },
   })
 }
@@ -132,8 +142,8 @@ async function invalidateMembership(
   member: string,
 ) {
   await Promise.all([
-    queryClient.invalidateQueries({ queryKey: queryKeys.users }),
-    queryClient.invalidateQueries({ queryKey: queryKeys.groups }),
+    queryClient.invalidateQueries({ queryKey: ['directory', 'users'] }),
+    queryClient.invalidateQueries({ queryKey: ['directory', 'groups'] }),
     queryClient.invalidateQueries({ queryKey: queryKeys.group(group) }),
     queryClient.invalidateQueries({ queryKey: queryKeys.user(member) }),
     // Admin rights are a membership too: granting or revoking directory-admins

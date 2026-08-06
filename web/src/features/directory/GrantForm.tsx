@@ -26,14 +26,17 @@ const DURATIONS = [
  * feature existing and a feature being used.
  */
 export function GrantForm({ member }: { member: string }) {
-  const { data: groups } = useGroups()
+  // Every group, for the picker. A directory large enough for this to be a
+  // real page is one where typing the name beats scrolling anyway, and the
+  // datalist is a convenience rather than the only way in.
+  const { data: groups } = useGroups({ q: '', limit: 200, offset: 0 })
   const grant = useGrantMembership()
 
   const [group, setGroup] = useState('')
   const [days, setDays] = useState<number | null>(30)
   const [reason, setReason] = useState('')
 
-  const available = (groups ?? []).map((g) => g.name)
+  const available = (groups?.items ?? []).map((g) => g.name)
 
   return (
     <form

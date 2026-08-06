@@ -17,7 +17,10 @@ import {
   decisionsSchema,
   meSchema,
   pendingAuthorizationSchema,
+  approvedRecoverySchema,
   pendingInvitationsSchema,
+  recoveryRequestsSchema,
+  recoveryRequestSchema,
   policySchema,
   recoveryCodesSchema,
   registeredApplicationSchema,
@@ -181,7 +184,8 @@ export const api = {
 
   /** People and groups. Admin-only, enforced server-side. */
   directory: {
-    users: () => request('/api/directory/users', directoryUsersSchema),
+    users: (page: PageQuery) =>
+      request(`/api/directory/users?${pageParams(page)}`, directoryUsersSchema),
 
     user: (login: string) =>
       request(`/api/directory/users/${encodeURIComponent(login)}`,
@@ -197,7 +201,8 @@ export const api = {
       request(`/api/directory/users/${encodeURIComponent(login)}`, z.undefined(),
         { method: 'DELETE' }),
 
-    groups: () => request('/api/directory/groups', directoryGroupsSchema),
+    groups: (page: PageQuery) =>
+      request(`/api/directory/groups?${pageParams(page)}`, directoryGroupsSchema),
 
     group: (name: string) =>
       request(`/api/directory/groups/${encodeURIComponent(name)}`,
@@ -218,6 +223,25 @@ export const api = {
       request(
         `/api/directory/groups/${encodeURIComponent(group)}/members/${encodeURIComponent(member)}`,
         z.undefined(), { method: 'DELETE' }),
+  },
+
+  /** Dual-control recovery: two administrators, neither the subject. */
+  recoveries: {
+    list: () => request('/api/recoveries', recoveryRequestsSchema),
+
+    open: (login: string, reason: string) =>
+      request('/api/recoveries', recoveryRequestSchema, {
+        method: 'POST',
+        body: { login, reason },
+      }),
+
+    approve: (login: string) =>
+      request(`/api/recoveries/${encodeURIComponent(login)}/approve`,
+        approvedRecoverySchema, { method: 'POST' }),
+
+    cancel: (login: string) =>
+      request(`/api/recoveries/${encodeURIComponent(login)}`, z.undefined(),
+        { method: 'DELETE' }),
   },
 
   consents: {
@@ -270,6 +294,24 @@ export const api = {
   },
 }
 
+/** Paging and search, as the directory endpoints expect them. */
+export interface PageQuery {
+  q: string
+  limit: number
+  offset: number
+}
+
+function pageParams({ q, limit, offset }: PageQuery): string {
+  const params = new URLSearchParams({
+    limit: String(limit),
+    offset: String(offset),
+  })
+  // Omitted rather than sent empty, so the URL a user sees while browsing is
+  // the URL they would have typed.
+  if (q !== '') params.set('q', q)
+  return params.toString()
+}
+
 export interface RegisterApplicationInput {
   name: string
   displayName: string
@@ -282,6 +324,7 @@ export interface RegisterApplicationInput {
 
 export { ApiError } from './client'
 export type {
+  ApprovedRecovery,
   Application,
   ApplicationDetail,
   Consent,
@@ -300,6 +343,7 @@ export type {
   PendingAuthorization,
   Policy,
   RecoveryCodes,
+  RecoveryRequest,
   RegisteredApplication,
   ScopeDetail,
 } from './schemas'
@@ -311,9 +355,10 @@ export const queryKeys = {
   application: (clientID: string) => ['applications', clientID] as const,
   consents: ['consents'] as const,
   invitations: ['invitations'] as const,
-  users: ['directory', 'users'] as const,
+  recoveries: ['recoveries'] as const,
+  users: (page: PageQuery) => ['directory', 'users', page] as const,
   user: (login: string) => ['directory', 'users', login] as const,
-  groups: ['directory', 'groups'] as const,
+  groups: (page: PageQuery) => ['directory', 'groups', page] as const,
   group: (name: string) => ['directory', 'groups', name] as const,
   credentials: ['credentials'] as const,
   decisions: (deniedOnly: boolean) => ['decisions', deniedOnly] as const,
