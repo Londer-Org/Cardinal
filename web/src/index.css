@@ -62,6 +62,22 @@
      palette — a warning that matches the chrome is one nobody notices. */
   --warning: oklch(0.828 0.189 84.429);
   --warning-foreground: oklch(0.279 0.077 45.635);
+
+  /* The sidebar has its own palette because it is a different surface, and
+     shadcn's sidebar styles every state through these names. They were missing
+     entirely, which is not a subtle look — `bg-sidebar-accent` compiles to
+     nothing when `--sidebar-accent` is undefined, so the chrome had no
+     background, no hover, and no highlight on the page you were actually on. */
+  --sidebar: oklch(0.985 0.004 249.3);
+  --sidebar-foreground: oklch(0.24 0.045 249.3);
+  --sidebar-primary: oklch(0.557 0.226 269.8);
+  --sidebar-primary-foreground: oklch(1 0 0);
+  /* Stronger than --accent: it has to read against an off-white sidebar rather
+     than against white, and it is what marks the current page. */
+  --sidebar-accent: oklch(0.945 0.018 269.8);
+  --sidebar-accent-foreground: oklch(0.30 0.09 269.8);
+  --sidebar-border: oklch(0.925 0.012 249.3);
+  --sidebar-ring: oklch(0.557 0.226 269.8);
 }
 
 .dark {
@@ -93,6 +109,17 @@
 
   --warning: oklch(0.828 0.189 84.429);
   --warning-foreground: oklch(0.279 0.077 45.635);
+
+  /* Sits one step above the page rather than below it. A sidebar darker than
+     the content it frames reads as a well the content fell into. */
+  --sidebar: oklch(0.235 0.038 249.3);
+  --sidebar-foreground: oklch(0.97 0.006 249.3);
+  --sidebar-primary: oklch(0.70 0.19 269.8);
+  --sidebar-primary-foreground: oklch(0.19 0.035 249.3);
+  --sidebar-accent: oklch(0.31 0.06 269.8);
+  --sidebar-accent-foreground: oklch(0.95 0.02 269.8);
+  --sidebar-border: oklch(1 0 0 / 12%);
+  --sidebar-ring: oklch(0.70 0.19 269.8);
 }
 
 @theme inline {
@@ -121,6 +148,15 @@
   --color-ring: var(--ring);
   --color-warning: var(--warning);
   --color-warning-foreground: var(--warning-foreground);
+
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
 }
 
 @layer base {
