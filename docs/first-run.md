@@ -112,11 +112,14 @@ passkey. Rather than a bootstrap mode someone could forget to disable, the
 offline key breaks the circle.
 
 1. Click **Emergency access**, then **Request a challenge**.
-2. Run the command it shows you:
-   ```sh
-   ./bin/cardinal break-glass sign <challenge> -key break-glass.key
-   ```
+2. **Copy** the command it shows — it names the running binary by its real path,
+   so it works without `cardinal` being on `PATH` — and replace
+   `/path/to/break-glass.key` with wherever you put the private half.
 3. Paste the signature, enter `alonfils`, open the session.
+
+The challenge is good for fifteen minutes and the dialog counts down, because
+the key is meant to live in a safe and walking to one takes longer than the five
+minutes this used to allow.
 4. You are in, with a red banner saying so. The session lasts 15 minutes.
 5. Name a passkey and click **Add** — your laptop's biometric or a security key.
 6. Add a second one. The warning banner clears at two.

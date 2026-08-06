@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"net/netip"
+	"os"
 	"strings"
 	"time"
 
@@ -57,8 +58,32 @@ func (s *Server) handleBreakGlassBegin(w http.ResponseWriter, r *http.Request) {
 		ExpiresAt: challenge.ExpiresAt,
 		// The command is echoed so an operator under pressure at 3am does not
 		// have to remember the syntax.
-		Command: "cardinal break-glass sign " + challenge.Encode() + " -key <path-to-offline-key>",
+		Command: signCommand(challenge.Encode()),
 	})
+}
+
+// signCommand builds the command to run against the offline key.
+//
+// It names the running binary by its actual path rather than a bare "cardinal",
+// because that is only a command if someone has already put it on PATH — and
+// the first person to hit this is running from a build directory, where the
+// echoed command failing is a bad first impression of an emergency procedure.
+// The same binary serves and signs, so its own path is the correct answer.
+//
+// The key path stays a placeholder: it is offline by design, and Cardinal has
+// no business claiming to know where it is. It is written as a plain path
+// rather than <angle-brackets> because this line is meant to be copied whole,
+// and a shell reads < and > as redirection — so the obvious placeholder syntax
+// turns a substitution someone forgot into a baffling shell error instead of an
+// obvious one.
+func signCommand(nonce string) string {
+	binary, err := os.Executable()
+	if err != nil {
+		// A name is still better than nothing, and this only fails on platforms
+		// where the path is genuinely unknowable.
+		binary = "cardinal"
+	}
+	return binary + " break-glass sign " + nonce + " -key /path/to/break-glass.key"
 }
 
 type breakGlassFinishRequest struct {

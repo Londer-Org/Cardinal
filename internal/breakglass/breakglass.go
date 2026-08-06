@@ -34,9 +34,19 @@ const SessionTTL = 15 * time.Minute
 
 // ChallengeTTL bounds how long a challenge may be signed.
 //
-// Long enough to fetch a key from a safe, short enough that a challenge
-// captured from a terminal or log is worthless by the time it is found.
-const ChallengeTTL = 5 * time.Minute
+// Fifteen minutes, because ADR 0009 says the private half lives offline —
+// printed and sealed, or on removable media in a safe. Retrieving it takes
+// longer than the five minutes this used to allow, so the window was shorter
+// than the ceremony it exists to permit, and the practical effect was not
+// tighter security but a queue of expired challenges and repeated attempts.
+//
+// The cost of the longer window is close to nothing. A challenge is worthless
+// without the key: anyone able to sign one already holds the credential that
+// can assume any account, at which point the expiry of a nonce is not what
+// stands between them and the directory. What actually bounds the damage is
+// that redemption is single-use, every issuance is logged at warning level,
+// and the resulting session lasts SessionTTL and cannot administer anything.
+const ChallengeTTL = 15 * time.Minute
 
 // challengeSize is 32 bytes of entropy — far beyond what is needed to prevent
 // collision or prediction, and free.
