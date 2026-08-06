@@ -37,6 +37,18 @@ var (
 	ActionAdministerData = types.NewEntityUID(TypeAction, "AdministerDirectory")
 )
 
+// AdminGroupID is the built-in directory-admins group.
+//
+// Created by migration 0008 with a fixed identifier, because the permit rule
+// in policies/cardinal.cedar cannot reference a UUID generated at install
+// time. Recognisably synthetic on purpose: nobody reading a grant log should
+// mistake it for something the system generated.
+//
+// Declared here rather than only in SQL and Cedar so a test can assert all
+// three agree — changing one without the others is exactly the mistake that
+// would silently lock everyone out of administration.
+const AdminGroupID = "00000000-0000-7000-8000-00000000ad11"
+
 // Decision is the outcome, with everything needed to explain it.
 type Decision struct {
 	Allowed bool

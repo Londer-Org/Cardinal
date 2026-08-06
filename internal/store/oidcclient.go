@@ -358,3 +358,69 @@ func insertEntityTx(ctx context.Context, tx pgx.Tx, e *directory.Entity) error {
 	}
 	return nil
 }
+
+// ClientStats summarise an application's live use.
+//
+// Shown when inspecting a client, because "may I disable this?" is really the
+// question "is anything still using it?", and a registration page that cannot
+// answer it invites disabling things in the dark.
+type ClientStats struct {
+	ActiveTokens   int
+	LastIssuedAt   *time.Time
+	StandingGrants int
+}
+
+// StatsForClient counts what a client currently holds.
+func (s *Store) StatsForClient(ctx context.Context, clientID string) (*ClientStats, error) {
+	var stats ClientStats
+	err := s.pool.QueryRow(ctx, `
+		SELECT
+			(SELECT count(*) FROM oidc_tokens
+			  WHERE client_id = $1 AND revoked_at IS NULL AND expires_at > now()),
+			(SELECT max(created_at) FROM oidc_tokens WHERE client_id = $1),
+			(SELECT count(*) FROM oidc_consents
+			  WHERE client_id = $1 AND revoked_at IS NULL)`,
+		clientID,
+	).Scan(&stats.ActiveTokens, &stats.LastIssuedAt, &stats.StandingGrants)
+	if err != nil {
+		return nil, fmt.Errorf("store: reading client stats: %w", err)
+	}
+	return &stats, nil
+}
+
+// DisableOIDCClient retires an application and kills what it holds.
+//
+// Disabling the entity alone would stop new authorizations — OIDCClientByID
+// excludes disabled entities — while leaving every issued access and refresh
+// token working until it expired. An application you have just retired
+// continuing to reach your API for the next fortnight is not what anyone means
+// by "disable", so the tokens and standing consents go with it.
+//
+// The registration itself is kept. Deleting it would break the audit trail:
+// past decisions and events reference this client, and they must stay
+// explicable (ADR 0002).
+func (s *Store) DisableOIDCClient(ctx context.Context, clientID string, actorID *uuid.UUID) error {
+	client, err := s.OIDCClientByID(ctx, clientID)
+	if err != nil {
+		return err
+	}
+
+	if err := s.DisableEntity(ctx, client.EntityID, actorID); err != nil {
+		return err
+	}
+
+	// Deliberately after the disable rather than inside it. If this fails the
+	// application is already unable to obtain anything new, which is the
+	// property that matters most; a retry cleans up the rest.
+	if _, err := s.pool.Exec(ctx, `
+		UPDATE oidc_tokens SET revoked_at = now()
+		 WHERE client_id = $1 AND revoked_at IS NULL`, clientID); err != nil {
+		return fmt.Errorf("store: revoking tokens for disabled client: %w", err)
+	}
+	if _, err := s.pool.Exec(ctx, `
+		UPDATE oidc_consents SET revoked_at = now()
+		 WHERE client_id = $1 AND revoked_at IS NULL`, clientID); err != nil {
+		return fmt.Errorf("store: revoking consents for disabled client: %w", err)
+	}
+	return nil
+}

@@ -117,8 +117,10 @@ func request(t *testing.T, c *http.Client, method, host, path string, accept str
 func cardinalCLI(t *testing.T, args ...string) string {
 	t.Helper()
 
-	full := append([]string{"compose", "-f", "../../examples/compose.yml",
-		"exec", "-T", "cardinal", "cardinal"}, args...)
+	full := append([]string{
+		"compose", "-f", "../../examples/compose.yml",
+		"exec", "-T", "cardinal", "cardinal",
+	}, args...)
 	out, err := exec.Command("docker", full...).CombinedOutput()
 	if err != nil {
 		t.Fatalf("cardinal %s: %v\n%s", strings.Join(args, " "), err, out)

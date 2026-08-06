@@ -145,6 +145,19 @@ func (s *Server) Handler() http.Handler {
 
 	// ── Decision explorer ──────────────────────────────────────────────────
 	mux.Handle("GET /api/decisions", s.requireAuth(http.HandlerFunc(s.handleDecisions)))
+
+	// Application management. Behind requireAdmin, which evaluates
+	// Cardinal::Action::"AdministerDirectory" — anyone who can register a client
+	// chooses its redirect URIs and whether it asks for consent, which is enough
+	// to build a phishing surface inside the organisation's own IdP.
+	mux.Handle("GET /api/applications",
+		s.requireAuth(s.requireAdmin(http.HandlerFunc(s.handleListApplications))))
+	mux.Handle("POST /api/applications",
+		s.requireAuth(s.requireAdmin(http.HandlerFunc(s.handleRegisterApplication))))
+	mux.Handle("GET /api/applications/{clientID}",
+		s.requireAuth(s.requireAdmin(http.HandlerFunc(s.handleGetApplication))))
+	mux.Handle("DELETE /api/applications/{clientID}",
+		s.requireAuth(s.requireAdmin(http.HandlerFunc(s.handleDisableApplication))))
 	mux.Handle("GET /api/policy", s.requireAuth(http.HandlerFunc(s.handlePolicy)))
 
 	// ── OpenID Connect ─────────────────────────────────────────────────────

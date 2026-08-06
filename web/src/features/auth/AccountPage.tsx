@@ -3,6 +3,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { CardinalMark } from '@/components/CardinalMark'
+import { ApplicationList } from '@/features/applications/ApplicationList'
 import { ConnectedApplications } from '@/features/consent/ConnectedApplications'
 import { CredentialList } from '@/features/credentials/CredentialList'
 import { DecisionExplorer } from '@/features/decisions/DecisionExplorer'
@@ -70,6 +71,11 @@ export function AccountPage({ session }: { session: Me }) {
           <TabsList>
             <TabsTrigger value="account">Account</TabsTrigger>
             <TabsTrigger value="access">Access</TabsTrigger>
+            {/* Hidden for everyone else, but that is presentation only: the
+                endpoints behind it evaluate AdministerDirectory themselves. */}
+            {session.canAdminister && (
+              <TabsTrigger value="admin">Applications</TabsTrigger>
+            )}
           </TabsList>
 
           <TabsContent value="account" className="mt-4 space-y-4">
@@ -81,6 +87,12 @@ export function AccountPage({ session }: { session: Me }) {
             <ConnectedApplications />
             <DecisionExplorer />
           </TabsContent>
+
+          {session.canAdminister && (
+            <TabsContent value="admin" className="mt-4">
+              <ApplicationList />
+            </TabsContent>
+          )}
         </Tabs>
       </div>
     </div>

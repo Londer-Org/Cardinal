@@ -31,6 +31,29 @@ when {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Directory administration
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Members of directory-admins may administer the directory.
+//
+// The group is created by migration 0008 with this fixed UUID, because a rule
+// shipped in this file cannot reference an identifier generated at install
+// time. Nobody is a member until someone is granted it:
+//
+//     cardinal grant directory-admins alice
+//
+// This is a permit, and the two forbid rules below still apply to it — in
+// Cedar a forbid always beats a permit, so membership alone is not enough:
+// the session must also be device-bound, recently authenticated, and not
+// break-glass.
+@id("directory-admins-may-administer")
+permit (
+    principal in Cardinal::Group::"00000000-0000-7000-8000-00000000ad11",
+    action == Cardinal::Action::"AdministerDirectory",
+    resource
+);
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Step-up
 // ─────────────────────────────────────────────────────────────────────────────
 

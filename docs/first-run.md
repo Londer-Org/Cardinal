@@ -124,6 +124,34 @@ offline key breaks the circle.
 8. Sign out, then **Sign in**. No username field: your authenticator offers the
    account, so there is nothing to enumerate.
 
+### Becoming an administrator
+
+Administering the directory is a Cedar decision like everything else (ADR 0012),
+so it needs a grant rather than a flag. The group is created by migration and
+starts empty — a migration that made the first account an administrator would
+be a backdoor with a changelog entry:
+
+```sh
+./bin/cardinal grant directory-admins alonfils -reason "founding admin"
+```
+
+Sign in again with your passkey and an **Applications** tab appears, where
+relying parties can be registered, inspected and retired.
+
+Three things will refuse you, all deliberately:
+
+- **A break-glass session cannot administer.** Emergency access exists to
+  restore normal access, not to be worked in. Do the grant above with the CLI,
+  which talks to the database directly.
+- **A synced passkey is not enough.** Administration needs a device-bound
+  credential — a hardware key, not one living in a cloud account.
+- **A session older than five minutes is not enough.** Sign in again; the tab
+  reappears.
+
+Each refusal names the policy that produced it, in the response and in
+**Access → decisions**. That is the demo worth showing someone: neither FreeIPA
+nor Keycloak can tell you *which rule* denied you.
+
 ## What to look for
 
 - The break-glass session shows `authMethod: break_glass` and a red banner.

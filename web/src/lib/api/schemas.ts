@@ -24,6 +24,9 @@ export const meSchema = z.object({
   emergency: z.boolean(),
   fullyEnrolled: z.boolean(),
   recoveryCodesRemaining: z.number(),
+  // Drives what the UI offers, never what it may do — every admin endpoint
+  // evaluates the policy itself.
+  canAdminister: z.boolean(),
 })
 export type Me = z.infer<typeof meSchema>
 
@@ -89,6 +92,42 @@ export const policySchema = z.object({
   document: z.string(),
 })
 export type Policy = z.infer<typeof policySchema>
+
+export const applicationSchema = z.object({
+  clientId: z.string(),
+  name: z.string(),
+  authMethod: z.string(),
+  public: z.boolean(),
+  redirectUris: z.array(z.string()),
+  scopes: z.array(z.string()),
+  requirePkce: z.boolean(),
+  requireConsent: z.boolean(),
+  devMode: z.boolean(),
+  accessTokenLifetime: z.string(),
+})
+export type Application = z.infer<typeof applicationSchema>
+
+export const applicationsSchema = z.array(applicationSchema)
+
+/** What an application currently holds — the answer to "may I disable this?" */
+export const applicationDetailSchema = applicationSchema.extend({
+  activeTokens: z.number(),
+  standingGrants: z.number(),
+  lastIssuedAt: z.string().nullable(),
+})
+export type ApplicationDetail = z.infer<typeof applicationDetailSchema>
+
+/**
+ * Registration returns the secret exactly once.
+ *
+ * Optional in the schema because a public client has none — asking for a secret
+ * in a browser or mobile app produces a credential shipped to every user, which
+ * is worse than having none at all.
+ */
+export const registeredApplicationSchema = applicationSchema.extend({
+  secret: z.string().optional(),
+})
+export type RegisteredApplication = z.infer<typeof registeredApplicationSchema>
 
 export const errorSchema = z.object({ error: z.string() })
 

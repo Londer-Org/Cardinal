@@ -1,6 +1,8 @@
 import { z } from 'zod'
 import { request } from './client'
 import {
+  applicationDetailSchema,
+  applicationsSchema,
   breakGlassChallengeSchema,
   ceremonySchema,
   consentsSchema,
@@ -11,6 +13,7 @@ import {
   pendingAuthorizationSchema,
   policySchema,
   recoveryCodesSchema,
+  registeredApplicationSchema,
 } from './schemas'
 
 /**
@@ -91,6 +94,32 @@ export const api = {
       }),
   },
 
+  applications: {
+    /** Every registered relying party. Admin-only, enforced server-side. */
+    list: () => request('/api/applications', applicationsSchema),
+
+    /** One application, including what it currently holds. */
+    get: (clientID: string) =>
+      request(`/api/applications/${encodeURIComponent(clientID)}`,
+        applicationDetailSchema),
+
+    register: (input: RegisterApplicationInput) =>
+      request('/api/applications', registeredApplicationSchema, {
+        method: 'POST',
+        body: input,
+      }),
+
+    /**
+     * Retires an application and revokes what it holds.
+     *
+     * Not a delete: the registration stays so past decisions and audit events
+     * referencing this client remain explicable.
+     */
+    disable: (clientID: string) =>
+      request(`/api/applications/${encodeURIComponent(clientID)}`, z.undefined(),
+        { method: 'DELETE' }),
+  },
+
   consents: {
     /** Applications this user has granted access to. */
     list: () => request('/api/consents', consentsSchema),
@@ -141,8 +170,20 @@ export const api = {
   },
 }
 
+export interface RegisterApplicationInput {
+  name: string
+  displayName: string
+  redirectUris: string[]
+  scopes: string[]
+  confidential: boolean
+  requireConsent: boolean
+  devMode: boolean
+}
+
 export { ApiError } from './client'
 export type {
+  Application,
+  ApplicationDetail,
   Consent,
   Credential,
   Decision,
@@ -150,12 +191,15 @@ export type {
   PendingAuthorization,
   Policy,
   RecoveryCodes,
+  RegisteredApplication,
   ScopeDetail,
 } from './schemas'
 
 /** Query keys, centralised so invalidation cannot drift from fetching. */
 export const queryKeys = {
   me: ['me'] as const,
+  applications: ['applications'] as const,
+  application: (clientID: string) => ['applications', clientID] as const,
   consents: ['consents'] as const,
   credentials: ['credentials'] as const,
   decisions: (deniedOnly: boolean) => ['decisions', deniedOnly] as const,

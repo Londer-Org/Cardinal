@@ -21,6 +21,7 @@ isn't finished.
 | [0009](0009-recovery-and-break-glass.md) | Account recovery and break-glass | Accepted |
 | [0010](0010-personal-data-and-erasure.md) | Personal data never enters the audit journal | Accepted |
 | [0011](0011-consent-is-per-client-and-off-by-default.md) | OIDC consent is per-client and off by default | Accepted |
+| [0012](0012-the-directory-administers-itself-through-cedar.md) | The directory administers itself through Cedar | Accepted |
 
 ## Conventions
 

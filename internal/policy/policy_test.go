@@ -107,7 +107,7 @@ func TestAdminRequiresFreshDeviceBoundAuth(t *testing.T) {
 			opts:    subjectOpts{deviceBound: true, authAge: time.Second},
 			allowed: false,
 			because: "clearing the forbid is not the same as being granted; " +
-				"nothing in the default set permits AdministerDirectory",
+				"nothing permits AdministerDirectory to a non-member",
 		},
 	}
 
@@ -121,6 +121,94 @@ func TestAdminRequiresFreshDeviceBoundAuth(t *testing.T) {
 			assert.Equal(t, tc.allowed, decision.Allowed, tc.because)
 		})
 	}
+}
+
+// TestDirectoryAdminsMayAdminister.
+//
+// The permit rule and the group it names live in three places — this constant,
+// migration 0008, and policies/cardinal.cedar. This test is what stops them
+// drifting apart: change the UUID in one and administration silently stops
+// working for everyone, with no error anywhere.
+func TestDirectoryAdminsMayAdminister(t *testing.T) {
+	e := engine(t)
+	resource := types.NewEntityUID(policy.TypeApplication, "cardinal")
+
+	admins := []claims.Group{{
+		ID:    uuid.MustParse(policy.AdminGroupID),
+		Name:  "directory-admins",
+		Depth: 1,
+	}}
+
+	t.Run("a member with fresh device-bound auth is permitted", func(t *testing.T) {
+		decision := e.Evaluate(policy.Request{
+			Subject: subject(subjectOpts{
+				deviceBound: true, authAge: time.Second, groups: admins,
+			}),
+			Action:   policy.ActionAdministerData,
+			Resource: resource,
+		})
+
+		require.True(t, decision.Allowed,
+			"membership of directory-admins must grant AdministerDirectory")
+		assert.Contains(t, decision.Reasons, "directory-admins-may-administer")
+	})
+
+	// Each of these clears the permit and is then refused by a forbid. In Cedar
+	// a forbid always beats a permit, and these three cases are the whole
+	// reason that ordering matters here.
+	refusals := []struct {
+		name    string
+		opts    subjectOpts
+		reason  string
+		because string
+	}{
+		{
+			name:    "stale authentication",
+			opts:    subjectOpts{deviceBound: true, authAge: 10 * time.Minute, groups: admins},
+			reason:  "admin-requires-fresh-device-bound-auth",
+			because: "an admin's forgotten session is the easiest way to take over a directory",
+		},
+		{
+			name:    "synced passkey",
+			opts:    subjectOpts{deviceBound: false, authAge: time.Second, groups: admins},
+			reason:  "admin-requires-fresh-device-bound-auth",
+			because: "a synced passkey is only as strong as the cloud account holding it",
+		},
+		{
+			name:    "break-glass session",
+			opts:    subjectOpts{deviceBound: true, emergency: true, authAge: time.Second, groups: admins},
+			reason:  "break-glass-cannot-administer",
+			because: "emergency access exists to restore normal access, not to be worked in",
+		},
+	}
+
+	for _, tc := range refusals {
+		t.Run(tc.name+" is still refused", func(t *testing.T) {
+			decision := e.Evaluate(policy.Request{
+				Subject:  subject(tc.opts),
+				Action:   policy.ActionAdministerData,
+				Resource: resource,
+			})
+
+			require.False(t, decision.Allowed, tc.because)
+			assert.True(t, decision.ExplicitlyDenied(),
+				"a member is refused by a forbid, not by default-deny, and the log must show which")
+			assert.Contains(t, decision.Reasons, tc.reason)
+		})
+	}
+}
+
+// TestAdminGroupIDMatchesTheShippedPolicy.
+//
+// Cheap insurance against the one-character edit that breaks administration
+// everywhere with no error to follow.
+func TestAdminGroupIDMatchesTheShippedPolicy(t *testing.T) {
+	source, err := os.ReadFile("../../policies/cardinal.cedar")
+	require.NoError(t, err)
+
+	assert.Contains(t, string(source), policy.AdminGroupID,
+		"policies/cardinal.cedar must reference policy.AdminGroupID; "+
+			"if this fails, migration 0008 needs checking too")
 }
 
 // TestBreakGlassCannotAdminister.

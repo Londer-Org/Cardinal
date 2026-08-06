@@ -135,6 +135,12 @@ type meResponse struct {
 	Emergency     bool      `json:"emergency"`
 	FullyEnrolled bool      `json:"fullyEnrolled"`
 	RecoveryCodes int       `json:"recoveryCodesRemaining"`
+
+	// CanAdminister drives what the UI renders. Not a security boundary — see
+	// canAdminister — and deliberately re-evaluated per request, so an admin
+	// whose authentication has gone stale sees the section disappear rather
+	// than discovering it by being refused.
+	CanAdminister bool `json:"canAdminister"`
 }
 
 func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
@@ -167,6 +173,10 @@ func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
 		Emergency:     session.Emergency(),
 		FullyEnrolled: enrolled,
 		RecoveryCodes: remaining,
+		// What the UI should offer, not what it is allowed to do. Every admin
+		// endpoint evaluates the policy itself; this only decides whether a
+		// section someone cannot use is rendered at all.
+		CanAdminister: s.canAdminister(ctx, session),
 	})
 }
 
