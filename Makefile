@@ -57,6 +57,11 @@ psql: ## Open a psql shell against the dev database
 test: ## Run unit and integration tests
 	go test ./... -race -count=1
 
+.PHONY: schema
+schema: ## Regenerate docs/schema.md from the running database
+	@go run ./tools/schemadoc
+	@echo "==> docs/schema.md regenerated from the live schema"
+
 .PHONY: lint
 lint: ## Run linters and vulnerability scanning
 	gofumpt -l -d .
