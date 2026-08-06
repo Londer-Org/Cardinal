@@ -380,6 +380,21 @@ func establishSession(t *testing.T) *http.Cookie {
 	return sessionCookie
 }
 
+// seedQuery runs a scalar query against the stack's database.
+func seedQuery(t *testing.T, query string) string {
+	t.Helper()
+
+	//nolint:gosec // the query is written in this file, not taken from input
+	out, err := exec.CommandContext(t.Context(), "docker", "compose",
+		"-f", "../../examples/compose.yml",
+		"exec", "-T", "postgres", "psql", "-U", "cardinal", "-d", "cardinal",
+		"-tAc", query).Output()
+	if err != nil {
+		t.Fatalf("querying: %v", err)
+	}
+	return strings.TrimSpace(string(out))
+}
+
 // seedSQL runs a statement against the stack's database.
 func seedSQL(t *testing.T, statement string) {
 	t.Helper()

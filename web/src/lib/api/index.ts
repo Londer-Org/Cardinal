@@ -5,7 +5,12 @@ import {
   applicationsSchema,
   ceremonySchema,
   consentsSchema,
+  createdUserSchema,
   credentialSchema,
+  directoryGroupDetailSchema,
+  directoryGroupsSchema,
+  directoryUserDetailSchema,
+  directoryUsersSchema,
   invitationSchema,
   issuedInvitationSchema,
   credentialsSchema,
@@ -173,6 +178,47 @@ export const api = {
         { method: 'DELETE' }),
   },
 
+  /** People and groups. Admin-only, enforced server-side. */
+  directory: {
+    users: () => request('/api/directory/users', directoryUsersSchema),
+
+    user: (login: string) =>
+      request(`/api/directory/users/${encodeURIComponent(login)}`,
+        directoryUserDetailSchema),
+
+    createUser: (input: { login: string; displayName: string; invite: boolean }) =>
+      request('/api/directory/users', createdUserSchema, {
+        method: 'POST',
+        body: input,
+      }),
+
+    disableUser: (login: string) =>
+      request(`/api/directory/users/${encodeURIComponent(login)}`, z.undefined(),
+        { method: 'DELETE' }),
+
+    groups: () => request('/api/directory/groups', directoryGroupsSchema),
+
+    group: (name: string) =>
+      request(`/api/directory/groups/${encodeURIComponent(name)}`,
+        directoryGroupDetailSchema),
+
+    createGroup: (input: { name: string; displayName: string }) =>
+      request('/api/directory/groups', z.looseObject({}), {
+        method: 'POST',
+        body: input,
+      }),
+
+    /** `until` omitted means unbounded — the grant that gets forgotten. */
+    grant: (group: string, input: { member: string; until?: string; reason: string }) =>
+      request(`/api/directory/groups/${encodeURIComponent(group)}/members`,
+        z.undefined(), { method: 'POST', body: input }),
+
+    revoke: (group: string, member: string) =>
+      request(
+        `/api/directory/groups/${encodeURIComponent(group)}/members/${encodeURIComponent(member)}`,
+        z.undefined(), { method: 'DELETE' }),
+  },
+
   consents: {
     /** Applications this user has granted access to. */
     list: () => request('/api/consents', consentsSchema),
@@ -238,7 +284,13 @@ export type {
   Application,
   ApplicationDetail,
   Consent,
+  CreatedUser,
   Credential,
+  DirectoryGroup,
+  DirectoryGroupDetail,
+  DirectoryUser,
+  DirectoryUserDetail,
+  Grant,
   Invitation,
   IssuedInvitation,
   PendingInvitation,
@@ -258,6 +310,10 @@ export const queryKeys = {
   application: (clientID: string) => ['applications', clientID] as const,
   consents: ['consents'] as const,
   invitations: ['invitations'] as const,
+  users: ['directory', 'users'] as const,
+  user: (login: string) => ['directory', 'users', login] as const,
+  groups: ['directory', 'groups'] as const,
+  group: (name: string) => ['directory', 'groups', name] as const,
   credentials: ['credentials'] as const,
   decisions: (deniedOnly: boolean) => ['decisions', deniedOnly] as const,
   policy: ['policy'] as const,

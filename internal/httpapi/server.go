@@ -169,6 +169,22 @@ func (s *Server) Handler() http.Handler {
 	// Cardinal::Action::"AdministerDirectory" — anyone who can register a client
 	// chooses its redirect URIs and whether it asks for consent, which is enough
 	// to build a phishing surface inside the organisation's own IdP.
+	// People and groups. Membership is what every policy reads, so granting one
+	// is administration in the fullest sense.
+	admin := func(h http.HandlerFunc) http.Handler {
+		return s.requireAuth(s.requireAdmin(h))
+	}
+	mux.Handle("GET /api/directory/users", admin(s.handleListUsers))
+	mux.Handle("POST /api/directory/users", admin(s.handleCreateUser))
+	mux.Handle("GET /api/directory/users/{login}", admin(s.handleGetUser))
+	mux.Handle("DELETE /api/directory/users/{login}", admin(s.handleDisableUser))
+
+	mux.Handle("GET /api/directory/groups", admin(s.handleListGroups))
+	mux.Handle("POST /api/directory/groups", admin(s.handleCreateGroup))
+	mux.Handle("GET /api/directory/groups/{name}", admin(s.handleGetGroup))
+	mux.Handle("POST /api/directory/groups/{name}/members", admin(s.handleGrantMembership))
+	mux.Handle("DELETE /api/directory/groups/{name}/members/{member}", admin(s.handleRevokeMembership))
+
 	mux.Handle("GET /api/applications",
 		s.requireAuth(s.requireAdmin(http.HandlerFunc(s.handleListApplications))))
 	mux.Handle("POST /api/applications",

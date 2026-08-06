@@ -185,6 +185,7 @@ works.
 | ✅ | **An OIDC relying party in the e2e stack** — coreos/go-oidc, an independent client library; 5 tests |
 | ✅ | **Consent** — per-client and off by default (ADR 0011); enforced on every completion path, withdrawable, and withdrawal revokes the client's tokens |
 | ✅ | **Client management UI** — register, inspect and retire relying parties from the admin UI; secret shown once |
+| ✅ | **Directory admin UI** — people and groups from the browser: who exists, who can sign in, and membership granted or revoked **with an expiry**. The temporal model was the flagship of the data model and reachable only from the CLI, so in practice every grant made through the product was unbounded |
 | ✅ | **The admin API is Cedar-gated** (ADR 0012) — `directory-admins` is a built-in group, membership is an ordinary temporal grant, and every refusal names the deciding policy |
 | ✅ | **Who may use which application** — an `AccessApplication` decision enforced on every path that can complete an authorization, logged, and named in the refusal. Ships permissive, because Cedar is default-deny and a version that locked everyone out of everything on upgrade is not a safe default |
 | ✅ | **Account enrollment for a new user** — done in Phase 1 via invitations (ADR 0013) |

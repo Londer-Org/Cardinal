@@ -150,6 +150,64 @@ export const pendingInvitationsSchema = z.array(
 )
 export type PendingInvitation = z.infer<typeof pendingInvitationsSchema>[number]
 
+export const directoryUserSchema = z.object({
+  login: z.string(),
+  displayName: z.string(),
+  email: z.string(),
+  credentials: z.number(),
+  fullyEnrolled: z.boolean(),
+  groups: z.number(),
+  invitationPending: z.boolean(),
+  createdAt: z.string(),
+})
+export type DirectoryUser = z.infer<typeof directoryUserSchema>
+
+export const directoryUsersSchema = z.array(directoryUserSchema)
+
+/**
+ * A membership, with its period.
+ *
+ * `until` is null for an unbounded grant — the kind every directory fills up
+ * with, and the kind the temporal model exists to make avoidable.
+ */
+export const grantSchema = z.object({
+  group: z.string(),
+  member: z.string(),
+  from: z.string(),
+  until: z.string().nullable(),
+  grantedBy: z.string(),
+  reason: z.string(),
+})
+export type Grant = z.infer<typeof grantSchema>
+
+export const directoryUserDetailSchema = directoryUserSchema.extend({
+  memberships: z.array(grantSchema),
+})
+export type DirectoryUserDetail = z.infer<typeof directoryUserDetailSchema>
+
+export const directoryGroupSchema = z.object({
+  name: z.string(),
+  displayName: z.string(),
+  members: z.number(),
+})
+export type DirectoryGroup = z.infer<typeof directoryGroupSchema>
+
+export const directoryGroupsSchema = z.array(directoryGroupSchema)
+
+export const directoryGroupDetailSchema = z.object({
+  name: z.string(),
+  displayName: z.string(),
+  members: z.array(grantSchema),
+})
+export type DirectoryGroupDetail = z.infer<typeof directoryGroupDetailSchema>
+
+export const createdUserSchema = z.object({
+  login: z.string(),
+  invitationUrl: z.string().optional(),
+  expiresAt: z.string().optional(),
+})
+export type CreatedUser = z.infer<typeof createdUserSchema>
+
 export const errorSchema = z.object({ error: z.string() })
 
 /**

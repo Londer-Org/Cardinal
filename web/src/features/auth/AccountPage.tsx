@@ -5,6 +5,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ErrorMessage } from '@/components/ErrorMessage'
 import { CardinalMark } from '@/components/CardinalMark'
 import { ApplicationList } from '@/features/applications/ApplicationList'
+import { GroupList } from '@/features/directory/GroupList'
+import { UserList } from '@/features/directory/UserList'
 import { ConnectedApplications } from '@/features/consent/ConnectedApplications'
 import { CredentialList } from '@/features/credentials/CredentialList'
 import { DecisionExplorer } from '@/features/decisions/DecisionExplorer'
@@ -74,7 +76,7 @@ export function AccountPage({ session }: { session: Me }) {
                 rather than as a policy. Presentation only: the endpoints behind
                 it evaluate AdministerDirectory themselves. */}
             {(session.canAdminister || session.adminNeedsReauth) && (
-              <TabsTrigger value="admin">Applications</TabsTrigger>
+              <TabsTrigger value="admin">Directory</TabsTrigger>
             )}
           </TabsList>
 
@@ -91,7 +93,15 @@ export function AccountPage({ session }: { session: Me }) {
 
           {(session.canAdminister || session.adminNeedsReauth) && (
             <TabsContent value="admin" className="mt-4">
-              {session.canAdminister ? <ApplicationList /> : <StepUpPrompt />}
+              {session.canAdminister ? (
+                <div className="space-y-4">
+                  <UserList />
+                  <GroupList />
+                  <ApplicationList />
+                </div>
+              ) : (
+                <StepUpPrompt />
+              )}
             </TabsContent>
           )}
         </Tabs>
