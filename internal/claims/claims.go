@@ -83,13 +83,39 @@ type AuthContext struct {
 // reading, and not fine for issuing recovery codes.
 func (a AuthContext) Age() time.Duration { return time.Since(a.At) }
 
-// GroupNames returns membership names, for consumers that want a flat list.
+// GroupNames returns membership names, for display and for humans.
+//
+// Not for an application's permission logic — see GroupIDs. A name is a mutable
+// attribute here by design (ADR 0002), so a relying party that branches on the
+// string "aura-admins" has coupled itself to something Cardinal intends to be
+// renameable, and the day someone renames it people lose access silently.
 func (s *Subject) GroupNames() []string {
 	names := make([]string, 0, len(s.Groups))
 	for _, g := range s.Groups {
 		names = append(names, g.Name)
 	}
 	return names
+}
+
+// GroupIDs returns membership identifiers, which is what an application should
+// branch on.
+//
+// Cardinal's whole objection to LDAP is that the DN was both the identity and
+// the path, so moving or renaming anything broke every reference to it
+// (ADR 0002). Internally that is solved: a group is a UUID and its name is an
+// attribute. The claims boundary was quietly re-introducing the same mistake,
+// because names were the only thing that crossed it — so every application
+// downstream had a permission model keyed on a mutable string.
+//
+// Emitted alongside the names rather than instead of them: a name is genuinely
+// the right thing to *show* somebody, and an existing relying party should not
+// break to fix a problem it does not have yet.
+func (s *Subject) GroupIDs() []string {
+	ids := make([]string, 0, len(s.Groups))
+	for _, g := range s.Groups {
+		ids = append(ids, g.ID.String())
+	}
+	return ids
 }
 
 // InGroup reports transitive membership by name.

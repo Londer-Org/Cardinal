@@ -27,10 +27,14 @@ import (
 // read these keep working — the migration should not require touching every
 // application.
 const (
-	headerUser        = "X-Auth-Request-User"
-	headerLogin       = "X-Auth-Request-Preferred-Username"
-	headerName        = "X-Auth-Request-Name"
-	headerGroups      = "X-Auth-Request-Groups"
+	headerUser   = "X-Auth-Request-User"
+	headerLogin  = "X-Auth-Request-Preferred-Username"
+	headerName   = "X-Auth-Request-Name"
+	headerGroups = "X-Auth-Request-Groups"
+	// Stable identifiers for the same memberships. An application deciding what
+	// somebody may do should read these; the names above are for showing a
+	// person, and Cardinal reserves the right to rename a group (ADR 0002).
+	headerGroupIDs    = "X-Auth-Request-Group-Ids"
 	headerAuthMethod  = "X-Auth-Request-Auth-Method"
 	headerDeviceBound = "X-Auth-Request-Device-Bound"
 
@@ -139,6 +143,7 @@ func (s *Server) handleForwardAuth(w http.ResponseWriter, r *http.Request) {
 	h.Set(headerLogin, subject.Login)
 	h.Set(headerName, subject.DisplayName)
 	h.Set(headerGroups, strings.Join(subject.GroupNames(), ","))
+	h.Set(headerGroupIDs, strings.Join(subject.GroupIDs(), ","))
 	h.Set(headerAuthMethod, subject.Auth.Method)
 	h.Set(headerDeviceBound, boolHeader(subject.Auth.DeviceBound))
 	h.Set(headerPolicy, strings.Join(decision.Reasons, ","))

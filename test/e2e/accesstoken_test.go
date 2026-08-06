@@ -231,3 +231,49 @@ func TestRevokedAccessTokenStopsWorking(t *testing.T) {
 			"withdrawn", after.StatusCode)
 	}
 }
+
+// TestIdentityHeadersCarryStableGroupIdentifiers.
+//
+// An application deciding what somebody may do has to key on something Cardinal
+// will not change underneath it. Group names are mutable attributes by design
+// (ADR 0002) — that is the whole objection to LDAP's DN — so a permission model
+// written against the string "aura-admins" is the same mistake one layer out.
+//
+// Nothing can rename a group today, which is exactly why this is worth fixing
+// now: applications should be coupling to the stable thing *before* rename
+// exists, not migrating afterwards.
+func TestIdentityHeadersCarryStableGroupIdentifiers(t *testing.T) {
+	token := tokenFor(t)
+
+	resp := bearerRequest(t, http.MethodGet, "/api/auth/verify", token,
+		map[string]string{
+			"X-Forwarded-Host":   hostProtected,
+			"X-Forwarded-Uri":    "/",
+			"X-Forwarded-Method": http.MethodGet,
+		})
+	defer drain(resp)
+
+	names := resp.Header.Get("X-Auth-Request-Groups")
+	ids := resp.Header.Get("X-Auth-Request-Group-Ids")
+
+	if names == "" {
+		t.Fatal("no groups header at all")
+	}
+	if ids == "" {
+		t.Fatal("no group-ids header — an application has nothing stable to key on")
+	}
+
+	nameCount := len(strings.Split(names, ","))
+	idCount := len(strings.Split(ids, ","))
+	if nameCount != idCount {
+		t.Fatalf("%d names but %d ids — they must line up, or an application "+
+			"cannot map one to the other", nameCount, idCount)
+	}
+
+	// Identifiers, not names repeated under a second header.
+	for _, id := range strings.Split(ids, ",") {
+		if len(id) != 36 || strings.Count(id, "-") != 4 {
+			t.Errorf("group id %q is not a UUID", id)
+		}
+	}
+}

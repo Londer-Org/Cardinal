@@ -411,6 +411,11 @@ func (s *Storage) setUserinfo(ctx context.Context, info *oidc.UserInfo, subject 
 
 		case "groups":
 			info.AppendClaims("groups", resolved.GroupNames())
+			// Stable identifiers beside the names. A relying party deciding
+			// what somebody may do should key on these: a group's name is a
+			// mutable attribute (ADR 0002), so permission logic written against
+			// the string breaks silently the day someone renames it.
+			info.AppendClaims("group_ids", resolved.GroupIDs())
 		}
 	}
 
@@ -432,6 +437,7 @@ func (s *Storage) GetPrivateClaimsFromScopes(ctx context.Context, userID, client
 	for _, scope := range scopes {
 		if scope == "groups" {
 			private["groups"] = resolved.GroupNames()
+			private["group_ids"] = resolved.GroupIDs()
 		}
 	}
 	return private, nil
