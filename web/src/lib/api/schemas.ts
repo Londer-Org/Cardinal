@@ -29,6 +29,10 @@ export const meSchema = z.object({
   // True when membership is fine and only freshness is missing, so the UI can
   // offer a security key rather than hiding a section the user is entitled to.
   adminNeedsReauth: z.boolean(),
+  // Which parts of administration this session may use. Rendering a form
+  // someone will be refused reads as a broken system, not a missing permission.
+  canManageUsers: z.boolean(),
+  canManageApplications: z.boolean(),
   email: z.string(),
 })
 export type Me = z.infer<typeof meSchema>

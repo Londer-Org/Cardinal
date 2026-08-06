@@ -147,6 +147,12 @@ type meResponse struct {
 	// missing, so the UI can offer a security key rather than hiding a section
 	// the user is entitled to.
 	AdminNeedsReauth bool `json:"adminNeedsReauth"`
+
+	// Which parts of administration this session may use. Rendering a form
+	// someone will be refused reads as a broken system rather than as a
+	// permission they lack.
+	CanManageUsers        bool `json:"canManageUsers"`
+	CanManageApplications bool `json:"canManageApplications"`
 }
 
 func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
@@ -183,8 +189,10 @@ func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
 		// What the UI should offer, not what it is allowed to do. Every admin
 		// endpoint evaluates the policy itself; this only decides what is
 		// rendered, and whether to offer a way back in.
-		CanAdminister:    admin.Allowed,
-		AdminNeedsReauth: admin.NeedsReauth,
+		CanAdminister:         admin.Allowed,
+		AdminNeedsReauth:      admin.NeedsReauth,
+		CanManageUsers:        admin.ManageUsers,
+		CanManageApplications: admin.ManageApplications,
 	})
 }
 

@@ -392,3 +392,147 @@ permit (
 		})
 	}
 }
+
+// TestAdminTiersAreSeparate.
+//
+// The point of splitting administration: whoever onboards staff must not be
+// able to register an OIDC client, because choosing a client's redirect URIs is
+// enough to stand up a phishing surface inside the organisation's own identity
+// provider. That is a different blast radius from adding someone to a group,
+// and one group holding both made "give someone admin" all-or-nothing.
+func TestAdminTiersAreSeparate(t *testing.T) {
+	e := engine(t)
+	resource := types.NewEntityUID(policy.TypeApplication, "cardinal")
+
+	member := func(id string, name string) []claims.Group {
+		return []claims.Group{{ID: uuid.MustParse(id), Name: name, Depth: 1}}
+	}
+
+	cases := []struct {
+		name    string
+		groups  []claims.Group
+		action  types.EntityUID
+		allowed bool
+		because string
+	}{
+		{
+			name: "directory-admins manage people", allowed: true,
+			groups: member(policy.AdminGroupID, "directory-admins"),
+			action: policy.ActionManageUsers,
+		},
+		{
+			name: "directory-admins manage applications", allowed: true,
+			groups: member(policy.AdminGroupID, "directory-admins"),
+			action: policy.ActionManageApplications,
+			because: "the broad tier stays the superset, so nobody loses access " +
+				"when the narrow ones are introduced",
+		},
+		{
+			name: "user-admins manage people", allowed: true,
+			groups: member(policy.UserAdminGroupID, "user-admins"),
+			action: policy.ActionManageUsers,
+		},
+		{
+			name: "user-admins may NOT register applications", allowed: false,
+			groups: member(policy.UserAdminGroupID, "user-admins"),
+			action: policy.ActionManageApplications,
+			because: "redirect URIs are a phishing surface; onboarding staff " +
+				"does not imply the authority to create one",
+		},
+		{
+			name: "security-admins manage applications", allowed: true,
+			groups: member(policy.SecurityAdminGroupID, "security-admins"),
+			action: policy.ActionManageApplications,
+		},
+		{
+			name: "security-admins may NOT disable accounts", allowed: false,
+			groups:  member(policy.SecurityAdminGroupID, "security-admins"),
+			action:  policy.ActionManageUsers,
+			because: "registering clients does not imply authority over people",
+		},
+		{
+			name: "user-admins are not directory-admins", allowed: false,
+			groups: member(policy.UserAdminGroupID, "user-admins"),
+			action: policy.ActionAdministerData,
+			because: "the broad action must not be reachable through a narrow " +
+				"tier, or the split buys nothing",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			decision := e.Evaluate(policy.Request{
+				Subject: subject(subjectOpts{
+					deviceBound: true, authAge: time.Second, groups: tc.groups,
+				}),
+				Action:   tc.action,
+				Resource: resource,
+			})
+			assert.Equal(t, tc.allowed, decision.Allowed, tc.because)
+		})
+	}
+}
+
+// TestStepUpCoversEveryAdminAction.
+//
+// A narrow tier that escaped the freshness rule would be a way to administer
+// *something* from a twelve-hour session, which is the hole the rule exists to
+// close. Listed explicitly in policy rather than inferred, and asserted here so
+// adding an action without adding it to the forbid fails loudly.
+func TestStepUpCoversEveryAdminAction(t *testing.T) {
+	e := engine(t)
+
+	adminActions := map[string]types.EntityUID{
+		"AdministerDirectory": policy.ActionAdministerData,
+		"ManageUsers":         policy.ActionManageUsers,
+		"ManageApplications":  policy.ActionManageApplications,
+	}
+
+	for name, action := range adminActions {
+		t.Run(name+" needs a fresh device-bound credential", func(t *testing.T) {
+			for _, tc := range []struct {
+				what string
+				opts subjectOpts
+			}{
+				{"a stale session", subjectOpts{deviceBound: true, authAge: 10 * time.Minute}},
+				{"a synced passkey", subjectOpts{deviceBound: false, authAge: time.Second}},
+			} {
+				// Granted every tier, so only the forbid can refuse them.
+				opts := tc.opts
+				opts.groups = []claims.Group{
+					{ID: uuid.MustParse(policy.AdminGroupID), Name: "directory-admins", Depth: 1},
+				}
+
+				decision := e.Evaluate(policy.Request{
+					Subject:  subject(opts),
+					Action:   action,
+					Resource: types.NewEntityUID(policy.TypeApplication, "cardinal"),
+				})
+
+				require.False(t, decision.Allowed, "%s must not administer with %s", name, tc.what)
+				assert.Contains(t, decision.Reasons, "admin-requires-fresh-device-bound-auth",
+					"the refusal must name the step-up rule, not be default-deny")
+			}
+		})
+	}
+}
+
+// TestBuiltInGroupIDsMatchTheShippedPolicy.
+//
+// Three copies of each identifier — this constant, the migration, and the
+// policy file. Cheap insurance against the one-character edit that silently
+// removes a tier's authority with no error anywhere.
+func TestBuiltInGroupIDsMatchTheShippedPolicy(t *testing.T) {
+	source, err := os.ReadFile("../../policies/cardinal.cedar")
+	require.NoError(t, err)
+
+	for name, id := range map[string]string{
+		"directory-admins": policy.AdminGroupID,
+		"user-admins":      policy.UserAdminGroupID,
+		"security-admins":  policy.SecurityAdminGroupID,
+	} {
+		assert.Contains(t, string(source), id,
+			"policies/cardinal.cedar must reference %s (%s); if this fails, "+
+				"the migration needs checking too", name, id)
+	}
+}

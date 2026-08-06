@@ -32,13 +32,13 @@ var adminResource = types.NewEntityUID(policy.TypeApplication, "cardinal")
 // caller should be told to come back rather than told they lack permission.
 var errNoPolicy = errors.New("httpapi: no policy is active")
 
-// requireAdmin gates a handler behind Cardinal::Action::"AdministerDirectory".
+// requirePermission gates a handler behind one administrative action.
 //
 // Every refusal is logged as a decision, so "why can't I do this?" is
 // answerable from the decision explorer with the deciding policy named —
 // including the common case of an admin whose authentication has simply gone
 // stale, which otherwise looks identical to not being an admin at all.
-func (s *Server) requireAdmin(next http.Handler) http.Handler {
+func (s *Server) requirePermission(action types.EntityUID, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
 		session, ok := SessionFrom(ctx)
@@ -49,13 +49,13 @@ func (s *Server) requireAdmin(next http.Handler) http.Handler {
 
 		resource := r.Method + " " + r.URL.Path
 
-		decision, subject, err := s.decideAdmin(ctx, session)
+		decision, subject, err := s.decideAction(ctx, session, action)
 		if err != nil {
 			s.log.ErrorContext(ctx, "admin authorization failed", "error", err)
 			writeError(w, http.StatusServiceUnavailable, "authorization unavailable")
 			return
 		}
-		s.logAdminDecision(ctx, subject, decision, resource)
+		s.logAdminDecision(ctx, subject, decision, action.ID.String(), resource)
 
 		if !decision.Allowed {
 			// The deciding policy is named in the response, not only the log.
@@ -92,13 +92,13 @@ func adminDenialMessage(decision policy.Decision) string {
 	return "you are not permitted to administer the directory"
 }
 
-// decideAdmin evaluates the policy without recording anything.
+// decideAction evaluates one administrative action without recording anything.
 //
 // Separate from logging because /api/auth/me asks this question on every page
 // load to decide what to render. Recording those would bury the decisions that
 // matter — an actual attempt to administer something — under routine
 // navigation, and the decision explorer would become unreadable.
-func (s *Server) decideAdmin(ctx context.Context, session *store.Session) (policy.Decision, *claims.Subject, error) {
+func (s *Server) decideAction(ctx context.Context, session *store.Session, action types.EntityUID) (policy.Decision, *claims.Subject, error) {
 	subject, err := s.claims.Resolve(ctx, session)
 	if err != nil {
 		// A disabled account holding a live session lands here. Refusing is
@@ -116,19 +116,19 @@ func (s *Server) decideAdmin(ctx context.Context, session *store.Session) (polic
 
 	decision := engine.Evaluate(policy.Request{
 		Subject:  subject,
-		Action:   policy.ActionAdministerData,
+		Action:   action,
 		Resource: adminResource,
 	})
 	return decision, subject, nil
 }
 
 // logAdminDecision records an attempt to administer something.
-func (s *Server) logAdminDecision(ctx context.Context, subject *claims.Subject, decision policy.Decision, resource string) {
+func (s *Server) logAdminDecision(ctx context.Context, subject *claims.Subject, decision policy.Decision, action, resource string) {
 	principalID := subject.ID
 	if err := s.store.LogDecision(ctx, store.DecisionRecord{
 		DecisionPoint: "adminAPI",
 		PrincipalID:   &principalID,
-		Action:        "AdministerDirectory",
+		Action:        action,
 		Resource:      resource,
 		Allowed:       decision.Allowed,
 		Reasons:       decision.Reasons,
@@ -154,8 +154,17 @@ func (s *Server) logAdminDecision(ctx context.Context, subject *claims.Subject, 
 
 // adminStatus is what the UI needs to render the admin section sensibly.
 type adminStatus struct {
-	// Allowed is the answer right now.
+	// Allowed is true when the session can do anything administrative at all.
+	// It is the union, not the broad action: a user-admin can manage people and
+	// should see the section, even though AdministerDirectory would refuse them.
 	Allowed bool
+
+	// ManageUsers and ManageApplications drive which parts render. Showing a
+	// user-admin a client-registration form they will be refused is worse than
+	// not showing it — they would reasonably conclude the system is broken
+	// rather than that they lack a permission.
+	ManageUsers        bool
+	ManageApplications bool
 
 	// NeedsReauth distinguishes "you are not an administrator" from "you are,
 	// but your authentication has gone stale". Without it the section simply
@@ -170,18 +179,32 @@ type adminStatus struct {
 // Not a security boundary — every admin endpoint evaluates the policy itself —
 // but a section someone cannot use should say why rather than disappear.
 func (s *Server) adminStatusFor(ctx context.Context, session *store.Session) adminStatus {
-	decision, _, err := s.decideAdmin(ctx, session)
-	if err != nil {
-		return adminStatus{}
-	}
-	if decision.Allowed {
-		return adminStatus{Allowed: true}
+	var (
+		status adminStatus
+		stale  bool
+	)
+
+	for _, tier := range []struct {
+		action types.EntityUID
+		into   *bool
+	}{
+		{policy.ActionManageUsers, &status.ManageUsers},
+		{policy.ActionManageApplications, &status.ManageApplications},
+	} {
+		decision, _, err := s.decideAction(ctx, session, tier.action)
+		if err != nil {
+			return adminStatus{}
+		}
+		*tier.into = decision.Allowed
+		status.Allowed = status.Allowed || decision.Allowed
+
+		// Only the freshness rule is recoverable by the user. Not being a
+		// member is not something tapping a key will fix, and offering it would
+		// be a lie.
+		stale = stale || slices.Contains(decision.Reasons,
+			"admin-requires-fresh-device-bound-auth")
 	}
 
-	// Only the freshness rule is recoverable by the user. Not being a member is
-	// not something tapping a key will fix, and offering it would be a lie.
-	return adminStatus{
-		NeedsReauth: slices.Contains(decision.Reasons,
-			"admin-requires-fresh-device-bound-auth"),
-	}
+	status.NeedsReauth = !status.Allowed && stale
+	return status
 }

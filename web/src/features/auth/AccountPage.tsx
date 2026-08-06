@@ -95,9 +95,16 @@ export function AccountPage({ session }: { session: Me }) {
             <TabsContent value="admin" className="mt-4">
               {session.canAdminister ? (
                 <div className="space-y-4">
-                  <UserList />
-                  <GroupList />
-                  <ApplicationList />
+                  {/* Each tier renders only what it can use. A user-admin shown
+                      a client-registration form they will be refused would
+                      reasonably conclude the system is broken. */}
+                  {session.canManageUsers && (
+                    <>
+                      <UserList />
+                      <GroupList />
+                    </>
+                  )}
+                  {session.canManageApplications && <ApplicationList />}
                 </div>
               ) : (
                 <StepUpPrompt />

@@ -85,7 +85,37 @@ permit (
 @id("directory-admins-may-administer")
 permit (
     principal in Cardinal::Group::"00000000-0000-7000-8000-00000000ad11",
-    action == Cardinal::Action::"AdministerDirectory",
+    action in [
+        Cardinal::Action::"AdministerDirectory",
+        Cardinal::Action::"ManageUsers",
+        Cardinal::Action::"ManageApplications"
+    ],
+    resource
+);
+
+// Narrower tiers, for organisations that want them.
+//
+// Both are empty until someone is granted them. An existing administrator keeps
+// exactly what they had — migration 0011 moves nobody — so narrowing is a
+// deliberate act rather than something discovered after an upgrade.
+
+// Onboarding staff: create and disable accounts, issue enrollment invitations,
+// grant and revoke group membership.
+@id("user-admins-may-manage-people")
+permit (
+    principal in Cardinal::Group::"00000000-0000-7000-8000-00000000ad12",
+    action == Cardinal::Action::"ManageUsers",
+    resource
+);
+
+// Registering relying parties. Separate from managing people because choosing
+// an application's redirect URIs is enough to build a phishing surface inside
+// the organisation's own identity provider — a different blast radius from
+// adding someone to a group.
+@id("security-admins-may-manage-applications")
+permit (
+    principal in Cardinal::Group::"00000000-0000-7000-8000-00000000ad13",
+    action == Cardinal::Action::"ManageApplications",
     resource
 );
 
@@ -93,8 +123,12 @@ permit (
 // Step-up
 // ─────────────────────────────────────────────────────────────────────────────
 
-// Administering the directory requires a device-bound credential authenticated
+// Every administrative action requires a device-bound credential authenticated
 // within the last five minutes.
+//
+// Listed explicitly rather than left to the broad action: a narrower tier that
+// escaped the step-up rule would be a way to administer *something* from a
+// twelve-hour session, which is the hole this rule exists to close.
 //
 // Two separate requirements, both load-bearing. Device-bound excludes a synced
 // passkey, which is more recoverable but lives in a cloud account. Freshness
@@ -102,7 +136,11 @@ permit (
 @id("admin-requires-fresh-device-bound-auth")
 forbid (
     principal,
-    action == Cardinal::Action::"AdministerDirectory",
+    action in [
+        Cardinal::Action::"AdministerDirectory",
+        Cardinal::Action::"ManageUsers",
+        Cardinal::Action::"ManageApplications"
+    ],
     resource
 )
 unless {

@@ -111,6 +111,16 @@ func (s *Server) Handler() http.Handler {
 		s.rateLimit(store.LimitLoginFinish)(http.HandlerFunc(s.handleLoginFinish)))
 
 	mux.Handle("GET /api/auth/me", s.requireAuth(http.HandlerFunc(s.handleMe)))
+
+	// Tiered: people go to user-admins, applications to security-admins, and
+	// directory-admins holds both. An endpoint added without a tier in mind
+	// falls to requireAdmin, which is the strictest of the three.
+	people := func(h http.HandlerFunc) http.Handler {
+		return s.requireAuth(s.requirePermission(policy.ActionManageUsers, h))
+	}
+	apps := func(h http.HandlerFunc) http.Handler {
+		return s.requireAuth(s.requirePermission(policy.ActionManageApplications, h))
+	}
 	mux.Handle("POST /api/auth/logout", s.requireAuth(http.HandlerFunc(s.handleLogout)))
 
 	// Editing your own name and email. Not behind requireAdmin: correcting a
@@ -134,12 +144,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/enroll/finish", s.handleEnrollFinish)
 
 	// Issuing them is administration.
-	mux.Handle("POST /api/invitations",
-		s.requireAuth(s.requireAdmin(http.HandlerFunc(s.handleIssueInvitation))))
-	mux.Handle("GET /api/invitations",
-		s.requireAuth(s.requireAdmin(http.HandlerFunc(s.handleListInvitations))))
-	mux.Handle("DELETE /api/invitations/{login}",
-		s.requireAuth(s.requireAdmin(http.HandlerFunc(s.handleRevokeInvitation))))
+	mux.Handle("POST /api/invitations", people(s.handleIssueInvitation))
+	mux.Handle("GET /api/invitations", people(s.handleListInvitations))
+	mux.Handle("DELETE /api/invitations/{login}", people(s.handleRevokeInvitation))
 
 	// ── Credential self-service ────────────────────────────────────────────
 	mux.Handle("POST /api/credentials/register/begin",
@@ -171,28 +178,21 @@ func (s *Server) Handler() http.Handler {
 	// to build a phishing surface inside the organisation's own IdP.
 	// People and groups. Membership is what every policy reads, so granting one
 	// is administration in the fullest sense.
-	admin := func(h http.HandlerFunc) http.Handler {
-		return s.requireAuth(s.requireAdmin(h))
-	}
-	mux.Handle("GET /api/directory/users", admin(s.handleListUsers))
-	mux.Handle("POST /api/directory/users", admin(s.handleCreateUser))
-	mux.Handle("GET /api/directory/users/{login}", admin(s.handleGetUser))
-	mux.Handle("DELETE /api/directory/users/{login}", admin(s.handleDisableUser))
+	mux.Handle("GET /api/directory/users", people(s.handleListUsers))
+	mux.Handle("POST /api/directory/users", people(s.handleCreateUser))
+	mux.Handle("GET /api/directory/users/{login}", people(s.handleGetUser))
+	mux.Handle("DELETE /api/directory/users/{login}", people(s.handleDisableUser))
 
-	mux.Handle("GET /api/directory/groups", admin(s.handleListGroups))
-	mux.Handle("POST /api/directory/groups", admin(s.handleCreateGroup))
-	mux.Handle("GET /api/directory/groups/{name}", admin(s.handleGetGroup))
-	mux.Handle("POST /api/directory/groups/{name}/members", admin(s.handleGrantMembership))
-	mux.Handle("DELETE /api/directory/groups/{name}/members/{member}", admin(s.handleRevokeMembership))
+	mux.Handle("GET /api/directory/groups", people(s.handleListGroups))
+	mux.Handle("POST /api/directory/groups", people(s.handleCreateGroup))
+	mux.Handle("GET /api/directory/groups/{name}", people(s.handleGetGroup))
+	mux.Handle("POST /api/directory/groups/{name}/members", people(s.handleGrantMembership))
+	mux.Handle("DELETE /api/directory/groups/{name}/members/{member}", people(s.handleRevokeMembership))
 
-	mux.Handle("GET /api/applications",
-		s.requireAuth(s.requireAdmin(http.HandlerFunc(s.handleListApplications))))
-	mux.Handle("POST /api/applications",
-		s.requireAuth(s.requireAdmin(http.HandlerFunc(s.handleRegisterApplication))))
-	mux.Handle("GET /api/applications/{clientID}",
-		s.requireAuth(s.requireAdmin(http.HandlerFunc(s.handleGetApplication))))
-	mux.Handle("DELETE /api/applications/{clientID}",
-		s.requireAuth(s.requireAdmin(http.HandlerFunc(s.handleDisableApplication))))
+	mux.Handle("GET /api/applications", apps(s.handleListApplications))
+	mux.Handle("POST /api/applications", apps(s.handleRegisterApplication))
+	mux.Handle("GET /api/applications/{clientID}", apps(s.handleGetApplication))
+	mux.Handle("DELETE /api/applications/{clientID}", apps(s.handleDisableApplication))
 	mux.Handle("GET /api/policy", s.requireAuth(http.HandlerFunc(s.handlePolicy)))
 
 	// ── OpenID Connect ─────────────────────────────────────────────────────

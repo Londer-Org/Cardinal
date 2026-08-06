@@ -44,6 +44,37 @@ var (
 	// OIDC is reached directly and the proxy never sees it, so the same
 	// question has to be asked at a different point.
 	ActionAccessApplication = types.NewEntityUID(TypeAction, "AccessApplication")
+
+	// ManageUsers and ManageApplications split administration into things that
+	// need different people.
+	//
+	// Whoever onboards staff does not need to be able to register an OIDC
+	// client, and whoever registers clients does not need to be able to disable
+	// accounts. Splitting them is not bureaucracy: registering a client means
+	// choosing its redirect URIs, which is enough to build a phishing surface
+	// inside the organisation's own identity provider, and that is a different
+	// blast radius from adding someone to a group.
+	//
+	// AdministerDirectory remains, and remains the superset — anything not
+	// covered by a narrower action still asks for it.
+	ActionManageUsers        = types.NewEntityUID(TypeAction, "ManageUsers")
+	ActionManageApplications = types.NewEntityUID(TypeAction, "ManageApplications")
+)
+
+// Built-in groups, created by migration with fixed identifiers.
+//
+// Declared here as well as in SQL and Cedar so a test can assert all three
+// agree. Changing one without the others silently removes an entire tier's
+// authority, with no error anywhere.
+const (
+	AdminGroupIDConst = AdminGroupID
+
+	// UserAdminGroupID may manage people, groups and invitations.
+	UserAdminGroupID = "00000000-0000-7000-8000-00000000ad12"
+
+	// SecurityAdminGroupID may manage OIDC applications, and later the policy
+	// set and signing keys.
+	SecurityAdminGroupID = "00000000-0000-7000-8000-00000000ad13"
 )
 
 // AdminGroupID is the built-in directory-admins group.
