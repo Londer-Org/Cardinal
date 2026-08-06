@@ -3,10 +3,12 @@ import { request } from './client'
 import {
   breakGlassChallengeSchema,
   ceremonySchema,
+  consentsSchema,
   credentialSchema,
   credentialsSchema,
   decisionsSchema,
   meSchema,
+  pendingAuthorizationSchema,
   policySchema,
   recoveryCodesSchema,
 } from './schemas'
@@ -64,11 +66,39 @@ export const api = {
       request(`/api/oidc/resume?auth=${encodeURIComponent(authID)}`,
         z.object({ continue: z.string() })),
 
+    /**
+     * Describes a parked authorization: which application, asking for what.
+     *
+     * Fetched before resuming, because the answer decides whether the user is
+     * shown anything at all. `needsConsent` is false for a first-party
+     * application, and for one they have already agreed to.
+     */
+    oidcPending: (authID: string) =>
+      request(`/api/oidc/pending?auth=${encodeURIComponent(authID)}`,
+        pendingAuthorizationSchema),
+
+    /** Records approval or refusal of a pending authorization. */
+    oidcConsent: (authID: string, approve: boolean) =>
+      request('/api/oidc/consent', z.object({ approved: z.boolean() }), {
+        method: 'POST',
+        body: { auth: authID, approve },
+      }),
+
     loginFinish: (ceremonyId: string, response: unknown) =>
       request('/api/auth/login/finish', z.looseObject({}), {
         method: 'POST',
         body: { ceremonyId, response },
       }),
+  },
+
+  consents: {
+    /** Applications this user has granted access to. */
+    list: () => request('/api/consents', consentsSchema),
+
+    /** Withdraws access, and the tokens it produced along with it. */
+    revoke: (clientID: string) =>
+      request(`/api/consents/${encodeURIComponent(clientID)}`, z.undefined(),
+        { method: 'DELETE' }),
   },
 
   credentials: {
@@ -112,11 +142,21 @@ export const api = {
 }
 
 export { ApiError } from './client'
-export type { Credential, Decision, Me, Policy, RecoveryCodes } from './schemas'
+export type {
+  Consent,
+  Credential,
+  Decision,
+  Me,
+  PendingAuthorization,
+  Policy,
+  RecoveryCodes,
+  ScopeDetail,
+} from './schemas'
 
 /** Query keys, centralised so invalidation cannot drift from fetching. */
 export const queryKeys = {
   me: ['me'] as const,
+  consents: ['consents'] as const,
   credentials: ['credentials'] as const,
   decisions: (deniedOnly: boolean) => ['decisions', deniedOnly] as const,
   policy: ['policy'] as const,

@@ -35,3 +35,6 @@ cardinal.toml
 web/dist/*
 !web/dist/.gitkeep
 examples/.oidc-client-id
+
+# TypeScript incremental build cache — churns on every build.
+web/tsconfig.tsbuildinfo

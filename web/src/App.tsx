@@ -5,6 +5,7 @@ import { AccountPage } from '@/features/auth/AccountPage'
 import { LoginPage } from '@/features/auth/LoginPage'
 import { useSession } from '@/features/auth/useAuth'
 import { pendingAuthorizationID, useOIDCResume } from '@/features/auth/useOIDCResume'
+import { ConsentPrompt } from '@/features/consent/ConsentPrompt'
 
 /**
  * Routing is a branch on session state plus one special case: an OIDC
@@ -19,8 +20,9 @@ export function App() {
 
   // An application may have sent the user here to sign in. If so, the
   // authorization is completed and the browser handed back the moment a session
-  // exists — the hook navigates away itself, so nothing below renders.
-  const resume = useOIDCResume(session !== null)
+  // exists — the hook navigates away itself, so nothing below renders. The one
+  // exception is an application that requires consent, which stops to ask.
+  const { state: resume, decide, deciding } = useOIDCResume(session !== null)
 
   if (isLoading) {
     return (
@@ -35,6 +37,35 @@ export function App() {
     // page after clicking something in another application is disorienting,
     // and the usual reaction is to assume it is a phishing page.
     return <LoginPage continuingToApplication={pendingAuthorizationID() !== null} />
+  }
+
+  if (resume.status === 'consent') {
+    return (
+      <ConsentPrompt
+        pending={resume.pending}
+        session={session}
+        onDecide={decide}
+        deciding={deciding}
+      />
+    )
+  }
+
+  if (resume.status === 'refused') {
+    return (
+      <Centered>
+        <Alert>
+          <AlertCircleIcon />
+          <AlertTitle>Access not granted</AlertTitle>
+          <AlertDescription>
+            {resume.application} was not given access to your account, and has
+            been sent nothing. You can close this tab, or carry on below.
+          </AlertDescription>
+        </Alert>
+        {/* Deliberately not an automatic redirect back to the application.
+            Bouncing someone straight back to the thing they just declined
+            reads as the refusal not having worked. */}
+      </Centered>
+    )
   }
 
   if (resume.status === 'resuming') {

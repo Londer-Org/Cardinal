@@ -31,16 +31,33 @@ func (s *Server) handleOIDCLogin(w http.ResponseWriter, r *http.Request) {
 	// Confirm the request exists and is live before sending anyone anywhere. An
 	// expired request would otherwise send the user through a full sign-in only
 	// to fail at the end.
-	if _, err := s.store.AuthRequestByID(ctx, requestID); err != nil {
+	authReq, err := s.store.AuthRequestByID(ctx, requestID)
+	if err != nil {
 		writeError(w, http.StatusBadRequest,
 			"this authorization request has expired — start again from the application")
 		return
 	}
 
 	session, authenticated := SessionFrom(ctx)
-	if !authenticated {
-		// Send them to sign in, remembering where to come back to. The target
-		// is Cardinal's own path, so there is no open-redirect surface here.
+
+	// A signed-in user still stops here if the application requires consent.
+	// This is the single-sign-on path — the common one — so completing it
+	// silently would have meant consent applied only to people who happened not
+	// to have a session yet.
+	askFirst := false
+	if authenticated {
+		askFirst, err = s.needsConsent(ctx, session.SubjectID, authReq)
+		if err != nil {
+			s.log.ErrorContext(ctx, "reading consent failed", "error", err)
+			writeError(w, http.StatusInternalServerError, "could not check consent")
+			return
+		}
+	}
+
+	if !authenticated || askFirst {
+		// Send them to the UI, remembering what is waiting. The target is
+		// Cardinal's own path, so there is no open-redirect surface here. The
+		// SPA works out whether that means signing in, agreeing, or both.
 		target := url.URL{Path: "/", RawQuery: url.Values{
 			"oidc_auth": {requestID.String()},
 		}.Encode()}
@@ -78,8 +95,26 @@ func (s *Server) handleOIDCResume(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if _, err := s.store.AuthRequestByID(ctx, requestID); err != nil {
+	authReq, err := s.store.AuthRequestByID(ctx, requestID)
+	if err != nil {
 		writeError(w, http.StatusBadRequest, "this authorization request has expired")
+		return
+	}
+
+	// Consent is enforced here, not only in the UI.
+	//
+	// A client that requires consent must not be satisfiable by calling resume
+	// directly — otherwise the prompt is advisory, and anything that skips the
+	// SPA skips the decision.
+	askFirst, err := s.needsConsent(ctx, session.SubjectID, authReq)
+	if err != nil {
+		s.log.ErrorContext(ctx, "reading consent failed", "error", err)
+		writeError(w, http.StatusInternalServerError, "could not check consent")
+		return
+	}
+	if askFirst {
+		writeError(w, http.StatusForbidden,
+			"this application needs your consent before it can sign you in")
 		return
 	}
 

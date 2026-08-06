@@ -121,8 +121,12 @@ e2e-seed-oidc: ## Register the relying party and start it with its client id
 			-scopes 'openid,profile,email,groups,offline_access' \
 			-config /etc/cardinal/cardinal.toml >/dev/null; \
 	fi
+	@# Named explicitly. Tests register clients of their own, so `LIMIT 1` would
+	@# hand the relying party whichever client the planner happened to return —
+	@# and the failure would look like a redirect-URI mismatch, not a seeding bug.
 	@$(COMPOSE_E2E) exec -T postgres psql -U cardinal -d cardinal -tAc \
-		"SELECT client_id FROM oidc_clients LIMIT 1" | tr -d ' \r\n' > examples/.oidc-client-id
+		"SELECT c.client_id FROM oidc_clients c JOIN entities e ON e.id = c.entity_id \
+		 WHERE e.name = 'e2e-client'" | tr -d ' \r\n' > examples/.oidc-client-id
 	@OIDC_CLIENT_ID="$$(cat examples/.oidc-client-id)" $(COMPOSE_E2E) up -d oidc-client >/dev/null
 	@echo "  relying party registered: $$(cut -c1-16 examples/.oidc-client-id)…"
 

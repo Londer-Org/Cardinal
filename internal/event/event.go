@@ -45,6 +45,9 @@ const (
 
 	ActionRecoveryCodesIssued = "recovery.codes_issued"
 	ActionRecoveryCodeUsed    = "recovery.code_used"
+
+	ActionConsentGranted = "consent.granted"
+	ActionConsentRevoked = "consent.revoked"
 )
 
 // Event is one immutable record in the journal.

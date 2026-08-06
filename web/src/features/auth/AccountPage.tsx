@@ -3,6 +3,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { CardinalMark } from '@/components/CardinalMark'
+import { ConnectedApplications } from '@/features/consent/ConnectedApplications'
 import { CredentialList } from '@/features/credentials/CredentialList'
 import { DecisionExplorer } from '@/features/decisions/DecisionExplorer'
 import { RecoveryCodes } from '@/features/recovery/RecoveryCodes'
@@ -76,7 +77,8 @@ export function AccountPage({ session }: { session: Me }) {
             <RecoveryCodes remaining={session.recoveryCodesRemaining} />
           </TabsContent>
 
-          <TabsContent value="access" className="mt-4">
+          <TabsContent value="access" className="mt-4 space-y-4">
+            <ConnectedApplications />
             <DecisionExplorer />
           </TabsContent>
         </Tabs>

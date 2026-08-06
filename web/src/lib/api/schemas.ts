@@ -91,3 +91,35 @@ export const policySchema = z.object({
 export type Policy = z.infer<typeof policySchema>
 
 export const errorSchema = z.object({ error: z.string() })
+
+/**
+ * A scope, alongside a description a person can actually weigh.
+ *
+ * The description is server-rendered rather than translated in the UI: the
+ * consent record and the screen that produced it must agree about what was
+ * agreed to, and two independent copies of that wording would eventually not.
+ */
+export const scopeDetailSchema = z.object({
+  scope: z.string(),
+  description: z.string(),
+})
+export type ScopeDetail = z.infer<typeof scopeDetailSchema>
+
+export const pendingAuthorizationSchema = z.object({
+  application: z.string(),
+  clientId: z.string(),
+  scopes: z.array(scopeDetailSchema),
+  needsConsent: z.boolean(),
+  expiresAt: z.string(),
+})
+export type PendingAuthorization = z.infer<typeof pendingAuthorizationSchema>
+
+export const consentSchema = z.object({
+  clientId: z.string(),
+  application: z.string(),
+  scopes: z.array(scopeDetailSchema),
+  grantedAt: z.string(),
+})
+export type Consent = z.infer<typeof consentSchema>
+
+export const consentsSchema = z.array(consentSchema)

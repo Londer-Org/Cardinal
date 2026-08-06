@@ -56,8 +56,9 @@ type OIDCClient struct {
 	GrantTypes             []string
 	Scopes                 []string
 
-	RequirePKCE bool
-	DevMode     bool
+	RequirePKCE    bool
+	RequireConsent bool
+	DevMode        bool
 
 	AccessTokenLifetime  time.Duration
 	IDTokenLifetime      time.Duration
@@ -69,12 +70,13 @@ func (c *OIDCClient) Public() bool { return c.AuthMethod == AuthNone }
 
 // RegisterClientInput describes a new relying party.
 type RegisterClientInput struct {
-	Name         string
-	DisplayName  string
-	AuthMethod   AuthMethod
-	RedirectURIs []string
-	Scopes       []string
-	DevMode      bool
+	Name           string
+	DisplayName    string
+	AuthMethod     AuthMethod
+	RedirectURIs   []string
+	Scopes         []string
+	DevMode        bool
+	RequireConsent bool
 }
 
 // RegisteredClient is returned once, at registration.
@@ -126,15 +128,16 @@ func (s *Store) RegisterOIDCClient(
 	}
 
 	out := &RegisteredClient{Client: &OIDCClient{
-		EntityID:     entity.ID,
-		ClientID:     clientID,
-		Name:         in.Name,
-		AuthMethod:   in.AuthMethod,
-		RedirectURIs: in.RedirectURIs,
-		GrantTypes:   []string{"authorization_code", "refresh_token"},
-		Scopes:       in.Scopes,
-		RequirePKCE:  true,
-		DevMode:      in.DevMode,
+		EntityID:       entity.ID,
+		ClientID:       clientID,
+		Name:           in.Name,
+		AuthMethod:     in.AuthMethod,
+		RedirectURIs:   in.RedirectURIs,
+		GrantTypes:     []string{"authorization_code", "refresh_token"},
+		Scopes:         in.Scopes,
+		RequirePKCE:    true,
+		RequireConsent: in.RequireConsent,
+		DevMode:        in.DevMode,
 	}}
 	if len(out.Client.Scopes) == 0 {
 		out.Client.Scopes = []string{"openid", "profile", "email", "groups"}
@@ -158,10 +161,11 @@ func (s *Store) RegisterOIDCClient(
 		if _, err := tx.Exec(ctx, `
 			INSERT INTO oidc_clients
 				(entity_id, client_id, secret_hash, auth_method, redirect_uris,
-				 grant_types, scopes, require_pkce, dev_mode)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, true, $8)`,
+				 grant_types, scopes, require_pkce, dev_mode, require_consent)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, true, $8, $9)`,
 			entity.ID, clientID, secretHash, string(in.AuthMethod),
 			in.RedirectURIs, out.Client.GrantTypes, out.Client.Scopes, in.DevMode,
+			in.RequireConsent,
 		); err != nil {
 			return fmt.Errorf("store: registering client: %w", err)
 		}
@@ -250,7 +254,7 @@ func (s *Store) OIDCClientByID(ctx context.Context, clientID string) (*OIDCClien
 	err := s.pool.QueryRow(ctx, `
 		SELECT c.entity_id, c.client_id, e.name, c.secret_hash, c.auth_method,
 		       c.redirect_uris, c.post_logout_redirect_uris, c.grant_types,
-		       c.scopes, c.require_pkce, c.dev_mode,
+		       c.scopes, c.require_pkce, c.dev_mode, c.require_consent,
 		       c.access_token_lifetime, c.id_token_lifetime, c.refresh_token_lifetime
 		  FROM oidc_clients c
 		  JOIN entities e ON e.id = c.entity_id
@@ -258,7 +262,7 @@ func (s *Store) OIDCClientByID(ctx context.Context, clientID string) (*OIDCClien
 		clientID,
 	).Scan(&c.EntityID, &c.ClientID, &c.Name, &c.secretHash, &authMethod,
 		&c.RedirectURIs, &c.PostLogoutRedirectURIs, &c.GrantTypes,
-		&c.Scopes, &c.RequirePKCE, &c.DevMode,
+		&c.Scopes, &c.RequirePKCE, &c.DevMode, &c.RequireConsent,
 		&c.AccessTokenLifetime, &c.IDTokenLifetime, &c.RefreshTokenLifetime)
 
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -290,7 +294,7 @@ func (s *Store) VerifyClientSecret(ctx context.Context, clientID, secret string)
 func (s *Store) ListOIDCClients(ctx context.Context) ([]*OIDCClient, error) {
 	rows, err := s.pool.Query(ctx, `
 		SELECT c.entity_id, c.client_id, e.name, c.auth_method, c.redirect_uris,
-		       c.scopes, c.require_pkce, c.dev_mode
+		       c.scopes, c.require_pkce, c.dev_mode, c.require_consent
 		  FROM oidc_clients c
 		  JOIN entities e ON e.id = c.entity_id
 		 WHERE e.disabled_at IS NULL
@@ -307,7 +311,8 @@ func (s *Store) ListOIDCClients(ctx context.Context) ([]*OIDCClient, error) {
 			authMethod string
 		)
 		if err := rows.Scan(&c.EntityID, &c.ClientID, &c.Name, &authMethod,
-			&c.RedirectURIs, &c.Scopes, &c.RequirePKCE, &c.DevMode); err != nil {
+			&c.RedirectURIs, &c.Scopes, &c.RequirePKCE, &c.DevMode,
+			&c.RequireConsent); err != nil {
 			return nil, fmt.Errorf("store: scanning client: %w", err)
 		}
 		c.AuthMethod = AuthMethod(authMethod)

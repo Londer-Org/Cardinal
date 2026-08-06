@@ -57,3 +57,28 @@ common cause of "it worked with curl but not through the proxy".
 
 `open.localhost:8100` routes to the same application with the middleware
 removed, so you can see it fail closed. Never do that in a real deployment.
+
+## Trying the consent screen
+
+The relying party is registered as a first-party application, so it signs you in
+without asking anything — which is the default and the point of
+[ADR 0011](../docs/adr/0011-consent-is-per-client-and-off-by-default.md). To see
+the other path, register a client that must ask:
+
+```sh
+docker compose -f examples/compose.yml exec cardinal \
+  cardinal app register partner-app \
+    -display 'A third-party integration' \
+    -redirect 'http://client.localhost:8100/callback' \
+    -dev-mode -consent \
+    -scopes 'openid,profile,email' \
+    -config /etc/cardinal/cardinal.toml
+```
+
+Start an authorization against that client id and Cardinal stops to ask before
+releasing anything. Agree once and it stops asking; the agreement then appears
+under **Access → Connected applications**, where withdrawing it also revokes the
+application's tokens.
+
+`cardinal app list` shows the flag in a `CONSENT` column, so which applications
+ask is visible without reading the database.

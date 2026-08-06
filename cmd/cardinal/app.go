@@ -34,6 +34,9 @@ func runAppRegister(ctx context.Context, args []string) error {
 		"issue a client secret; only for servers that can keep one")
 	devMode := fs.Bool("dev-mode", false,
 		"permit plain http redirect URIs — never in production")
+	consent := fs.Bool("consent", false,
+		"ask the user before releasing claims; for third-party applications. "+
+			"A prompt on a first-party app is one more thing people dismiss unread")
 	scopes := fs.String("scopes", "openid,profile,email,groups", "comma-separated scopes")
 	configPath := fs.String("config", "", "configuration file, for the recovery-domain check")
 	dsnFlag := fs.String("dsn", "", "PostgreSQL connection string")
@@ -70,12 +73,13 @@ func runAppRegister(ctx context.Context, args []string) error {
 	}
 
 	registered, err := s.RegisterOIDCClient(ctx, store.RegisterClientInput{
-		Name:         pos[0],
-		DisplayName:  *display,
-		AuthMethod:   method,
-		RedirectURIs: splitList(*redirect),
-		Scopes:       splitList(*scopes),
-		DevMode:      *devMode,
+		Name:           pos[0],
+		DisplayName:    *display,
+		AuthMethod:     method,
+		RedirectURIs:   splitList(*redirect),
+		Scopes:         splitList(*scopes),
+		DevMode:        *devMode,
+		RequireConsent: *consent,
 	}, check, nil)
 	if err != nil {
 		return err
@@ -120,7 +124,7 @@ func runAppList(ctx context.Context, args []string) error {
 	}
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "NAME\tCLIENT ID\tAUTH\tPKCE\tDEV\tREDIRECT URIS")
+	fmt.Fprintln(w, "NAME\tCLIENT ID\tAUTH\tPKCE\tCONSENT\tDEV\tREDIRECT URIS")
 	for _, c := range clients {
 		dev := ""
 		if c.DevMode {
@@ -132,8 +136,12 @@ func runAppList(ctx context.Context, args []string) error {
 		if !c.RequirePKCE {
 			pkce = "NOT REQUIRED"
 		}
-		fmt.Fprintf(w, "%s\t%s…\t%s\t%s\t%s\t%s\n",
-			c.Name, c.ClientID[:12], c.AuthMethod, pkce, dev,
+		consent := "no"
+		if c.RequireConsent {
+			consent = "yes"
+		}
+		fmt.Fprintf(w, "%s\t%s…\t%s\t%s\t%s\t%s\t%s\n",
+			c.Name, c.ClientID[:12], c.AuthMethod, pkce, consent, dev,
 			strings.Join(c.RedirectURIs, " "))
 	}
 	return w.Flush()

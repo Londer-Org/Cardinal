@@ -163,8 +163,21 @@ func (s *Server) Handler() http.Handler {
 		// The hand-off between the library and Cardinal's own authentication.
 		// More specific than "/oidc/", so it takes precedence.
 		mux.HandleFunc("GET /oidc/login", s.handleOIDCLogin)
+		mux.Handle("GET /api/oidc/pending",
+			s.requireAuth(http.HandlerFunc(s.handlePendingAuthorization)))
+		mux.Handle("POST /api/oidc/consent",
+			s.requireAuth(http.HandlerFunc(s.handleConsentDecision)))
 		mux.Handle("GET /api/oidc/resume",
 			s.requireAuth(http.HandlerFunc(s.handleOIDCResume)))
+
+		// Standing consents, and withdrawing them. Available whether or not any
+		// client currently requires consent: a client's setting can change
+		// after agreement was given, and the user must still be able to see and
+		// undo what they agreed to.
+		mux.Handle("GET /api/consents",
+			s.requireAuth(http.HandlerFunc(s.handleListConsents)))
+		mux.Handle("DELETE /api/consents/{clientID}",
+			s.requireAuth(http.HandlerFunc(s.handleRevokeConsent)))
 	}
 
 	mux.HandleFunc("GET /api/health", s.handleHealth)

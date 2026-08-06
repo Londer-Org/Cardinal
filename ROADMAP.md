@@ -6,9 +6,9 @@ Living document. Updated as work lands, not as it's planned.
 
 **Current position:** Phase 3 nearly complete. A browser can now sign in to a
 third-party application through Cardinal end to end: authorization code flow
-with PKCE, resumed across sign-in, with `state` and `nonce` preserved. Remaining
-in Phase 3: a consent screen, client management UI, and an OIDC relying party in
-the e2e stack.
+with PKCE, resumed across sign-in, with `state` and `nonce` preserved, and
+consent asked for where the application is not first-party. Remaining in Phase
+3: client management UI and the OpenID Foundation conformance suite.
 
 Phases 0–2 complete. Phase 1 still owes TOTP, recovery-email delivery, and
 dual-control recovery. See [docs/first-run.md](docs/first-run.md) to try it.
@@ -177,9 +177,8 @@ works.
 | ✅ | Authorization code flow with PKCE — verified end to end; wrong verifier and replayed code both refused |
 | ✅ | Discovery, JWKS, token, userinfo, introspection, revocation |
 | ✅ | Frontend resumes an OIDC flow after sign-in — browser login works end to end |
-| ⬜ | Consent screen |
-| ⬜ | Client management UI |
 | ✅ | **An OIDC relying party in the e2e stack** — coreos/go-oidc, an independent client library; 5 tests |
+| ✅ | **Consent** — per-client and off by default (ADR 0011); enforced on every completion path, withdrawable, and withdrawal revokes the client's tokens |
 | ⬜ | Client management UI |
 | ⬜ | OpenID Foundation conformance suite |
 
