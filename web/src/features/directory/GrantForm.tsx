@@ -3,7 +3,8 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { ErrorMessage } from '@/components/ErrorMessage'
-import { useGrantMembership, useGroups } from './useDirectory'
+import { GroupPicker } from './GroupPicker'
+import { useGrantMembership } from './useDirectory'
 
 /** How long a grant lasts. */
 const DURATIONS = [
@@ -25,18 +26,20 @@ const DURATIONS = [
  * with a bounded option selected by default, is the difference between a
  * feature existing and a feature being used.
  */
-export function GrantForm({ member }: { member: string }) {
-  // Every group, for the picker. A directory large enough for this to be a
-  // real page is one where typing the name beats scrolling anyway, and the
-  // datalist is a convenience rather than the only way in.
-  const { data: groups } = useGroups({ q: '', limit: 200, offset: 0 })
+export function GrantForm({
+  member,
+  alreadyIn,
+}: {
+  member: string
+  /** Groups this person is already in, so the picker can say why one is not
+   *  selectable rather than leaving it looking broken. */
+  alreadyIn: string[]
+}) {
   const grant = useGrantMembership()
 
   const [group, setGroup] = useState('')
   const [days, setDays] = useState<number | null>(30)
   const [reason, setReason] = useState('')
-
-  const available = (groups?.items ?? []).map((g) => g.name)
 
   return (
     <form
@@ -68,21 +71,12 @@ export function GrantForm({ member }: { member: string }) {
           <Label htmlFor={`grant-group-${member}`} className="text-xs">
             Group
           </Label>
-          <Input
+          <GroupPicker
             id={`grant-group-${member}`}
-            list={`groups-${member}`}
             value={group}
-            onChange={(event) => { setGroup(event.target.value) }}
-            placeholder="engineers"
-            required
+            onChange={setGroup}
+            alreadyIn={alreadyIn}
           />
-          {/* A datalist rather than a select: the list can be long, and typing
-              a name you already know beats scrolling to it. */}
-          <datalist id={`groups-${member}`}>
-            {available.map((name) => (
-              <option key={name} value={name} />
-            ))}
-          </datalist>
         </div>
 
         <div className="space-y-1">

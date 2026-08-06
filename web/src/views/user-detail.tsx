@@ -81,7 +81,10 @@ export function UserDetailView() {
             )}
 
             <ErrorMessage error={revoke.error} />
-            <GrantForm member={login} />
+            <GrantForm
+              member={login}
+              alreadyIn={user.memberships.map((m) => m.group)}
+            />
           </CardContent>
         </Card>
 
