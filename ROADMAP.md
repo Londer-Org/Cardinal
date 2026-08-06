@@ -212,6 +212,7 @@ Cardinal.
 | ✅ | **Applications get a stable group identifier** — the `groups` claim and `X-Auth-Request-Groups` carried only names, so every application downstream keyed its permission logic on a mutable string. That is LDAP's DN problem ([ADR 0002](docs/adr/0002-identity-is-an-immutable-uuid.md)) reappearing one layer out, solved inside Cardinal and reintroduced at the boundary. `group_ids` and `X-Auth-Request-Group-Ids` now travel alongside, additively. Fixed *before* a rename operation exists, which is the only cheap moment to fix it |
 | ⬜ | **Token scopes** — a token can currently do anything its owner can that does not need a device-bound credential, which is broad for something in a CI variable. Wanted: a scope list surfaced to Cedar as context |
 | ⬜ | **Service accounts** — non-human identities with `private_key_jwt`. Deliberately separate from tokens, or a token becomes the way around the passkey requirement |
+| ❓ | **In-app authorization** ([ADR 0019](docs/adr/0019-in-app-authorization.md), *proposed*) — bringing an application's own permissions under Cedar, evaluated locally by `cardinal-agent` rather than by a call per action, with thin client packages over a local socket so adding a language is small. Optional by construction: an application that ignores it behaves exactly as today. **Not started, and question 5 in the ADR should be answered on a real application first** — roles carried in the token may cover enough of the need to make the rest unnecessary |
 
 ---
 

@@ -28,6 +28,7 @@ isn't finished.
 | [0016](0016-cardinal-serves-its-own-discovery-document.md) | Cardinal serves its own discovery document | Accepted |
 | [0017](0017-prompt-and-max-age-are-honoured.md) | `prompt` and `max_age` are honoured, not accepted | Accepted |
 | [0018](0018-access-tokens-are-a-weaker-credential.md) | Access tokens are a weaker credential, not a second principal | Accepted |
+| [0019](0019-in-app-authorization.md) | In-app authorization, if it happens, is a local decision | **Proposed** — design only |
 
 ## Conventions
 
