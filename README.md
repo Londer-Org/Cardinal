@@ -78,9 +78,7 @@ To run it:
 cp cardinal.example.toml cardinal.toml   # set rp_id and origins
 make release                             # UI + binary, one artifact
 make migrate
-./bin/cardinal user create you -display "Your Name"
-./bin/cardinal grant directory-admins you
-./bin/cardinal invite you                # prints an enrollment link
+./bin/cardinal init you                  # admin + policy + enrollment link
 ./bin/cardinal serve -config cardinal.toml -dev
 ```
 

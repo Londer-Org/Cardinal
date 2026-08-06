@@ -33,20 +33,14 @@ reset: ## Destroy the dev database and recreate it with a first administrator
 	@# It leaves you able to sign in, which the previous version did not: a
 	@# migrated database with no accounts is one nobody can reach, and working
 	@# that out from scratch each time is exactly the friction that stops people
-	@# resetting a database they should have reset.
+	@# resetting a database they should have reset. The setup itself is
+	@# `cardinal init`, so this and a real first run take the same path.
 	@printf 'This destroys every account, credential and audit record in\n%s\n\nType "yes" to continue: ' '$(DSN)'
 	@read -r reply && [ "$$reply" = yes ] || { echo 'aborted'; exit 1; }
 	docker compose down -v
 	@$(MAKE) --no-print-directory up
 	@$(MAKE) --no-print-directory migrate
-	@CARDINAL_DSN="$(DSN)" ./bin/cardinal policy publish policies/cardinal.cedar \
-		-description 'development default' -activate | sed 's/^/  /'
-	@CARDINAL_DSN="$(DSN)" ./bin/cardinal user create '$(ADMIN)' >/dev/null
-	@CARDINAL_DSN="$(DSN)" ./bin/cardinal grant directory-admins '$(ADMIN)' \
-		-reason 'founding admin' >/dev/null
-	@echo
-	@echo '==> start the server, then open this to register a passkey:'
-	@CARDINAL_DSN="$(DSN)" ./bin/cardinal invite '$(ADMIN)' 2>/dev/null
+	@CARDINAL_DSN="$(DSN)" ./bin/cardinal init '$(ADMIN)'
 
 # Who `make reset` makes an administrator. Override with `make reset ADMIN=you`.
 ADMIN ?= $(USER)

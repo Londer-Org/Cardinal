@@ -28,6 +28,17 @@ make migrate
 make release            # builds the React UI and embeds it in the binary
 ```
 
+Then set yourself up in one step:
+
+```sh
+./bin/cardinal init alonfils -display "Arthur Lonfils"
+```
+
+It publishes the default policy, creates the account, grants it
+`directory-admins`, and prints a single-use enrollment link. It refuses on a
+directory that already has administrators — `init` is for a fresh deployment,
+not a way to mint one on a live system.
+
 ## 2. Configuration
 
 ```sh

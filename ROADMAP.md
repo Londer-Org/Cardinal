@@ -83,7 +83,7 @@ The core thesis was tested before any Go was written:
 | ✅ | **Step-up re-authentication** — prove the key again without a new session. The freshness rule had been in the policy since Phase 0 with no way to satisfy it on demand: `auth_at` was set once, at sign-in, so administration expired five minutes later mid-task and only a full sign-out restored it |
 | ✅ | Recovery codes (Argon2id, single-use) and ≥2 passkeys enforced |
 | ⬜ | Dual-control admin recovery |
-| ⬜ | **First-run setup** — one deliberate step for `user create` + `grant directory-admins` + `invite`, instead of three commands a newcomer has to know about |
+| ✅ | **First-run setup** — `cardinal init <login>` publishes the policy, creates the administrator and prints an enrollment link. Refuses on a directory that already has administrators, and is deliberately not part of `migrate`: every upgrade would otherwise carry code that can mint one |
 | ✅ | **Enrollment invitations** (ADR 0013) — single-use, 24h, revocable, hashed at rest, no session granted; the enrollment screen is also where a user sets their own name and email. **Recovery is `cardinal invite <admin>` on the host** (ADR 0014) |
 | ✅ | **Self-service profile** — display name and email, with the recovery/IdP circularity guard applied here too. The login stays administrative |
 | ✅ | Rate limiting — fixed-window, fails closed, trusted-proxy aware |

@@ -71,6 +71,8 @@ func run(ctx context.Context, args []string) error {
 		return runMemberships(ctx, rest)
 	case "history":
 		return runHistory(ctx, rest)
+	case "init":
+		return runInit(ctx, args[1:])
 	case "migrate":
 		return runMigrate(ctx, rest)
 	case "invite":
@@ -103,6 +105,8 @@ USAGE
 
 SERVER
   migrate [-status]                         Apply the embedded schema
+  init <login> [-display <text>]            First-run setup: policy, the first
+                                            administrator, and an enrollment link
   serve [-config <file>] [-dev]             Run the API and admin UI
 
 ENTITIES
@@ -111,6 +115,11 @@ ENTITIES
   host create <name> [-display <text>]     Create a host
   list [type] [-all]                       List entities (-all includes disabled)
   show <type> <name>                       Show one entity and its memberships
+
+ENROLLMENT
+  invite <login> [-for <duration>]         Print a single-use enrollment link
+  invite list                              Outstanding invitations
+  invite revoke <login>                    Withdraw one
 
 MEMBERSHIP
   grant <group> <member> [flags]           Grant membership
