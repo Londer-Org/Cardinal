@@ -16,10 +16,10 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"html/template"
 	"log"
 	"net/http"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -51,6 +51,7 @@ func main() {
 
 	app := &client{
 		provider: provider,
+		issuer:   issuer,
 		verifier: provider.Verifier(&oidc.Config{ClientID: clientID}),
 		oauth: &oauth2.Config{
 			ClientID:    clientID,
@@ -69,6 +70,7 @@ func main() {
 	mux.HandleFunc("GET /login", app.handleLogin)
 	mux.HandleFunc("GET /callback", app.handleCallback)
 	mux.HandleFunc("POST /refresh", app.handleRefresh)
+	mux.HandleFunc("GET /signout", app.handleSignOut)
 	mux.HandleFunc("GET /whoami.json", app.handleWhoami)
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
 		fmt.Fprintln(w, "ok")
@@ -79,8 +81,11 @@ func main() {
 	log.Fatal(server.ListenAndServe())
 }
 
+const sessionCookieName = "rp_session"
+
 type client struct {
 	provider *oidc.Provider
+	issuer   string
 	verifier *oidc.IDTokenVerifier
 	oauth    *oauth2.Config
 
@@ -179,7 +184,7 @@ func (c *client) handleCallback(w http.ResponseWriter, r *http.Request) {
 	c.mu.Unlock()
 
 	http.SetCookie(w, &http.Cookie{
-		Name: "rp_session", Value: sid, Path: "/", HttpOnly: true,
+		Name: sessionCookieName, Value: sid, Path: "/", HttpOnly: true,
 	})
 	http.Redirect(w, r, "/", http.StatusFound)
 }
@@ -222,9 +227,21 @@ func (c *client) handleRefresh(w http.ResponseWriter, r *http.Request) {
 	sess.Refreshed++
 	c.mu.Unlock()
 
+	rotated := refreshed.RefreshToken != previous
+	log.Printf("refreshed: rotated=%v", rotated)
+
+	// One endpoint, two callers. A person clicking the button wants the page
+	// back; the e2e tests want the rotation assertion. Both are POSTs to the
+	// same URL, and Accept is exactly the header that distinguishes them —
+	// a browser form sends text/html and never asks for JSON.
+	if !strings.Contains(r.Header.Get("Accept"), "application/json") {
+		http.Redirect(w, r, "/", http.StatusSeeOther)
+		return
+	}
+
 	writeJSON(w, map[string]any{
 		"refreshed":      sess.Refreshed,
-		"rotated":        refreshed.RefreshToken != previous,
+		"rotated":        rotated,
 		"newAccessToken": refreshed.AccessToken != "",
 	})
 }
@@ -242,24 +259,8 @@ func (c *client) handleWhoami(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (c *client) handleHome(w http.ResponseWriter, r *http.Request) {
-	sess := c.session(r)
-	if sess == nil {
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		fmt.Fprint(w, `<!doctype html><meta charset=utf-8><title>Relying party</title>
-<body style="font:15px/1.6 system-ui;max-width:36rem;margin:4rem auto">
-<h1>Relying party</h1>
-<p>This application knows nothing about Cardinal beyond its issuer URL.</p>
-<p><a href="/login">Sign in with Cardinal</a></p>`)
-		return
-	}
-
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	_ = homePage.Execute(w, sess)
-}
-
 func (c *client) session(r *http.Request) *session {
-	cookie, err := r.Cookie("rp_session")
+	cookie, err := r.Cookie(sessionCookieName)
 	if err != nil {
 		return nil
 	}
@@ -267,21 +268,6 @@ func (c *client) session(r *http.Request) *session {
 	defer c.mu.Unlock()
 	return c.sessions[cookie.Value]
 }
-
-var homePage = template.Must(template.New("home").Funcs(template.FuncMap{
-	"json": func(v any) string {
-		b, _ := json.MarshalIndent(v, "", "  ")
-		return string(b)
-	},
-}).Parse(`<!doctype html><meta charset=utf-8><title>Relying party</title>
-<body style="font:15px/1.6 system-ui;max-width:40rem;margin:4rem auto">
-<h1>Signed in</h1>
-<p>The ID token's signature, issuer, audience and nonce were all verified
-against Cardinal's published metadata.</p>
-<h2>Claims</h2>
-<pre style="background:#f6f6f6;padding:1rem;overflow:auto">{{ json .Claims }}</pre>
-<form method="post" action="/refresh"><button>Refresh tokens</button></form>
-<p>Refreshed {{ .Refreshed }} time(s).</p>`))
 
 // discoverWithRetry polls until the provider is serving.
 func discoverWithRetry(ctx context.Context, issuer string, limit time.Duration) (*oidc.Provider, error) {
