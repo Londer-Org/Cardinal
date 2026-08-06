@@ -187,7 +187,7 @@ export function DataTable<T>({
             value={String(limit)}
             onValueChange={(value) => { onLimit(Number(value)) }}
           >
-            <SelectTrigger size="sm" className="w-[110px]" aria-label="Rows per page">
+            <SelectTrigger size="sm" className="w-[130px]" aria-label="Rows per page">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>

@@ -34,7 +34,10 @@ interface NavItem {
 const ACCOUNT_NAV: NavItem[] = [
   { label: 'Your account', to: '/', icon: UserIcon },
   { label: 'Passkeys', to: '/passkeys', icon: KeyRoundIcon },
-  { label: 'Applications', to: '/connected', icon: AppWindowIcon },
+  // "Connected" rather than "Applications": the Integrations section below has
+  // an entry by that name, and two identical labels in one sidebar is a menu
+  // you have to click to understand.
+  { label: 'Connected apps', to: '/connected', icon: AppWindowIcon },
   { label: 'Decisions', to: '/decisions', icon: ScrollTextIcon },
 ]
 

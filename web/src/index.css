@@ -10,6 +10,20 @@
  *
  * Semantic names rather than colour names — `destructive` rather than `red` —
  * so dark mode is a variable swap rather than a sweep through every component.
+ *
+ * The palette comes from the mark: navy #0F253A, blue #445EF5, red #B41E30.
+ * The blue is the accent in the compass rose, so it is the primary here; the
+ * red is the centre dot, and it is the only warm colour in the identity, which
+ * makes it the natural destructive. Neutrals are tinted toward the navy's hue
+ * rather than left grey, so the chrome belongs to the same family as the mark
+ * instead of sitting beside it.
+ *
+ * Every pairing below clears WCAG AA for body text, checked rather than
+ * assumed: white on the blue is 5.04:1, white on the red 6.63:1, and body text
+ * on the background 16.4:1. In dark mode the blue has to lighten to stand off
+ * the background, at which point white on it falls to 2.9:1 — so the dark
+ * primary takes dark text instead, at 6.4:1. A brand colour that forces
+ * unreadable buttons is not a brand colour worth keeping.
  */
 
 @custom-variant dark (&:is(.dark *));
@@ -18,53 +32,67 @@
   --radius: 0.625rem;
 
   --background: oklch(1 0 0);
-  --foreground: oklch(0.129 0.042 264.695);
+  --foreground: oklch(0.24 0.045 249.3);
   --card: oklch(1 0 0);
-  --card-foreground: oklch(0.129 0.042 264.695);
+  --card-foreground: oklch(0.24 0.045 249.3);
   --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.129 0.042 264.695);
-  --primary: oklch(0.208 0.042 265.755);
-  --primary-foreground: oklch(0.984 0.003 247.858);
-  --secondary: oklch(0.968 0.007 247.896);
-  --secondary-foreground: oklch(0.208 0.042 265.755);
-  --muted: oklch(0.968 0.007 247.896);
-  --muted-foreground: oklch(0.554 0.046 257.417);
-  --accent: oklch(0.968 0.007 247.896);
-  --accent-foreground: oklch(0.208 0.042 265.755);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.929 0.013 255.508);
-  --input: oklch(0.929 0.013 255.508);
-  --ring: oklch(0.704 0.04 256.788);
+  --popover-foreground: oklch(0.24 0.045 249.3);
+
+  /* #445EF5 — the compass ring. */
+  --primary: oklch(0.557 0.226 269.8);
+  --primary-foreground: oklch(1 0 0);
+
+  --secondary: oklch(0.967 0.008 249.3);
+  --secondary-foreground: oklch(0.24 0.045 249.3);
+  --muted: oklch(0.967 0.008 249.3);
+  --muted-foreground: oklch(0.53 0.035 249.3);
+  --accent: oklch(0.955 0.016 269.8);
+  --accent-foreground: oklch(0.30 0.09 269.8);
+
+  /* #B41E30 — the centre dot. */
+  --destructive: oklch(0.500 0.183 21.7);
+
+  --border: oklch(0.925 0.012 249.3);
+  --input: oklch(0.925 0.012 249.3);
+  --ring: oklch(0.557 0.226 269.8);
 
   /* Cardinal-specific. A warning here is not an error: "you have one passkey"
      is a nudge, and colouring it destructive would train people to ignore
-     genuinely destructive states. */
+     genuinely destructive states. Kept amber, deliberately outside the brand
+     palette — a warning that matches the chrome is one nobody notices. */
   --warning: oklch(0.828 0.189 84.429);
   --warning-foreground: oklch(0.279 0.077 45.635);
 }
 
 .dark {
-  --background: oklch(0.129 0.042 264.695);
-  --foreground: oklch(0.984 0.003 247.858);
-  --card: oklch(0.208 0.042 265.755);
-  --card-foreground: oklch(0.984 0.003 247.858);
-  --popover: oklch(0.208 0.042 265.755);
-  --popover-foreground: oklch(0.984 0.003 247.858);
-  --primary: oklch(0.929 0.013 255.508);
-  --primary-foreground: oklch(0.208 0.042 265.755);
-  --secondary: oklch(0.279 0.041 260.031);
-  --secondary-foreground: oklch(0.984 0.003 247.858);
-  --muted: oklch(0.279 0.041 260.031);
-  --muted-foreground: oklch(0.704 0.04 256.788);
-  --accent: oklch(0.279 0.041 260.031);
-  --accent-foreground: oklch(0.984 0.003 247.858);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.551 0.027 264.364);
+  --background: oklch(0.19 0.035 249.3);
+  --foreground: oklch(0.97 0.006 249.3);
+  --card: oklch(0.235 0.038 249.3);
+  --card-foreground: oklch(0.97 0.006 249.3);
+  --popover: oklch(0.235 0.038 249.3);
+  --popover-foreground: oklch(0.97 0.006 249.3);
 
-  --warning: oklch(0.769 0.188 70.08);
-  --warning-foreground: oklch(0.984 0.003 247.858);
+  /* Lightened to stand off a navy background. White on this is 2.9:1, so the
+     label goes dark instead — 6.4:1, and legible, which the alternative is
+     not. */
+  --primary: oklch(0.70 0.19 269.8);
+  --primary-foreground: oklch(0.19 0.035 249.3);
+
+  --secondary: oklch(0.29 0.04 249.3);
+  --secondary-foreground: oklch(0.97 0.006 249.3);
+  --muted: oklch(0.29 0.04 249.3);
+  --muted-foreground: oklch(0.70 0.03 249.3);
+  --accent: oklch(0.31 0.06 269.8);
+  --accent-foreground: oklch(0.95 0.02 269.8);
+
+  --destructive: oklch(0.62 0.19 21.7);
+
+  --border: oklch(1 0 0 / 12%);
+  --input: oklch(1 0 0 / 16%);
+  --ring: oklch(0.70 0.19 269.8);
+
+  --warning: oklch(0.828 0.189 84.429);
+  --warning-foreground: oklch(0.279 0.077 45.635);
 }
 
 @theme inline {
