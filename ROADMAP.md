@@ -80,6 +80,8 @@ The core thesis was tested before any Go was written:
 | ⬜ | Recovery email delivery (config + circularity guard done; SMTP sending pending) |
 | ✅ | Config loading — no unsafe defaults; enforces the recovery/IdP circularity rule |
 | ✅ | Session management + CSRF — hashed tokens, read-time revocation, double-submit CSRF, security headers |
+| ✅ | **Sliding sessions with an absolute cap** — the idle window moves while a session is used, so nobody is signed out mid-task because of when they started; the cap is never extended, so everyone re-authenticates eventually and a stolen token cannot be kept alive by using it |
+| ✅ | **Step-up asks in place** — a dialog wherever the user is, rather than the section emptying and leaving them to find the passkeys page |
 | ✅ | **Step-up re-authentication** — prove the key again without a new session. The freshness rule had been in the policy since Phase 0 with no way to satisfy it on demand: `auth_at` was set once, at sign-in, so administration expired five minutes later mid-task and only a full sign-out restored it |
 | ✅ | Recovery codes (Argon2id, single-use) and ≥2 passkeys enforced |
 | ✅ | **Dual-control admin recovery** (ADR 0015) — two distinct administrators, neither the subject, to restore an account that can already sign in. Fixed a real escalation: issuing invitations sat with `user-admins`, so one could mint a link for a `directory-admins` account and become them |

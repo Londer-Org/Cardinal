@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"slices"
+	"time"
 
 	"github.com/arthur-lonfils/cardinal/internal/claims"
 	"github.com/arthur-lonfils/cardinal/internal/policy"
@@ -154,15 +155,14 @@ func (s *Server) logAdminDecision(ctx context.Context, subject *claims.Subject, 
 
 // adminStatus is what the UI needs to render the admin section sensibly.
 type adminStatus struct {
-	// Allowed is true when the session can do anything administrative at all.
-	// It is the union, not the broad action: a user-admin can manage people and
-	// should see the section, even though AdministerDirectory would refuse them.
+	// Allowed is true when the session can do something administrative right
+	// now, without touching a key first.
 	Allowed bool
 
-	// ManageUsers and ManageApplications drive which parts render. Showing a
-	// user-admin a client-registration form they will be refused is worse than
-	// not showing it — they would reasonably conclude the system is broken
-	// rather than that they lack a permission.
+	// ManageUsers and ManageApplications say what this person is entitled to,
+	// not what they can do this second. A section that disappears when
+	// authentication goes stale reads as a broken system; one that stays and
+	// asks for a key reads as a policy.
 	ManageUsers        bool
 	ManageApplications bool
 
@@ -179,11 +179,22 @@ type adminStatus struct {
 // Not a security boundary — every admin endpoint evaluates the policy itself —
 // but a section someone cannot use should say why rather than disappear.
 func (s *Server) adminStatusFor(ctx context.Context, session *store.Session) adminStatus {
-	var (
-		status adminStatus
-		stale  bool
-	)
+	// Asked twice: once as the session stands, and once as it would be with a
+	// key touched just now.
+	//
+	// The tiers report the second answer, so a section does not vanish the
+	// moment authentication goes stale — it stays, and touching a key fills it
+	// in. The first answer is only used to decide whether to ask.
+	//
+	// The freshness rule is a forbid on every principal, so its firing says
+	// nothing about membership on its own. Reporting NeedsReauth from that
+	// alone would tell an ordinary user with an old session to confirm
+	// themselves for a section they could never use.
+	fresh := *session
+	fresh.AuthAt = time.Now()
+	fresh.DeviceBound = true
 
+	var status adminStatus
 	for _, tier := range []struct {
 		action types.EntityUID
 		into   *bool
@@ -191,20 +202,27 @@ func (s *Server) adminStatusFor(ctx context.Context, session *store.Session) adm
 		{policy.ActionManageUsers, &status.ManageUsers},
 		{policy.ActionManageApplications, &status.ManageApplications},
 	} {
-		decision, _, err := s.decideAction(ctx, session, tier.action)
+		entitled, _, err := s.decideAction(ctx, &fresh, tier.action)
 		if err != nil {
 			return adminStatus{}
 		}
-		*tier.into = decision.Allowed
-		status.Allowed = status.Allowed || decision.Allowed
+		*tier.into = entitled.Allowed
 
-		// Only the freshness rule is recoverable by the user. Not being a
-		// member is not something tapping a key will fix, and offering it would
-		// be a lie.
-		stale = stale || slices.Contains(decision.Reasons,
-			"admin-requires-fresh-device-bound-auth")
+		if !entitled.Allowed {
+			continue
+		}
+
+		now, _, err := s.decideAction(ctx, session, tier.action)
+		if err != nil {
+			return adminStatus{}
+		}
+		if now.Allowed {
+			status.Allowed = true
+		} else {
+			// Entitled, but not right now. That is the one refusal a user can
+			// fix, and the only one worth offering a key for.
+			status.NeedsReauth = true
+		}
 	}
-
-	status.NeedsReauth = !status.Allowed && stale
 	return status
 }

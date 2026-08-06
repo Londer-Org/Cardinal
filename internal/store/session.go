@@ -25,6 +25,21 @@ var (
 )
 
 // Session is an authenticated session.
+// Two clocks bound a session, which is what every session system converges on.
+//
+// IdleSessionTTL is how long it survives without being used, and it slides: a
+// request pushes it forward, so somebody working through a morning is not
+// signed out because of when they started.
+//
+// AbsoluteSessionTTL is the hard end, never extended. It is what makes
+// "everyone re-authenticates eventually" true rather than aspirational —
+// sliding expiry with no cap means a stolen token is valid indefinitely
+// provided it is used, which is precisely the case a cap exists for.
+const (
+	IdleSessionTTL     = 12 * time.Hour
+	AbsoluteSessionTTL = 7 * 24 * time.Hour
+)
+
 type Session struct {
 	ID        uuid.UUID
 	SubjectID uuid.UUID
@@ -44,6 +59,9 @@ type Session struct {
 	DeviceBound bool
 
 	CredentialID *uuid.UUID
+
+	// AbsoluteExpiry is the hard end of this session, never extended.
+	AbsoluteExpiry time.Time
 }
 
 // Expired reports whether the session has passed its validity window.
@@ -55,8 +73,18 @@ func (s *Session) Expired() bool { return time.Now().After(s.ValidUntil) }
 
 // SessionSpec describes a session to be created.
 type SessionSpec struct {
-	AuthMethod   string
-	TTL          time.Duration
+	AuthMethod string
+
+	// TTL is the idle window: how long the session survives without being used.
+	// It slides forward as the session is used.
+	TTL time.Duration
+
+	// AbsoluteTTL is the hard end, never extended. Zero means
+	// AbsoluteSessionTTL. A deployment wanting shorter-lived sessions than the
+	// default sets this rather than shortening the idle window, which would
+	// only mean signing people out mid-task more often.
+	AbsoluteTTL time.Duration
+
 	DeviceBound  bool
 	CredentialID *uuid.UUID
 }
@@ -88,13 +116,19 @@ func createSessionTx(ctx context.Context, tx pgx.Tx, subjectID uuid.UUID, spec S
 		CredentialID: spec.CredentialID,
 	}
 
+	absolute := spec.AbsoluteTTL
+	if absolute <= 0 {
+		absolute = AbsoluteSessionTTL
+	}
+	s.AbsoluteExpiry = now.Add(absolute)
+
 	err := tx.QueryRow(ctx, `
 		INSERT INTO sessions (subject_id, token_hash, valid_period, auth_method,
-		                      auth_at, device_bound, credential_id)
-		VALUES ($1, $2, tstzrange($3::timestamptz, $4::timestamptz), $5, $6, $7, $8)
+		                      auth_at, device_bound, credential_id, absolute_expiry)
+		VALUES ($1, $2, tstzrange($3::timestamptz, $4::timestamptz), $5, $6, $7, $8, $9)
 		RETURNING id`,
 		subjectID, sum[:], s.ValidFrom, s.ValidUntil,
-		s.AuthMethod, s.AuthAt, s.DeviceBound, s.CredentialID,
+		s.AuthMethod, s.AuthAt, s.DeviceBound, s.CredentialID, s.AbsoluteExpiry,
 	).Scan(&s.ID)
 	if err != nil {
 		return nil, fmt.Errorf("store: creating session: %w", err)
@@ -134,15 +168,45 @@ func (s *Store) CreateSession(ctx context.Context, subjectID uuid.UUID, spec Ses
 func (s *Store) LookupSession(ctx context.Context, token string) (*Session, error) {
 	sum := sha256.Sum256([]byte(token))
 
+	// Resolved and extended in one statement.
+	//
+	// The extension is the whole point: a session ends because its holder
+	// stopped, not because of when they started. It is written only when the
+	// idle window has actually moved by more than a minute, so an active tab
+	// does not turn every request into a write — the mistake that makes people
+	// blame Postgres for session storage.
+	//
+	// least() against absolute_expiry is what keeps the second clock honest:
+	// sliding expiry without a cap means a stolen token is valid forever
+	// provided it is used.
 	var sess Session
 	err := s.pool.QueryRow(ctx, `
-		SELECT id, subject_id, lower(valid_period), upper(valid_period),
-		       auth_method, auth_at, device_bound, credential_id
-		  FROM sessions
-		 WHERE token_hash = $1 AND valid_period @> now()`,
-		sum[:],
+		UPDATE sessions SET valid_period = tstzrange(
+		         lower(valid_period),
+		         least(now() + $2::interval, absolute_expiry))
+		 WHERE token_hash = $1
+		   AND valid_period @> now()
+		   AND upper(valid_period) < least(now() + $2::interval, absolute_expiry) - interval '1 minute'
+		RETURNING id, subject_id, lower(valid_period), upper(valid_period),
+		          auth_method, auth_at, device_bound, credential_id, absolute_expiry`,
+		sum[:], IdleSessionTTL,
 	).Scan(&sess.ID, &sess.SubjectID, &sess.ValidFrom, &sess.ValidUntil,
-		&sess.AuthMethod, &sess.AuthAt, &sess.DeviceBound, &sess.CredentialID)
+		&sess.AuthMethod, &sess.AuthAt, &sess.DeviceBound, &sess.CredentialID,
+		&sess.AbsoluteExpiry)
+
+	if errors.Is(err, pgx.ErrNoRows) {
+		// Either the session is invalid, or it was extended less than a minute
+		// ago and needs no write. Read it.
+		err = s.pool.QueryRow(ctx, `
+			SELECT id, subject_id, lower(valid_period), upper(valid_period),
+			       auth_method, auth_at, device_bound, credential_id, absolute_expiry
+			  FROM sessions
+			 WHERE token_hash = $1 AND valid_period @> now()`,
+			sum[:],
+		).Scan(&sess.ID, &sess.SubjectID, &sess.ValidFrom, &sess.ValidUntil,
+			&sess.AuthMethod, &sess.AuthAt, &sess.DeviceBound, &sess.CredentialID,
+			&sess.AbsoluteExpiry)
+	}
 
 	if errors.Is(err, pgx.ErrNoRows) {
 		// Deliberately indistinguishable: whether the token was wrong, expired

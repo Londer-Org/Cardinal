@@ -194,8 +194,10 @@ func TestSignOutRevokesIssuedTokens(t *testing.T) {
 
 	var sessionID string
 	require.NoError(t, s.Pool().QueryRow(ctx, `
-		INSERT INTO sessions (subject_id, token_hash, valid_period, auth_method)
-		VALUES ($1, $2, tstzrange(now(), now() + interval '1 hour'), 'passkey')
+		INSERT INTO sessions (subject_id, token_hash, valid_period, auth_method,
+		                      absolute_expiry)
+		VALUES ($1, $2, tstzrange(now(), now() + interval '1 hour'), 'passkey',
+		        now() + interval '7 days')
 		RETURNING id`, user.ID, []byte("session-hash")).Scan(&sessionID))
 
 	sid := uuidMust(t, sessionID)

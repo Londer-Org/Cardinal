@@ -102,9 +102,9 @@ func TestRedactionRemovesSessions(t *testing.T) {
 
 	_, err := s.Pool().Exec(ctx, `
 		INSERT INTO sessions (subject_id, token_hash, valid_period,
-		                      auth_method, client_ip, user_agent)
+		                      auth_method, client_ip, user_agent, absolute_expiry)
 		VALUES ($1, $2, tstzrange(now(), now() + interval '1 hour'),
-		        'passkey', '192.0.2.10', 'Mozilla/5.0')`,
+		        'passkey', '192.0.2.10', 'Mozilla/5.0', now() + interval '7 days')`,
 		alice.ID, []byte("not-a-real-token-hash"))
 	require.NoError(t, err)
 

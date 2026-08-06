@@ -22,6 +22,7 @@ import { useSession } from '@/features/auth/useAuth'
 import { pendingAuthorizationID, useOIDCResume } from '@/features/auth/useOIDCResume'
 import { ConsentPrompt } from '@/features/consent/ConsentPrompt'
 import { EnrollPage, invitationToken } from '@/features/enroll/EnrollPage'
+import { StepUpDialog } from '@/features/auth/StepUpDialog'
 
 /**
  * Everything that wraps a page: authentication, the OIDC hand-off, and the
@@ -159,6 +160,12 @@ function Authenticated() {
         <main className="min-h-0 min-w-0 flex-1 overflow-y-auto p-4 md:p-6">
           <Outlet />
         </main>
+
+        {/* Mounted once, at the top. Any request refused for want of a fresh
+            credential opens it, wherever the user happens to be — rather than
+            the section they were looking at emptying itself and leaving them to
+            work out that Passkeys is where the fix lives. */}
+        <StepUpDialog />
       </SidebarInset>
     </SidebarProvider>
   )

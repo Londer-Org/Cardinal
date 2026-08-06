@@ -141,9 +141,11 @@ func tieredClient(t *testing.T, login, groupID string) (*http.Client, string) {
 
 	seedSQL(t, `DELETE FROM sessions WHERE token_hash = sha256('`+token+`'::bytea)`)
 	seedSQL(t, `INSERT INTO sessions
-	              (subject_id, token_hash, valid_period, auth_method, auth_at, device_bound)
+	              (subject_id, token_hash, valid_period, auth_method, auth_at,
+	               device_bound, absolute_expiry)
 	            SELECT e.id, sha256('`+token+`'::bytea),
-	                   tstzrange(now(), now() + interval '1 hour'), 'passkey', now(), true
+	                   tstzrange(now(), now() + interval '1 hour'), 'passkey', now(),
+	                   true, now() + interval '7 days'
 	              FROM entities e WHERE e.name = '`+login+`'`)
 
 	c := client(t)

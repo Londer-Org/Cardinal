@@ -33,7 +33,9 @@ const CeremonyTTL = 5 * time.Minute
 // Policy can still demand a *fresh* authentication for privileged actions via
 // Cedar (step-up), so this being a working day does not mean administrative
 // actions go unchallenged for a working day.
-const SessionTTL = 12 * time.Hour
+// Kept as the idle window. The absolute cap lives in the store, because it is
+// a property of the session row rather than of a ceremony.
+const SessionTTL = store.IdleSessionTTL
 
 var (
 	ErrCeremonyNotFound = errors.New("auth: ceremony not found or expired")

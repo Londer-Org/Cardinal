@@ -5,15 +5,33 @@ import { errorSchema } from './schemas'
 export class ApiError extends Error {
   readonly status: number
 
-  constructor(status: number, message: string) {
+  /** Policy IDs that produced a refusal, when the server named any. */
+  readonly policy: string[]
+
+  constructor(status: number, message: string, policy: string[] = []) {
     super(message)
     this.name = 'ApiError'
     this.status = status
+    this.policy = policy
   }
 
   /** True when the session has gone — the UI should return to the login screen. */
   get isUnauthenticated(): boolean {
     return this.status === 401
+  }
+
+  /**
+   * True when the only thing missing is a recent, device-bound credential.
+   *
+   * Distinguished from every other refusal because it is the one the user can
+   * fix, in about two seconds, by touching a key. Anything else is a permission
+   * they do not have, and offering them a key would be a lie.
+   */
+  get needsStepUp(): boolean {
+    return (
+      this.status === 403 &&
+      this.policy.includes('admin-requires-fresh-device-bound-auth')
+    )
   }
 }
 
@@ -69,14 +87,48 @@ export async function request<T>(
 
   if (!response.ok) {
     const parsed = errorSchema.safeParse(body)
-    throw new ApiError(
+    const error = new ApiError(
       response.status,
       parsed.success ? parsed.data.error : `Request failed (${response.status}).`,
+      policyOf(body),
     )
+    if (error.needsStepUp) {
+      // Announced rather than handled here: this module knows nothing about
+      // React, and the alternative is every caller remembering to check.
+      stepUpNeeded()
+    }
+    throw error
   }
 
   // The single place `unknown` is allowed to exist. Past this line everything is
   // typed, and a server change that breaks the contract fails loudly here rather
   // than surfacing as `undefined` three components away.
   return schema.parse(body)
+}
+
+/** Reads the policy IDs a refusal named, if it named any. */
+function policyOf(body: unknown): string[] {
+  if (typeof body !== 'object' || body === null) return []
+  const policy = (body as { policy?: unknown }).policy
+  if (!Array.isArray(policy)) return []
+  return policy.filter((id): id is string => typeof id === 'string')
+}
+
+type StepUpListener = () => void
+const stepUpListeners = new Set<StepUpListener>()
+
+/**
+ * Called whenever a request is refused for want of a fresh credential.
+ *
+ * A module-level registry rather than a React context, because the thing that
+ * detects this is a fetch wrapper with no component around it — and threading a
+ * callback through every query and mutation would mean each one remembering.
+ */
+function stepUpNeeded() {
+  for (const listener of stepUpListeners) listener()
+}
+
+export function onStepUpNeeded(listener: StepUpListener): () => void {
+  stepUpListeners.add(listener)
+  return () => stepUpListeners.delete(listener)
 }

@@ -191,9 +191,15 @@ Two things will refuse you, both deliberately:
 
 - **A synced passkey is not enough.** Administration needs a device-bound
   credential — a hardware key, not one living in a cloud account.
-- **A session older than five minutes is not enough.** The tab stays, but shows
-  **Confirm it is you** instead of the application list. Tap your key and it
-  comes back — your session is kept, only the key is re-proved.
+- **A session older than five minutes is not enough.** The section stays where
+  it is and a dialog asks for your key. Tap it and the page fills in — your
+  session is kept, only the key is re-proved.
+
+Sessions themselves slide: using Cardinal pushes the idle window forward, so
+working through a morning does not sign you out halfway. An absolute cap of
+seven days is never extended, so everybody re-authenticates eventually — that
+cap is what stops a stolen session cookie from lasting indefinitely just because
+somebody keeps using it.
 
 ### Deciding who may use which application
 
