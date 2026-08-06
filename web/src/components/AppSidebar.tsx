@@ -1,16 +1,5 @@
 import { Link, useNavigate, useRouterState } from '@tanstack/react-router'
-import {
-  AppWindowIcon,
-  ChevronsUpDownIcon,
-  KeyRoundIcon,
-  LayersIcon,
-  LifeBuoyIcon,
-  LogOutIcon,
-  ScrollTextIcon,
-  UserIcon,
-  UsersIcon,
-} from 'lucide-react'
-import type { LucideIcon } from 'lucide-react'
+import { ChevronsUpDownIcon, LogOutIcon, UserIcon } from 'lucide-react'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -33,42 +22,14 @@ import {
 } from '@/components/ui/sidebar'
 import { CardinalMark } from '@/components/CardinalMark'
 import { useLogout, useSession } from '@/features/auth/useAuth'
-
-interface NavItem {
-  label: string
-  to: string
-  icon: LucideIcon
-}
-
-// "Your account" is not here — it lives in the account menu at the bottom,
-// beside the identity it belongs to.
-const ACCOUNT_NAV: NavItem[] = [
-  { label: 'Passkeys', to: '/passkeys', icon: KeyRoundIcon },
-  // "Connected" rather than "Applications": the Integrations section below has
-  // an entry by that name, and two identical labels in one sidebar is a menu
-  // you have to click to understand.
-  { label: 'Connected apps', to: '/connected', icon: AppWindowIcon },
-  { label: 'Decisions', to: '/decisions', icon: ScrollTextIcon },
-]
-
-const PEOPLE_NAV: NavItem[] = [
-  { label: 'People', to: '/admin/users', icon: UsersIcon },
-  { label: 'Groups', to: '/admin/groups', icon: LayersIcon },
-  { label: 'Recovery', to: '/admin/recovery', icon: LifeBuoyIcon },
-]
-
-const APPS_NAV: NavItem[] = [
-  { label: 'Applications', to: '/admin/applications', icon: AppWindowIcon },
-]
+import { ACCOUNT, NAV } from '@/lib/nav'
+import type { NavItem } from '@/lib/nav'
 
 /**
- * The one place navigation lives.
+ * The sidebar.
  *
- * Sections are hidden by tier, which is presentation only — every endpoint
- * behind them evaluates the policy itself. Hiding a section someone cannot use
- * beats letting them find out by being refused, and showing a user-admin an
- * Applications link they will be told no about reads as a broken system rather
- * than as a permission they lack.
+ * The sections come from lib/nav, which the breadcrumbs read too — so the
+ * answer to "where am I" is written once rather than twice.
  */
 export function AppSidebar() {
   const { session } = useSession()
@@ -105,14 +66,18 @@ export function AppSidebar() {
       </SidebarHeader>
 
       <SidebarContent>
-        <NavGroup label="Account" items={ACCOUNT_NAV} pathname={pathname} />
-
-        {session?.canManageUsers === true && (
-          <NavGroup label="Directory" items={PEOPLE_NAV} pathname={pathname} />
-        )}
-        {session?.canManageApplications === true && (
-          <NavGroup label="Integrations" items={APPS_NAV} pathname={pathname} />
-        )}
+        {NAV.filter(
+          (section) =>
+            section.visible === undefined ||
+            (session !== null && section.visible(session)),
+        ).map((section) => (
+          <NavGroup
+            key={section.label}
+            label={section.label}
+            items={section.items}
+            pathname={pathname}
+          />
+        ))}
       </SidebarContent>
 
       <SidebarFooter>
@@ -196,11 +161,11 @@ function NavUser() {
         <DropdownMenuItem
           onSelect={() => {
             setOpenMobile(false)
-            void navigate({ to: '/' })
+            void navigate({ to: ACCOUNT.to })
           }}
         >
           <UserIcon />
-          Your account
+          {ACCOUNT.label}
         </DropdownMenuItem>
 
         <DropdownMenuSeparator />
@@ -243,15 +208,15 @@ function initials(name: string): string {
  * A group of links.
  *
  * `isActive` is a prefix match so a detail route keeps its section highlighted —
- * /admin/users/alonfils should not make People look unselected, which is the
- * moment a sidebar stops telling you where you are.
+ * /directory/people/alonfils should not make People look unselected, which is
+ * the moment a sidebar stops telling you where you are.
  */
 function NavGroup({
   label,
   items,
   pathname,
 }: {
-  label?: string
+  label: string
   items: NavItem[]
   pathname: string
 }) {
@@ -259,14 +224,14 @@ function NavGroup({
 
   return (
     <SidebarGroup>
-      {label !== undefined && <SidebarGroupLabel>{label}</SidebarGroupLabel>}
+      <SidebarGroupLabel>{label}</SidebarGroupLabel>
       <SidebarMenu>
         {items.map((item) => (
           <SidebarMenuItem key={item.to}>
             <SidebarMenuButton
               asChild
               isActive={
-                item.to === '/' ? pathname === '/' : pathname.startsWith(item.to)
+                pathname === item.to || pathname.startsWith(`${item.to}/`)
               }
               tooltip={item.label}
             >

@@ -17,7 +17,7 @@ import { RequiresFreshAuth } from '@/features/auth/RequiresFreshAuth'
 import { ViewHeader } from '@/views/ViewHeader'
 
 function GroupDetailViewBody() {
-  const { name } = useParams({ from: '/admin/groups/$name' })
+  const { name } = useParams({ from: '/directory/groups/$name' })
   const { data: group, isPending, error } = useGroup(name)
   const revoke = useRevokeMembership()
 
@@ -81,7 +81,7 @@ function GroupDetailViewBody() {
                 >
                   <span className="min-w-0 text-sm">
                     <Link
-                      to="/admin/users/$login"
+                      to="/directory/people/$login"
                       params={{ login: grant.member }}
                       className="font-medium hover:underline"
                     >

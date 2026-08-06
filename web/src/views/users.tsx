@@ -103,7 +103,7 @@ function UsersViewBody() {
         isPending={isPending}
         empty="Nobody yet."
         onRowClick={(u) => {
-          void navigate({ to: '/admin/users/$login', params: { login: u.login } })
+          void navigate({ to: '/directory/people/$login', params: { login: u.login } })
         }}
       />
     </div>

@@ -25,55 +25,55 @@ const accountRoute = createRoute({
 
 const passkeysRoute = createRoute({
   getParentRoute: () => rootRoute,
-  path: '/passkeys',
+  path: '/access/passkeys',
   component: lazyRouteComponent(() => import('@/views/passkeys'), 'PasskeysView'),
 })
 
 const connectedRoute = createRoute({
   getParentRoute: () => rootRoute,
-  path: '/connected',
+  path: '/access/connected',
   component: lazyRouteComponent(() => import('@/views/connected'), 'ConnectedView'),
 })
 
 const decisionsRoute = createRoute({
   getParentRoute: () => rootRoute,
-  path: '/decisions',
+  path: '/access/decisions',
   component: lazyRouteComponent(() => import('@/views/decisions'), 'DecisionsView'),
 })
 
 const usersRoute = createRoute({
   getParentRoute: () => rootRoute,
-  path: '/admin/users',
+  path: '/directory/people',
   component: lazyRouteComponent(() => import('@/views/users'), 'UsersView'),
 })
 
 const userDetailRoute = createRoute({
   getParentRoute: () => rootRoute,
-  path: '/admin/users/$login',
+  path: '/directory/people/$login',
   component: lazyRouteComponent(() => import('@/views/user-detail'), 'UserDetailView'),
 })
 
 const groupsRoute = createRoute({
   getParentRoute: () => rootRoute,
-  path: '/admin/groups',
+  path: '/directory/groups',
   component: lazyRouteComponent(() => import('@/views/groups'), 'GroupsView'),
 })
 
 const groupDetailRoute = createRoute({
   getParentRoute: () => rootRoute,
-  path: '/admin/groups/$name',
+  path: '/directory/groups/$name',
   component: lazyRouteComponent(() => import('@/views/group-detail'), 'GroupDetailView'),
 })
 
 const applicationsRoute = createRoute({
   getParentRoute: () => rootRoute,
-  path: '/admin/applications',
+  path: '/integrations/applications',
   component: lazyRouteComponent(() => import('@/views/applications'), 'ApplicationsView'),
 })
 
 const recoveryRoute = createRoute({
   getParentRoute: () => rootRoute,
-  path: '/admin/recovery',
+  path: '/directory/recovery',
   component: lazyRouteComponent(() => import('@/views/recovery'), 'RecoveryView'),
 })
 

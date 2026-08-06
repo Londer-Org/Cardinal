@@ -23,7 +23,7 @@ import { RequiresFreshAuth } from '@/features/auth/RequiresFreshAuth'
 import { ViewHeader } from '@/views/ViewHeader'
 
 function UserDetailViewBody() {
-  const { login } = useParams({ from: '/admin/users/$login' })
+  const { login } = useParams({ from: '/directory/people/$login' })
   const { data: user, isPending, error } = useUser(login)
   const disable = useDisableUser()
   const revoke = useRevokeMembership()
@@ -138,7 +138,7 @@ function UserDetailViewBody() {
                       onClick={() => {
                         disable.mutate(login, {
                           onSuccess: () => {
-                            void navigate({ to: '/admin/users' })
+                            void navigate({ to: '/directory/people' })
                           },
                         })
                       }}

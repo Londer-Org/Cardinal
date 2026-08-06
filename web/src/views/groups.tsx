@@ -132,7 +132,7 @@ function GroupsViewBody() {
           </Select>
         }
         onRowClick={(g) => {
-          void navigate({ to: '/admin/groups/$name', params: { name: g.name } })
+          void navigate({ to: '/directory/groups/$name', params: { name: g.name } })
         }}
       />
     </div>
