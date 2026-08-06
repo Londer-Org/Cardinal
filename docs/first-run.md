@@ -3,6 +3,23 @@
 Everything below works today. It takes about ten minutes, and the last section
 is the part nobody has done yet — a real passkey against a real browser.
 
+## 0. Starting over
+
+If the development database fills up with experiments:
+
+```sh
+make reset            # or: make reset ADMIN=you
+```
+
+It destroys everything in the dev database, reapplies migrations, publishes the
+default policy, creates you as an administrator, and prints an enrollment link.
+It asks before doing any of that.
+
+Tests never need it. The store suite gets a fresh container per run through
+testcontainers, and the end-to-end stack has its own database in
+`examples/compose.yml` — so `go test ./...` touches neither this database nor
+anything in it.
+
 ## 1. Database and build
 
 ```sh

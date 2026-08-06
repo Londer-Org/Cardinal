@@ -21,10 +21,35 @@ down: ## Stop the database (keeps data)
 	docker compose down
 
 .PHONY: reset
-reset: ## Destroy the database and recreate it from migrations
+reset: ## Destroy the dev database and recreate it with a first administrator
+	@# For when the development database has filled up with experiments.
+	@#
+	@# Tests never need this. The store suite gets a fresh container per run via
+	@# testcontainers, and the end-to-end stack has its own database in
+	@# examples/compose.yml — so a run of `go test ./...` touches neither this
+	@# database nor anything in it. What lands here is manual poking, which has
+	@# nowhere else to go.
+	@#
+	@# It leaves you able to sign in, which the previous version did not: a
+	@# migrated database with no accounts is one nobody can reach, and working
+	@# that out from scratch each time is exactly the friction that stops people
+	@# resetting a database they should have reset.
+	@printf 'This destroys every account, credential and audit record in\n%s\n\nType "yes" to continue: ' '$(DSN)'
+	@read -r reply && [ "$$reply" = yes ] || { echo 'aborted'; exit 1; }
 	docker compose down -v
-	$(MAKE) up
-	$(MAKE) migrate
+	@$(MAKE) --no-print-directory up
+	@$(MAKE) --no-print-directory migrate
+	@CARDINAL_DSN="$(DSN)" ./bin/cardinal policy publish policies/cardinal.cedar \
+		-description 'development default' -activate | sed 's/^/  /'
+	@CARDINAL_DSN="$(DSN)" ./bin/cardinal user create '$(ADMIN)' >/dev/null
+	@CARDINAL_DSN="$(DSN)" ./bin/cardinal grant directory-admins '$(ADMIN)' \
+		-reason 'founding admin' >/dev/null
+	@echo
+	@echo '==> start the server, then open this to register a passkey:'
+	@CARDINAL_DSN="$(DSN)" ./bin/cardinal invite '$(ADMIN)' 2>/dev/null
+
+# Who `make reset` makes an administrator. Override with `make reset ADMIN=you`.
+ADMIN ?= $(USER)
 
 .PHONY: migrate
 migrate: build ## Apply the schema (same code path as a deployed container)
