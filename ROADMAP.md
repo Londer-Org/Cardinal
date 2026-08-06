@@ -193,6 +193,9 @@ works.
 | ✅ | **System groups vs application groups** — membership of a system group confers authority inside Cardinal, so granting one needs `AdministerDirectory`. Closed a third escalation: a `user-admin` could grant themselves `directory-admins`. Other groups may belong to an application, so `aura-users` sits beside `aura` |
 | ✅ | **Administration is tiered** — `user-admins` (people, groups, invitations) and `security-admins` (OIDC applications) alongside `directory-admins`, which stays the superset. Nobody is migrated, so narrowing is deliberate. Step-up covers every admin action, not just the broad one |
 | ✅ | **Who may use which application** — an `AccessApplication` decision enforced on every path that can complete an authorization, logged, and named in the refusal. Ships permissive, because Cedar is default-deny and a version that locked everyone out of everything on upgrade is not a safe default |
+| ✅ | **A navigable console** — sidebar, breadcrumbs and server-paginated tables. The URL, the sidebar and the breadcrumb trail are read from one navigation model rather than three that agree until someone adds a route; they already disagreed, with the sidebar filing People under Directory while the breadcrumb said Admin. Tables fill the viewport and scroll their rows under a sticky header, so the search box and the pagination stay reachable in a long list |
+| ✅ | **A home page** — what needs your attention first, where everything is second. Gated on entitlement *and* freshness, which is not the same test: `canManageUsers` reports what a fresh key would allow, deliberately, so sections do not vanish when authentication goes stale — so gating on it alone meant a stale administrator was met by a security-key prompt for the crime of loading a page. Console reads are filtered out of its decision list; every table this UI draws is itself an authorized action, and they buried everything that meant anything |
+| ✅ | **A palette taken from the mark** — contrast computed rather than eyeballed, which changed a decision: the dark-mode primary takes dark text at 6.4:1 because white on it falls to 2.9:1. Fixed a defect hiding in plain sight — the sidebar palette was never defined, and an undefined custom property compiles to nothing rather than to something wrong, so the console had no hover and no highlight on the page you were on |
 | ✅ | **Account enrollment for a new user** — done in Phase 1 via invitations (ADR 0013) |
 | ⬜ | OpenID Foundation conformance suite |
 
@@ -255,10 +258,10 @@ Tracked openly, from [the threat model](docs/threat-model.md):
 | Gap | Consequence | Phase |
 |---|---|---|
 | No external anchor for the hash chain | A superuser could rewrite it wholesale and pass validation | Post-1.0 |
-| Session revocation propagation unspecified | A cached decision could outlive a revocation | Blocks Phase 2 |
+| No decision cache yet, so nothing to invalidate | When the agent caches offline, a cached decision could outlive a revocation | Phase 4 |
 | SSH CA key management undecided | Highest-stakes remaining decision | Blocks Phase 4 |
-| No rate limiting or lockout | Online guessing against TOTP | Phase 1 |
-| `sensitive` attribute flag not enforced | The registry declares it; nothing encrypts yet | Phase 1 |
+| No account lockout | Nothing guessable is unlimited today; reopens with TOTP | With TOTP |
+| The `sensitive` flag is declared and unread | The registry lets an operator mark an attribute sensitive; nothing encrypts or redacts on it | Phase 1 |
 | No external security review | Self-assessment only | Before production |
 
 ## Standing risks

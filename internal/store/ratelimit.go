@@ -20,8 +20,13 @@ var (
 	LimitLoginBegin  = RateLimit{Scope: "login:begin", Limit: 20, Window: time.Minute}
 	LimitLoginFinish = RateLimit{Scope: "login:finish", Limit: 20, Window: time.Minute}
 	LimitRecovery    = RateLimit{Scope: "recovery", Limit: 5, Window: 15 * time.Minute}
-	LimitBreakGlass  = RateLimit{Scope: "breakglass", Limit: 5, Window: 15 * time.Minute}
 )
+
+// Deliberately absent: a break-glass limit. The feature was removed in ADR 0014
+// and its limit outlived it here, guarding an endpoint that no longer exists —
+// exported, so no linter reads it as dead. Rows already written under the old
+// scope are left alone; they are a record of what was attempted while it
+// existed, and rate_limits is swept by window anyway.
 
 // Allow records an attempt and reports whether it is within the allowance.
 //

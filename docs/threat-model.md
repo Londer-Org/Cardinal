@@ -149,7 +149,10 @@ question and is the highest-stakes decision remaining in Phase 4.
   centralised identity and is why availability is a phase-0 constraint.
 - **Hosts survive it**: issued certificates stay valid and the agent serves
   cached identity, so a Cardinal outage does not lock anyone out of SSH.
-- Rate limiting and lockout are Phase 1 work.
+- **Rate limiting shipped** — fixed-window, fails closed, proxy-aware, on login
+  and recovery. Account lockout did not, and is not currently needed: a passkey
+  cannot be guessed, and the one guessable secret left is a recovery code, which
+  is capped. Revisit when TOTP arrives.
 
 **Residual risk:** database loss. Mitigated by PITR plus a restore drill that
 also verifies chain integrity — the restore path is proven, not assumed.
@@ -180,10 +183,10 @@ Honest list, tracked in [ROADMAP.md](../ROADMAP.md):
 | Gap | Consequence | Phase |
 |---|---|---|
 | **No external anchor for the hash chain** | A superuser could rewrite it whole and pass validation | Post-1.0 |
-| **Session revocation propagation unspecified** | A cached decision could outlive a revocation | Blocks Phase 2 |
+| **No decision cache yet, so nothing to invalidate** | When the agent caches offline, a cached decision could outlive a revocation | Phase 4 |
 | **SSH CA key management undecided** | Highest-stakes remaining decision | Blocks Phase 4 |
-| **No rate limiting or lockout** | Online guessing against TOTP | Phase 1 |
-| **Sensitive attributes not yet encrypted at rest** | The registry has a `sensitive` flag; nothing enforces it | Phase 1 |
+| **No account lockout** | Nothing guessable is unlimited today — passkeys cannot be guessed and recovery codes are capped at 5 per 15 minutes. Reopens the moment TOTP exists | With TOTP |
+| **The `sensitive` flag is declared and unread** | The registry lets an operator mark an attribute sensitive; no code encrypts or redacts on it, so the flag promises something nothing delivers | Phase 1 |
 | **No external security review** | Self-assessment only | Before production |
 
 The last one matters most. This document is written by the person who wrote the
