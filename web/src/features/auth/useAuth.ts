@@ -13,10 +13,30 @@ export function useSession() {
       !(error instanceof ApiError && error.isUnauthenticated) && failureCount < 2,
   })
 
+  // React Query keeps the last successful data when a later fetch errors, which
+  // is right for a flaky endpoint and wrong for this one: a 401 means the
+  // session is gone, and continuing to render the account page from stale data
+  // would leave someone looking at an account they are no longer signed in to
+  // while every request behind it fails. That is exactly what a break-glass
+  // session does after fifteen minutes.
+  const signedOut =
+    query.error instanceof ApiError && query.error.isUnauthenticated
+
   return {
-    session: query.data ?? null,
-    isLoading: query.isPending,
-    isSignedIn: query.isSuccess,
+    session: signedOut ? null : (query.data ?? null),
+
+    // Only before we have ever had an answer — not on every revalidation.
+    //
+    // query-core resets status to "pending" on any fetch where data is
+    // undefined (see fetchState), and data is always undefined for a signed-out
+    // user because the query errors. With refetchOnWindowFocus on, that made
+    // isPending true every time the window regained focus, so the app swapped
+    // in its loading skeleton and remounted the login page — discarding a
+    // break-glass ceremony mid-flight, which is the one moment the user has
+    // deliberately alt-tabbed away to sign a challenge.
+    isLoading: query.isPending && !query.isFetched,
+
+    isSignedIn: query.isSuccess && !signedOut,
   }
 }
 
