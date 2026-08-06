@@ -78,7 +78,7 @@ export function UsersView() {
   ]
 
   return (
-    <div className="space-y-4">
+    <div className="flex h-full min-h-0 flex-col gap-4">
       <ViewHeader
         title="People"
         description="Everyone in the directory, and whether they can actually sign in."

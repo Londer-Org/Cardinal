@@ -87,8 +87,13 @@ export function DataTable<T>({
   const last = Math.min(offset + rows.length, total)
 
   return (
-    <div className="space-y-3">
-      <div className="relative max-w-sm">
+    // Fills whatever height it is given, with only the rows scrolling. The
+    // alternative — letting the page grow — means the search box and the
+    // pagination controls scroll off the top and bottom, so the two things you
+    // need while looking through a long list are the two things you cannot
+    // reach.
+    <div className="flex h-full min-h-0 flex-col gap-3">
+      <div className="relative max-w-sm shrink-0">
         <SearchIcon className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
         <Input
           className="pl-9"
@@ -99,9 +104,13 @@ export function DataTable<T>({
         />
       </div>
 
-      <div className="overflow-x-auto rounded-md border">
+      {/* min-h-0 is what lets this shrink inside a flex column rather than
+          pushing the footer off the bottom. The child reset undoes shadcn's own
+          scroll container: nested scrollers would leave the sticky header
+          stuck to the wrong box. */}
+      <div className="min-h-0 flex-1 overflow-auto rounded-md border [&>[data-slot=table-container]]:overflow-visible">
         <Table>
-          <TableHeader>
+          <TableHeader className="[&_th]:sticky [&_th]:top-0 [&_th]:z-10 [&_th]:bg-background">
             <TableRow>
               {columns.map((column) => (
                 <TableHead
@@ -159,7 +168,7 @@ export function DataTable<T>({
         </Table>
       </div>
 
-      <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-muted-foreground">
+      <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 text-sm text-muted-foreground">
         <div className="flex items-center gap-3">
           <span>
             {/* The total, not just what is on screen. "25 of 412" is what tells

@@ -38,7 +38,7 @@ export function GroupsView() {
   ]
 
   return (
-    <div className="space-y-4">
+    <div className="flex h-full min-h-0 flex-col gap-4">
       <ViewHeader
         title="Groups"
         description="What policy reads. Membership is temporal — counts are as of now."

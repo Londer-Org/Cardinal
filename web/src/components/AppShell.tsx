@@ -136,9 +136,13 @@ function Authenticated() {
           <Crumbs />
         </header>
 
-        <main className="min-w-0 flex-1 p-4 md:p-6">
-          {!session.fullyEnrolled && (
-            <Alert className="mb-4 border-warning/50 text-warning-foreground [&>svg]:text-warning">
+        {/* Outside the scroll area on purpose. A view that wants a
+            viewport-height table asks for h-full, and it should get exactly the
+            space left over — not that minus however tall this banner is
+            today. */}
+        {!session.fullyEnrolled && (
+          <div className="shrink-0 px-4 pt-4 md:px-6">
+            <Alert className="border-warning/50 text-warning-foreground [&>svg]:text-warning">
               <ShieldQuestionIcon />
               <AlertTitle>Register a second passkey</AlertTitle>
               <AlertDescription>
@@ -146,7 +150,13 @@ function Authenticated() {
                 hardware key kept somewhere else is the usual second.
               </AlertDescription>
             </Alert>
-          )}
+          </div>
+        )}
+
+        {/* The page scroller. Views that fill the height put their own scroll
+            region inside instead, so a long table scrolls its rows rather than
+            the whole screen — and its header and pagination stay put. */}
+        <main className="min-h-0 min-w-0 flex-1 overflow-y-auto p-4 md:p-6">
           <Outlet />
         </main>
       </SidebarInset>
