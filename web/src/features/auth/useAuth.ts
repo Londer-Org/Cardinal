@@ -58,15 +58,25 @@ export function useLogin() {
 }
 
 export function useLogout() {
-  const queryClient = useQueryClient()
-
   return useMutation({
     mutationFn: api.auth.logout,
     onSuccess: () => {
-      // Clear everything rather than invalidating: cached credential lists and
-      // account details belong to the session that just ended, and leaving them
-      // in memory for the next person to sign in would be a small but real leak.
-      queryClient.clear()
+      // A full navigation, not a cache operation.
+      //
+      // This used to call queryClient.clear(), which removes queries from the
+      // cache but does not notify observers already mounted — so the account
+      // page went on rendering the session that had just ended, and signing out
+      // appeared to do nothing at all.
+      //
+      // Reloading is also the stronger version of what clear() was reaching
+      // for. Cached credential lists and account details belong to the session
+      // that ended, but so does component state holding recovery codes, a
+      // decision list, a half-filled form. Only discarding the whole heap
+      // guarantees none of it is there for whoever signs in next.
+      //
+      // replace rather than assign, so Back cannot restore a rendered view of
+      // the signed-in page.
+      window.location.replace('/')
     },
   })
 }

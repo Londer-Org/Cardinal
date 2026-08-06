@@ -2,6 +2,7 @@ import { LogOutIcon, ShieldAlertIcon, ShieldQuestionIcon } from 'lucide-react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { ErrorMessage } from '@/components/ErrorMessage'
 import { CardinalMark } from '@/components/CardinalMark'
 import { ApplicationList } from '@/features/applications/ApplicationList'
 import { ConnectedApplications } from '@/features/consent/ConnectedApplications'
@@ -37,6 +38,11 @@ export function AccountPage({ session }: { session: Me }) {
             Sign out
           </Button>
         </header>
+
+        {/* A sign-out that fails leaves the session live, and the button
+            simply re-enabling says nothing. Silence here is how "sign out did
+            nothing" gets mistaken for "sign out worked". */}
+        {logout.error !== null && <ErrorMessage error={logout.error} />}
 
         {session.emergency && (
           <Alert variant="destructive">
