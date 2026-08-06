@@ -54,6 +54,16 @@ export const api = {
         body: { challenge, signature, login },
       }),
 
+    /**
+     * Completes a parked OIDC authorization now that a session exists.
+     *
+     * Returns where to send the browser next — the provider's own callback,
+     * which redirects onwards to the application that started the flow.
+     */
+    oidcResume: (authID: string) =>
+      request(`/api/oidc/resume?auth=${encodeURIComponent(authID)}`,
+        z.object({ continue: z.string() })),
+
     loginFinish: (ceremonyId: string, response: unknown) =>
       request('/api/auth/login/finish', z.looseObject({}), {
         method: 'POST',

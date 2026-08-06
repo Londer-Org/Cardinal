@@ -14,7 +14,12 @@ import { isSupported } from '@/lib/webauthn'
 import { BreakGlassDialog } from './BreakGlassDialog'
 import { useLogin } from './useAuth'
 
-export function LoginPage() {
+export function LoginPage({
+  continuingToApplication = false,
+}: {
+  /** True when an application sent the user here to sign in. */
+  continuingToApplication?: boolean
+}) {
   const login = useLogin()
   const [emergency, setEmergency] = useState(false)
 
@@ -46,7 +51,9 @@ export function LoginPage() {
         <CardHeader>
           <CardTitle className="text-xl">Cardinal</CardTitle>
           <CardDescription>
-            Sign in with your passkey. There is nothing to type.
+            {continuingToApplication
+              ? 'An application needs you to sign in. Use your passkey — there is nothing to type.'
+              : 'Sign in with your passkey. There is nothing to type.'}
           </CardDescription>
         </CardHeader>
 

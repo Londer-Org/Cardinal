@@ -4,12 +4,14 @@ Living document. Updated as work lands, not as it's planned.
 
 **Legend:** ✅ done · 🔨 in progress · ⬜ not started · 🚧 blocked · ❓ needs a decision
 
-**Current position:** Phase 2 complete. Cedar governs forwardAuth end to end,
-verified through real Traefik, and the decision explorer answers "why was I
-denied?" with the rule text. Phase 1 complete except TOTP, recovery-email
-delivery, and dual-control recovery.
+**Current position:** Phase 3 nearly complete. A browser can now sign in to a
+third-party application through Cardinal end to end: authorization code flow
+with PKCE, resumed across sign-in, with `state` and `nonce` preserved. Remaining
+in Phase 3: a consent screen, client management UI, and an OIDC relying party in
+the e2e stack.
 
-Next: Phase 3, the OIDC provider. See [docs/first-run.md](docs/first-run.md) to try it.
+Phases 0–2 complete. Phase 1 still owes TOTP, recovery-email delivery, and
+dual-control recovery. See [docs/first-run.md](docs/first-run.md) to try it.
 
 **Not yet verified by a human:** a real passkey in a real browser. Everything up
 to that boundary is tested; WebAuthn's failure modes are browser-side and need
@@ -162,7 +164,7 @@ works.
 | ✅ | `op.Storage` adapter — compile-time assertion, claims from the shared projection |
 | ✅ | Authorization code flow with PKCE — verified end to end; wrong verifier and replayed code both refused |
 | ✅ | Discovery, JWKS, token, userinfo, introspection, revocation |
-| ⬜ | Frontend: resume an OIDC flow after sign-in (`?oidc_auth=`) |
+| ✅ | Frontend resumes an OIDC flow after sign-in — browser login works end to end |
 | ⬜ | Consent screen |
 | ⬜ | Client management UI |
 | ⬜ | An OIDC relying party in the e2e stack |

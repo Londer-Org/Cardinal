@@ -1,17 +1,26 @@
+import { AlertCircleIcon } from 'lucide-react'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Skeleton } from '@/components/ui/skeleton'
 import { AccountPage } from '@/features/auth/AccountPage'
 import { LoginPage } from '@/features/auth/LoginPage'
 import { useSession } from '@/features/auth/useAuth'
+import { pendingAuthorizationID, useOIDCResume } from '@/features/auth/useOIDCResume'
 
 /**
- * Routing is a single branch on session state, deliberately.
+ * Routing is a branch on session state plus one special case: an OIDC
+ * authorization parked mid-flow.
  *
- * Adding a router before there is more than one authenticated view would be
- * machinery without a purpose; it arrives in Phase 2 with the policy and
- * decision-explorer screens.
+ * Still no router. The OIDC case is not a route — it is a redirect the browser
+ * passes through — so adding one would be machinery without a purpose. It
+ * arrives when deep-linking to a specific decision is wanted.
  */
 export function App() {
   const { session, isLoading } = useSession()
+
+  // An application may have sent the user here to sign in. If so, the
+  // authorization is completed and the browser handed back the moment a session
+  // exists — the hook navigates away itself, so nothing below renders.
+  const resume = useOIDCResume(session !== null)
 
   if (isLoading) {
     return (
@@ -21,5 +30,47 @@ export function App() {
     )
   }
 
-  return session === null ? <LoginPage /> : <AccountPage session={session} />
+  if (session === null) {
+    // Tell them why they are being asked to sign in. Arriving at a bare login
+    // page after clicking something in another application is disorienting,
+    // and the usual reaction is to assume it is a phishing page.
+    return <LoginPage continuingToApplication={pendingAuthorizationID() !== null} />
+  }
+
+  if (resume.status === 'resuming') {
+    return (
+      <Centered>
+        <p className="text-sm text-muted-foreground">
+          Returning you to the application…
+        </p>
+      </Centered>
+    )
+  }
+
+  if (resume.status === 'failed') {
+    // Deliberately not silent. Someone who arrived from an application and
+    // ends up on their account page would otherwise have no idea the thing
+    // they were trying to reach is still waiting.
+    return (
+      <Centered>
+        <Alert variant="destructive">
+          <AlertCircleIcon />
+          <AlertTitle>Could not return you to the application</AlertTitle>
+          <AlertDescription>
+            {resume.message} Start again from the application.
+          </AlertDescription>
+        </Alert>
+      </Centered>
+    )
+  }
+
+  return <AccountPage session={session} />
+}
+
+function Centered({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="grid min-h-dvh place-items-center bg-background p-6">
+      <div className="w-full max-w-sm">{children}</div>
+    </div>
+  )
 }
