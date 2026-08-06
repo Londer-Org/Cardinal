@@ -314,3 +314,81 @@ func TestInheritedGroupMembership(t *testing.T) {
 			"enumerate nesting by hand")
 	_ = e
 }
+
+// TestApplicationAccessShipsPermissive.
+//
+// Cedar is default-deny, so introducing AccessApplication without a permit
+// would have refused every sign-in to every application the moment the check
+// existed. An upgrade that locks everyone out of everything is not a safe
+// default, whatever it is a safe default for — so the shipped set permits, and
+// operators narrow it.
+func TestApplicationAccessShipsPermissive(t *testing.T) {
+	e := engine(t)
+
+	decision := e.Evaluate(policy.Request{
+		Subject:  subject(subjectOpts{deviceBound: true}),
+		Action:   policy.ActionAccessApplication,
+		Resource: types.NewEntityUID(policy.TypeApplication, "grafana"),
+	})
+
+	require.True(t, decision.Allowed,
+		"the shipped policy must not lock every user out of every application")
+	assert.Contains(t, decision.Reasons, "any-user-may-access-any-application")
+}
+
+// TestApplicationAccessCanBeNarrowed.
+//
+// The point of the feature: replacing the shipped rule with a group-scoped one
+// must actually restrict access, and must name the application readably.
+func TestApplicationAccessCanBeNarrowed(t *testing.T) {
+	const narrowed = `
+@id("grafana-is-for-engineering")
+permit (
+    principal in Cardinal::Group::"11111111-1111-7111-8111-111111111111",
+    action == Cardinal::Action::"AccessApplication",
+    resource == Cardinal::Application::"grafana"
+);`
+
+	e, err := policy.NewEngine([]byte(narrowed), 1)
+	require.NoError(t, err)
+
+	engineers := []claims.Group{{
+		ID:    uuid.MustParse("11111111-1111-7111-8111-111111111111"),
+		Name:  "engineering",
+		Depth: 1,
+	}}
+
+	cases := []struct {
+		name        string
+		groups      []claims.Group
+		application string
+		allowed     bool
+		because     string
+	}{
+		{
+			name: "a member reaching the named application", groups: engineers,
+			application: "grafana", allowed: true,
+		},
+		{
+			name: "a non-member", groups: nil,
+			application: "grafana", allowed: false,
+			because: "membership is the whole point of narrowing it",
+		},
+		{
+			name: "a member reaching a different application", groups: engineers,
+			application: "payroll", allowed: false,
+			because: "a rule naming one application must not grant every application",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			decision := e.Evaluate(policy.Request{
+				Subject:  subject(subjectOpts{deviceBound: true, groups: tc.groups}),
+				Action:   policy.ActionAccessApplication,
+				Resource: types.NewEntityUID(policy.TypeApplication, types.String(tc.application)),
+			})
+			assert.Equal(t, tc.allowed, decision.Allowed, tc.because)
+		})
+	}
+}

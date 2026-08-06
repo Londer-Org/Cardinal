@@ -31,6 +31,43 @@ when {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Application access
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Who may sign in to which application.
+//
+// Asked at /oidc/authorize, once the user is known and before any claim is
+// released. Separate from AccessURL because an OIDC application is reached
+// directly rather than through the proxy, so forwardAuth never sees it.
+//
+// This ships permissive on purpose. Cedar is default-deny, so a policy set with
+// no permit here would refuse every sign-in to every application the moment
+// this check existed — an upgrade that locks everyone out of everything is not
+// a safe default, whatever it is a safe default for.
+//
+// Narrow it by replacing this rule. Applications are named by their directory
+// name, so it reads the way an administrator thinks:
+//
+//     @id("grafana-is-for-engineering")
+//     permit (
+//         principal in Cardinal::Group::"<engineering-uuid>",
+//         action == Cardinal::Action::"AccessApplication",
+//         resource == Cardinal::Application::"grafana"
+//     );
+//
+// Naming applications rather than referencing their UUID is the same trade the
+// host rules make below: policy has to be readable by the person who maintains
+// it, and renaming an application is a deliberate administrative act. Renaming
+// one *does* change what this policy means — which is a reason to be careful
+// about renames, not a reason to make every rule unreadable.
+@id("any-user-may-access-any-application")
+permit (
+    principal,
+    action == Cardinal::Action::"AccessApplication",
+    resource
+);
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Directory administration
 // ─────────────────────────────────────────────────────────────────────────────
 

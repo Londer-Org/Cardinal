@@ -167,6 +167,12 @@ export const pendingAuthorizationSchema = z.object({
   clientId: z.string(),
   scopes: z.array(scopeDetailSchema),
   needsConsent: z.boolean(),
+  // Policy refused this person access to this application. Reported before the
+  // flow completes so the UI can say so, rather than the user watching sign-in
+  // appear to work and then stop.
+  denied: z.boolean(),
+  deniedReason: z.string().optional(),
+  deniedBy: z.array(z.string()).optional(),
   expiresAt: z.string(),
 })
 export type PendingAuthorization = z.infer<typeof pendingAuthorizationSchema>

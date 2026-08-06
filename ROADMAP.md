@@ -185,7 +185,7 @@ works.
 | ✅ | **Consent** — per-client and off by default (ADR 0011); enforced on every completion path, withdrawable, and withdrawal revokes the client's tokens |
 | ✅ | **Client management UI** — register, inspect and retire relying parties from the admin UI; secret shown once |
 | ✅ | **The admin API is Cedar-gated** (ADR 0012) — `directory-admins` is a built-in group, membership is an ordinary temporal grant, and every refusal names the deciding policy |
-| ⬜ | **Who may use which application** — an `AccessApplication` decision at `/oidc/authorize`, so a policy can say only `grafana-users` may sign in to Grafana. **Currently any authenticated user can sign in to any registered application.** The claims carry `groups` so an app can enforce its own rules, but Cardinal does not gate it, and that is the first thing anyone coming from Keycloak will look for |
+| ✅ | **Who may use which application** — an `AccessApplication` decision enforced on every path that can complete an authorization, logged, and named in the refusal. Ships permissive, because Cedar is default-deny and a version that locked everyone out of everything on upgrade is not a safe default |
 | ✅ | **Account enrollment for a new user** — done in Phase 1 via invitations (ADR 0013) |
 | ⬜ | OpenID Foundation conformance suite |
 

@@ -40,6 +40,27 @@ func (s *Server) handleOIDCLogin(w http.ResponseWriter, r *http.Request) {
 
 	session, authenticated := SessionFrom(ctx)
 
+	// Access first, then consent. Asking someone to agree to release claims to
+	// an application they may not use would be a strange question, and agreeing
+	// would leave a consent record for access that never happened.
+	if authenticated {
+		client, err := s.store.OIDCClientByID(ctx, authReq.ClientID)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "unknown application")
+			return
+		}
+		access, err := s.canAccessApplication(ctx, session, client)
+		if err != nil {
+			s.log.ErrorContext(ctx, "application access check failed", "error", err)
+			writeError(w, http.StatusServiceUnavailable, "authorization unavailable")
+			return
+		}
+		if !access.Allowed {
+			s.denyApplicationAccess(w, client, access)
+			return
+		}
+	}
+
 	// A signed-in user still stops here if the application requires consent.
 	// This is the single-sign-on path — the common one — so completing it
 	// silently would have meant consent applied only to people who happened not
@@ -98,6 +119,22 @@ func (s *Server) handleOIDCResume(w http.ResponseWriter, r *http.Request) {
 	authReq, err := s.store.AuthRequestByID(ctx, requestID)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "this authorization request has expired")
+		return
+	}
+
+	client, err := s.store.OIDCClientByID(ctx, authReq.ClientID)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "unknown application")
+		return
+	}
+	access, err := s.canAccessApplication(ctx, session, client)
+	if err != nil {
+		s.log.ErrorContext(ctx, "application access check failed", "error", err)
+		writeError(w, http.StatusServiceUnavailable, "authorization unavailable")
+		return
+	}
+	if !access.Allowed {
+		s.denyApplicationAccess(w, client, access)
 		return
 	}
 

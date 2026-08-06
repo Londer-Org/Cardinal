@@ -66,6 +66,14 @@ type pendingAuthorizationResponse struct {
 	// authorization silently in that case.
 	NeedsConsent bool `json:"needsConsent"`
 
+	// Denied is set when policy refuses this person access to this application.
+	// Reported here rather than only at resume so the SPA can say so plainly,
+	// instead of the user watching a sign-in that appears to work and then
+	// stops.
+	Denied       bool     `json:"denied"`
+	DeniedReason string   `json:"deniedReason,omitempty"`
+	DeniedBy     []string `json:"deniedBy,omitempty"`
+
 	ExpiresAt time.Time `json:"expiresAt"`
 }
 
@@ -92,6 +100,26 @@ func (s *Server) handlePendingAuthorization(w http.ResponseWriter, r *http.Reque
 	client, err := s.store.OIDCClientByID(ctx, authReq.ClientID)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "unknown application")
+		return
+	}
+
+	access, err := s.canAccessApplication(ctx, session, client)
+	if err != nil {
+		s.log.ErrorContext(ctx, "application access check failed", "error", err)
+		writeError(w, http.StatusServiceUnavailable, "authorization unavailable")
+		return
+	}
+
+	if !access.Allowed {
+		writeJSON(w, http.StatusOK, pendingAuthorizationResponse{
+			Application: client.Name,
+			ClientID:    client.ClientID,
+			Denied:      true,
+			DeniedReason: "you do not have access to " + client.Name +
+				" — ask an administrator if you think you should",
+			DeniedBy:  access.Reasons,
+			ExpiresAt: authReq.ExpiresAt,
+		})
 		return
 	}
 

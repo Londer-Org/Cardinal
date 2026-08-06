@@ -144,6 +144,25 @@ Two things will refuse you, both deliberately:
 - **A session older than five minutes is not enough.** Sign in again; the tab
   reappears.
 
+### Deciding who may use which application
+
+By default every signed-in user may sign in to every registered application —
+Cedar is default-deny, so shipping no rule would have refused everyone
+everything. Narrow it by editing `policies/cardinal.cedar`:
+
+```cedar
+@id("meridian-is-for-analysts")
+permit (
+    principal in Cardinal::Group::"<analysts-group-uuid>",
+    action == Cardinal::Action::"AccessApplication",
+    resource == Cardinal::Application::"meridian"
+);
+```
+
+Then `cardinal policy publish policies/cardinal.cedar -activate` and restart.
+Someone outside the group now gets a plain "no access to Meridian" screen naming
+the rule, instead of a sign-in that appears to work and then stops.
+
 Each refusal names the policy that produced it, in the response and in
 **Access → decisions**. That is the demo worth showing someone: neither FreeIPA
 nor Keycloak can tell you *which rule* denied you.

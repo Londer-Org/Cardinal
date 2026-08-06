@@ -25,6 +25,7 @@ export type ResumeState =
   | { status: 'resuming' }
   | { status: 'consent'; pending: PendingAuthorization }
   | { status: 'refused'; application: string }
+  | { status: 'denied'; application: string; reason: string; policies: string[] }
   | { status: 'failed'; message: string }
 
 export interface Resume {
@@ -73,6 +74,17 @@ export function useOIDCResume(isSignedIn: boolean): Resume {
         // asking afterwards would mean the claims were already released by the
         // time the question appeared.
         const pending = await api.auth.oidcPending(authID)
+        if (pending.denied) {
+          // Policy said no. Distinct from a failure: nothing is broken, and
+          // telling someone to try again would waste their time.
+          setState({
+            status: 'denied',
+            application: pending.application,
+            reason: pending.deniedReason ?? 'You do not have access to this application.',
+            policies: pending.deniedBy ?? [],
+          })
+          return
+        }
         if (pending.needsConsent) {
           setState({ status: 'consent', pending })
           return

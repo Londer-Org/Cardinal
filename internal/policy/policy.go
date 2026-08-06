@@ -35,6 +35,15 @@ var (
 	ActionSSHLogin       = types.NewEntityUID(TypeAction, "SSHLogin")
 	ActionRunAsRoot      = types.NewEntityUID(TypeAction, "RunAsRoot")
 	ActionAdministerData = types.NewEntityUID(TypeAction, "AdministerDirectory")
+
+	// ActionAccessApplication asks whether this person may sign in to this
+	// relying party at all.
+	//
+	// Distinct from AccessURL, which governs reaching a URL through the proxy.
+	// An application behind forwardAuth is protected by the proxy; one speaking
+	// OIDC is reached directly and the proxy never sees it, so the same
+	// question has to be asked at a different point.
+	ActionAccessApplication = types.NewEntityUID(TypeAction, "AccessApplication")
 )
 
 // AdminGroupID is the built-in directory-admins group.

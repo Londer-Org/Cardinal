@@ -46,9 +46,11 @@ the query rather than a cron job that might not run. Early revocation is
 historical fact that the grant existed and why.
 
 **One policy engine decides everything.** [Cedar](https://www.cedarpolicy.com/)
-governs web access via Traefik `forwardAuth`, SSH certificate issuance, sudo
-rules, and Cardinal's own admin API — so the directory's access control is the
-same reviewable, testable policy set as everything else.
+governs web access via Traefik `forwardAuth`, sign-in to each OIDC application,
+SSH certificate issuance, sudo rules, and Cardinal's own admin API — so the
+directory's access control is the same reviewable, testable policy set as
+everything else. Every decision is logged with the rule that produced it, so
+"why was I denied?" has an answer neither FreeIPA nor Keycloak can give.
 
 ## Requirements
 

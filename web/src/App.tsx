@@ -65,6 +65,28 @@ function AuthenticatedApp() {
     )
   }
 
+  if (resume.status === 'denied') {
+    return (
+      <Centered>
+        <Alert variant="destructive">
+          <AlertCircleIcon />
+          <AlertTitle>No access to {resume.application}</AlertTitle>
+          <AlertDescription>
+            <p>{resume.reason}</p>
+            {resume.policies.length > 0 && (
+              // The deciding rule, named. Neither FreeIPA nor Keycloak can tell
+              // you which policy refused you, and being able to quote it is the
+              // difference between a useful support request and a shrug.
+              <p className="mt-2 text-xs">
+                Decided by <code>{resume.policies.join(', ')}</code>
+              </p>
+            )}
+          </AlertDescription>
+        </Alert>
+      </Centered>
+    )
+  }
+
   if (resume.status === 'refused') {
     return (
       <Centered>
