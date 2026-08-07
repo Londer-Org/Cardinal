@@ -167,6 +167,35 @@ unless {
     principal.deviceBound
 };
 
+// Who may log into which machines, and as which local account.
+//
+// This is the HBAC replacement, and it is deliberately not a new kind of object.
+// A host is a directory entity, so "which machines" is group membership; a
+// person's access is group membership; and the local account they may become is
+// the one fact that has nowhere else to live, so it travels in the context.
+//
+// Three consequences fall out of using membership rather than rule objects:
+// access expires on its own because a grant carries a validity period, it is
+// visible beside every other grant rather than in a separate list, and a host
+// joins `env-prod` the same way a person joins a team.
+//
+// Both rules below are examples to edit, not defaults to inherit. They are
+// written narrow — a specific group, a specific account — because a permissive
+// starting point is one nobody revisits.
+
+@id("sre-may-log-into-production")
+permit (
+    principal in Cardinal::Group::"sre",
+    action == Cardinal::Action::"SSHLogin",
+    resource in Cardinal::Group::"env-prod"
+)
+when {
+    // Never `root`. Becoming root is a separate action with a stricter rule,
+    // and a certificate whose principals included it would have granted it
+    // without that rule ever being consulted.
+    context.localAccount == "deploy" || context.localAccount == "www-data"
+};
+
 // Running as root additionally requires a recent authentication.
 //
 // Replaces FreeIPA sudo rules. Fifteen minutes rather than five: sudo happens

@@ -136,6 +136,16 @@ type Request struct {
 	Action   types.EntityUID
 	Resource types.EntityUID
 
+	// ResourceGroups are the groups the *resource* belongs to, so a policy can
+	// say `resource in Cardinal::Group::"env-prod"`.
+	//
+	// Without this the resource reaches Cedar as a bare identifier with no
+	// parents, and every `resource in …` clause silently matches nothing —
+	// which reads as a policy that does not work rather than one that cannot.
+	// It is what makes a host group the unit of access, replacing FreeIPA's
+	// HBAC rules with ordinary membership that expires like any other.
+	ResourceGroups []claims.Group
+
 	// Context carries decision-point specific facts — the HTTP method and path
 	// for a web request, the target login for an SSH certificate.
 	Context map[string]types.Value
@@ -157,7 +167,8 @@ func principalUID(s *claims.Subject) types.EntityUID {
 // nesting. The transitive closure is already resolved by the claims layer, and
 // crucially it was resolved with expiry applied — an expired grant is simply
 // not in the list, so policy cannot accidentally honour it.
-func buildEntities(s *claims.Subject) types.EntityMap {
+func buildEntities(req Request) types.EntityMap {
+	s := req.Subject
 	entities := types.EntityMap{}
 
 	parents := make([]types.EntityUID, 0, len(s.Groups))
@@ -190,6 +201,36 @@ func buildEntities(s *claims.Subject) types.EntityMap {
 			"authAgeSeconds": types.Long(
 				max(0, int64(s.Auth.Age().Seconds()))),
 		}),
+	}
+
+	// The resource, when it belongs to groups. A host is an entity like any
+	// other, so "which machines may this person reach" is ordinary membership
+	// — bounded in time, revocable, and visible in the same place as every
+	// other grant, rather than a separate rule object as in HBAC.
+	if len(req.ResourceGroups) > 0 {
+		resourceParents := make([]types.EntityUID, 0, len(req.ResourceGroups))
+		for _, g := range req.ResourceGroups {
+			uid := types.NewEntityUID(TypeGroup, types.String(g.ID.String()))
+			resourceParents = append(resourceParents, uid)
+
+			// Only added if the principal did not already contribute it, so a
+			// user and a host sharing a group do not produce two entries that
+			// disagree.
+			if _, seen := entities[uid]; !seen {
+				entities[uid] = types.Entity{
+					UID: uid,
+					Attributes: types.NewRecord(types.RecordMap{
+						"name":  types.String(g.Name),
+						"depth": types.Long(g.Depth),
+					}),
+				}
+			}
+		}
+
+		entities[req.Resource] = types.Entity{
+			UID:     req.Resource,
+			Parents: types.NewEntityUIDSet(resourceParents...),
+		}
 	}
 
 	return entities
@@ -276,7 +317,7 @@ func (e *Engine) Version() int64 { return e.version }
 func (e *Engine) Evaluate(req Request) Decision {
 	start := time.Now()
 
-	entities := buildEntities(req.Subject)
+	entities := buildEntities(req)
 
 	context := types.RecordMap{}
 	for k, v := range req.Context {
