@@ -14,7 +14,7 @@ import (
 
 func runPOSIX(ctx context.Context, args []string) error {
 	if len(args) == 0 {
-		return fmt.Errorf("%w: cardinal posix <assign|show|set|list>", errUsage)
+		return fmt.Errorf("%w: cardinal posix <assign|show|set|list|adopt>", errUsage)
 	}
 	switch args[0] {
 	case "assign":
@@ -25,8 +25,10 @@ func runPOSIX(ctx context.Context, args []string) error {
 		return runPOSIXSet(ctx, args[1:])
 	case "list":
 		return runPOSIXList(ctx, args[1:])
+	case "adopt":
+		return runAdopt(ctx, args[1:])
 	default:
-		return fmt.Errorf("%w: cardinal posix <assign|show|set|list>", errUsage)
+		return fmt.Errorf("%w: cardinal posix <assign|show|set|list|adopt>", errUsage)
 	}
 }
 
@@ -104,12 +106,16 @@ func runPOSIXAssign(ctx context.Context, args []string) error {
 	}
 	fmt.Println()
 	if typ == directory.TypeGroup {
-		fmt.Println("  Permanent. Files owned by this group record the number, not the name,")
-		fmt.Println("  so there is no command to change it and no command to release it.")
+		fmt.Println("  Files owned by this group will record the number, not the name.")
 	} else {
-		fmt.Println("  Permanent. Every file this account creates records the number, not the")
-		fmt.Println("  name, so there is no command to change it and no command to release it.")
+		fmt.Println("  Every file this account creates will record the number, not the name.")
 	}
+	// Precise about when it becomes permanent, because that is the fact somebody
+	// planning a migration needs. It said "permanent, no command to change it",
+	// which was true before `posix adopt` existed and is not any more.
+	fmt.Println("  It can still be changed with `cardinal posix adopt` — until the first")
+	fmt.Println("  host is told about it, after which it is on a filesystem somewhere and")
+	fmt.Println("  changing it would move files rather than edit a row.")
 	return nil
 }
 
@@ -246,13 +252,20 @@ func runPOSIXList(ctx context.Context, args []string) error {
 	}
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "NUMBER\tTYPE\tNAME\tHOME\tSHELL")
+	fmt.Fprintln(w, "NUMBER\tTYPE\tNAME\tHOME\tSHELL\tSTATE")
 	for _, p := range identities {
 		home, shell := p.HomeDirectory, p.LoginShell
 		if home == "" {
 			home, shell = "—", "—"
 		}
-		fmt.Fprintf(w, "%d\t%s\t%s\t%s\t%s\n", p.Number, p.Type, p.Name, home, shell)
+		// Whether it can still be adopted, which is the one thing about a
+		// number that changes over its life and the thing a migration turns on.
+		state := "served"
+		if p.Adoptable() {
+			state = "adoptable"
+		}
+		fmt.Fprintf(w, "%d\t%s\t%s\t%s\t%s\t%s\n",
+			p.Number, p.Type, p.Name, home, shell, state)
 	}
 	return w.Flush()
 }

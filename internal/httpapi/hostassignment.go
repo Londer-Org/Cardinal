@@ -128,6 +128,10 @@ func (s *Server) handleHostAssignment(w http.ResponseWriter, r *http.Request) {
 
 	members := make(map[uuid.UUID][]string)
 
+	// Which identities this response will contain — users, and the groups their
+	// memberships project to. Both are numbers a machine is about to write down.
+	serving := make(map[uuid.UUID]struct{})
+
 	for _, p := range identities {
 		if p.Type != directory.TypeUser {
 			continue
@@ -168,9 +172,11 @@ func (s *Server) handleHostAssignment(w http.ResponseWriter, r *http.Request) {
 			}
 			user.Groups = append(user.Groups, numbered.Number)
 			members[g.ID] = append(members[g.ID], p.Name)
+			serving[numbered.EntityID] = struct{}{}
 		}
 
 		assignment.Users = append(assignment.Users, user)
+		serving[p.EntityID] = struct{}{}
 	}
 
 	// Only the groups somebody on this host is actually in. A group nobody here
@@ -185,6 +191,27 @@ func (s *Server) handleHostAssignment(w http.ResponseWriter, r *http.Request) {
 	slices.SortFunc(assignment.Groups, func(a, b assignedGroup) int {
 		return a.GID - b.GID
 	})
+
+	// Stamped before the response is written, and a failure here fails the
+	// request. The guard on adopting a number depends on this having happened:
+	// if the mark is lost, a number can be changed after a machine has already
+	// put it on a filesystem, and the symptom is files belonging to the wrong
+	// person weeks later. Refusing to serve is the safe direction — the agent
+	// keeps whatever it last cached.
+	served := make([]uuid.UUID, 0, len(assignment.Users))
+	for _, p := range identities {
+		if _, ok := serving[p.EntityID]; ok {
+			served = append(served, p.EntityID)
+		}
+	}
+	if err := s.store.MarkPOSIXNumbersServed(ctx, served); err != nil {
+		s.log.ErrorContext(ctx, "host assignment: could not record numbers as served",
+			"host", cred.HostName, "error", err)
+		writeError(w, http.StatusServiceUnavailable,
+			"could not record this assignment; refusing to serve numbers that "+
+				"could still be changed")
+		return
+	}
 
 	assignment.Unnumbered = s.permittedWithoutNumbers(
 		ctx, engine, cred, hostSubject, identities)

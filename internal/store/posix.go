@@ -5,11 +5,13 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/arthur-lonfils/cardinal/internal/directory"
 	"github.com/arthur-lonfils/cardinal/internal/event"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
 var (
@@ -24,12 +26,50 @@ var (
 	ErrPOSIXRangeExhausted = errors.New("store: the POSIX id range is exhausted")
 )
 
-// POSIXFloor is the lowest number Cardinal will ever allocate.
+// Two different floors, for two different questions.
 //
-// Enforced by a database constraint as well, because the consequence of getting
-// it wrong is not a validation error but a machine where Cardinal's idea of uid
-// 0 disagrees with the kernel's.
-const POSIXFloor = 65536
+// The distinction only became visible when adoption existed to expose it: the
+// number Cardinal *starts allocating from* is a policy choice, and the numbers a
+// person may legitimately *hold* are a fact about Unix. Conflating them made
+// adoption refuse uid 1234 — a person on a machine using the distribution's own
+// UID_MIN, which is the ordinary case a migration exists for.
+const (
+	// POSIXAllocationFloor is the lowest number Cardinal will hand out itself.
+	//
+	// Above the distribution's accounts and above systemd's DynamicUser
+	// reservation, so a freshly allocated number never lands on either. Only a
+	// floor: where allocation actually starts is configuration.
+	POSIXAllocationFloor = 65536
+
+	// POSIXSystemCeiling is the top of the distribution's own range. Below it
+	// are root, daemon, and whatever the package manager created.
+	POSIXSystemCeiling = 1000
+
+	// systemd hands numbers in this range to transient services and reuses
+	// them, so an account holding one is periodically impersonated by whatever
+	// systemd started that minute.
+	dynamicUserLow  = 61184
+	dynamicUserHigh = 65519
+)
+
+// reservedNumber reports whether a number can never belong to a person.
+//
+// Universally true rather than policy: the same on every machine, which is why
+// the database enforces exactly this and leaves the allocation range to
+// configuration.
+func reservedNumber(n int) (reason string, reserved bool) {
+	switch {
+	case n < POSIXSystemCeiling:
+		return fmt.Sprintf("below %d belongs to the distribution's own accounts",
+			POSIXSystemCeiling), true
+	case n >= dynamicUserLow && n <= dynamicUserHigh:
+		return fmt.Sprintf("%d–%d is systemd's DynamicUser reservation, where "+
+			"numbers are handed to transient services and reused",
+			dynamicUserLow, dynamicUserHigh), true
+	default:
+		return "", false
+	}
+}
 
 // DefaultLoginShell is what a user gets when nobody says otherwise.
 //
@@ -51,7 +91,14 @@ type POSIXIdentity struct {
 	// HomeDirectory and LoginShell are empty for a group.
 	HomeDirectory string
 	LoginShell    string
+
+	// FirstServedAt is when a host was first told this number. Nil means it can
+	// still be adopted; set means it is on a filesystem somewhere.
+	FirstServedAt *time.Time
 }
+
+// Adoptable reports whether this number may still be changed.
+func (p POSIXIdentity) Adoptable() bool { return p.FirstServedAt == nil }
 
 // PrimaryGroup is the user-private group a user belongs to.
 //
@@ -103,10 +150,10 @@ const posixAllocationLock int64 = 7079736978
 func (s *Store) AssignPOSIXIdentity(
 	ctx context.Context, entityID uuid.UUID, r POSIXRange, actorID *uuid.UUID,
 ) (*POSIXIdentity, error) {
-	if r.Low < POSIXFloor {
+	if r.Low < POSIXAllocationFloor {
 		return nil, fmt.Errorf(
 			"store: a POSIX range starting at %d would collide with the system's "+
-				"own accounts; the lowest allowed is %d", r.Low, POSIXFloor)
+				"own accounts; the lowest allowed is %d", r.Low, POSIXAllocationFloor)
 	}
 
 	entity, err := s.GetEntity(ctx, entityID)
@@ -193,11 +240,12 @@ func (s *Store) POSIXIdentityFor(ctx context.Context, entityID uuid.UUID) (*POSI
 		shell *string
 	)
 	err := s.pool.QueryRow(ctx, `
-		SELECT p.entity_id, e.name, e.type, p.id_number, p.home_directory, p.login_shell
+		SELECT p.entity_id, e.name, e.type, p.id_number, p.home_directory,
+		       p.login_shell, p.first_served_at
 		  FROM posix_identities p
 		  JOIN entities e ON e.id = p.entity_id
 		 WHERE p.entity_id = $1`, entityID,
-	).Scan(&p.EntityID, &p.Name, &p.Type, &p.Number, &home, &shell)
+	).Scan(&p.EntityID, &p.Name, &p.Type, &p.Number, &home, &shell, &p.FirstServedAt)
 
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrNoPOSIXIdentity
@@ -211,12 +259,104 @@ func (s *Store) POSIXIdentityFor(ctx context.Context, entityID uuid.UUID) (*POSI
 	return &p, nil
 }
 
+// ErrNumberAlreadyServed means a host has been told this number.
+var ErrNumberAlreadyServed = errors.New("store: this number has already been served to a host")
+
+// AdoptPOSIXNumber replaces an unserved number with one the world already uses.
+//
+// The exception to the rule that a number is permanent, and it holds only in
+// the window that makes migration possible: a number no host has been told
+// about has reattributed nothing, so changing it costs exactly nothing. The
+// moment one has been served it is on a filesystem somewhere and this refuses.
+//
+// The guard is a column rather than a warning in a runbook, because the failure
+// it prevents is silent — an operator adopting a number after cutover would see
+// success and find out weeks later, from the files.
+func (s *Store) AdoptPOSIXNumber(
+	ctx context.Context, entityID uuid.UUID, number int, actorID *uuid.UUID,
+) error {
+	// Checked against what is reserved, not against where Cardinal allocates.
+	// A machine numbering its people from 1000 is doing the ordinary thing, and
+	// refusing those is refusing to migrate at all.
+	if reason, reserved := reservedNumber(number); reserved {
+		return fmt.Errorf(
+			"store: %d cannot belong to a person — %s", number, reason)
+	}
+
+	return s.InTx(ctx, func(tx pgx.Tx) error {
+		var (
+			current int
+			served  *time.Time
+		)
+		err := tx.QueryRow(ctx, `
+			SELECT id_number, first_served_at FROM posix_identities
+			 WHERE entity_id = $1 FOR UPDATE`, entityID).Scan(&current, &served)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ErrNoPOSIXIdentity
+		}
+		if err != nil {
+			return fmt.Errorf("store: reading the current number: %w", err)
+		}
+
+		if current == number {
+			// Already agreed. Not an error: adopting the same report twice is
+			// ordinary, and failing on it would make the command unsafe to
+			// re-run, which is the property an operator most wants.
+			return nil
+		}
+
+		if served != nil {
+			return fmt.Errorf("%w: %d was served at %s",
+				ErrNumberAlreadyServed, current, served.UTC().Format(time.RFC3339))
+		}
+
+		if _, err := tx.Exec(ctx,
+			`UPDATE posix_identities SET id_number = $2 WHERE entity_id = $1`,
+			entityID, number); err != nil {
+			var pgErr *pgconn.PgError
+			if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+				return fmt.Errorf(
+					"store: %d is already held by somebody else in this directory", number)
+			}
+			return fmt.Errorf("store: adopting the number: %w", err)
+		}
+
+		ev, err := event.New(event.ActionPOSIXNumberAdopted, &entityID, actorID,
+			map[string]any{"id_number": number})
+		if err != nil {
+			return err
+		}
+		return s.AppendEvent(ctx, tx, ev)
+	})
+}
+
+// MarkPOSIXNumbersServed records that a host has been told these numbers.
+//
+// One statement for the whole assignment, and a no-op after the first time:
+// rows already stamped are excluded by the WHERE, so this costs a small indexed
+// scan per fetch and a write exactly once per identity ever.
+//
+// Called by the assignment endpoint rather than by the agent, because the
+// guarantee has to hold from the moment the number leaves Cardinal — not from
+// the moment somebody's machine admits to having received it.
+func (s *Store) MarkPOSIXNumbersServed(ctx context.Context, entityIDs []uuid.UUID) error {
+	if len(entityIDs) == 0 {
+		return nil
+	}
+	_, err := s.pool.Exec(ctx, `
+		UPDATE posix_identities SET first_served_at = now()
+		 WHERE entity_id = ANY($1) AND first_served_at IS NULL`, entityIDs)
+	if err != nil {
+		return fmt.Errorf("store: marking POSIX numbers as served: %w", err)
+	}
+	return nil
+}
+
 // SetPOSIXAttributes changes a user's home directory or shell.
 //
-// The number is deliberately absent: it is the one field that must never
-// change, because every file on every disk already records it. Changing it is
-// not an edit, it is a new identity, and doing that is releasing the old number
-// — which this design does not do.
+// The number is deliberately absent. Changing it is not an edit — see
+// AdoptPOSIXNumber, which is the one path that may, and only while nothing has
+// been told about it yet.
 func (s *Store) SetPOSIXAttributes(
 	ctx context.Context, entityID uuid.UUID, home, shell string, actorID *uuid.UUID,
 ) error {
@@ -252,7 +392,8 @@ func (s *Store) SetPOSIXAttributes(
 // ListPOSIXIdentities returns every assigned number, lowest first.
 func (s *Store) ListPOSIXIdentities(ctx context.Context) ([]POSIXIdentity, error) {
 	rows, err := s.pool.Query(ctx, `
-		SELECT p.entity_id, e.name, e.type, p.id_number, p.home_directory, p.login_shell
+		SELECT p.entity_id, e.name, e.type, p.id_number, p.home_directory,
+		       p.login_shell, p.first_served_at
 		  FROM posix_identities p
 		  JOIN entities e ON e.id = p.entity_id
 		 ORDER BY p.id_number`)
@@ -268,7 +409,8 @@ func (s *Store) ListPOSIXIdentities(ctx context.Context) ([]POSIXIdentity, error
 			home  *string
 			shell *string
 		)
-		if err := rows.Scan(&p.EntityID, &p.Name, &p.Type, &p.Number, &home, &shell); err != nil {
+		if err := rows.Scan(&p.EntityID, &p.Name, &p.Type, &p.Number, &home, &shell,
+			&p.FirstServedAt); err != nil {
 			return nil, fmt.Errorf("store: scanning POSIX identity: %w", err)
 		}
 		if home != nil {

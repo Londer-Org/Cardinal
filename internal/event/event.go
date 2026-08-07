@@ -77,6 +77,12 @@ const (
 	ActionPOSIXIdentityAssigned  = "posix.identity_assigned"
 	ActionPOSIXAttributesChanged = "posix.attributes_changed"
 
+	// Adopting a number a machine already uses. The one path that changes a
+	// uid, and only before any host has been told the old one — so the journal
+	// records both that it happened and, by its absence afterwards, that it
+	// could not have happened later.
+	ActionPOSIXNumberAdopted = "posix.number_adopted"
+
 	ActionRecoveryCodesIssued = "recovery.codes_issued"
 	ActionRecoveryCodeUsed    = "recovery.code_used"
 

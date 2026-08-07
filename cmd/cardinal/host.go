@@ -341,8 +341,10 @@ func runHostAlias(ctx context.Context, args []string) error {
 	case "add":
 		if err := s.AddHostAlias(ctx, host.ID, pos[1], nil); err != nil {
 			if errors.Is(err, store.ErrNameTaken) {
-				return fmt.Errorf("%w\n\n  Two machines answering to one name is the "+
-					"ambiguity host certificates exist to remove.", err)
+				fmt.Fprintln(os.Stderr,
+					"\n  Two machines answering to one name is the ambiguity host\n"+
+						"  certificates exist to remove.")
+				return err
 			}
 			return err
 		}

@@ -393,11 +393,11 @@ func (c *Config) validatePOSIX() []error {
 	// everywhere else, and writing only one end of the range is the common case.
 	r := c.POSIX.Effective()
 
-	if r.Low < store.POSIXFloor {
+	if r.Low < store.POSIXAllocationFloor {
 		problems = append(problems, fmt.Errorf(
 			"%w: posix.range_low is %d — below %d belongs to the distribution's "+
 				"own accounts and to systemd's DynamicUser reservation",
-			ErrInvalid, r.Low, store.POSIXFloor))
+			ErrInvalid, r.Low, store.POSIXAllocationFloor))
 	}
 	if r.High <= r.Low {
 		problems = append(problems, fmt.Errorf(

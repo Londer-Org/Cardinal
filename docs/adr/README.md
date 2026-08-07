@@ -38,6 +38,7 @@ isn't finished.
 | [0026](0026-sudo-is-as-strong-as-the-shell.md) | Sudo is exactly as strong as the shell that reaches it | Accepted |
 | [0027](0027-a-machine-proves-its-own-name.md) | A machine proves its own name | Accepted |
 | [0028](0028-shadow-mode-reports-and-does-not-act.md) | Shadow mode reports, and does not act | Accepted |
+| [0029](0029-a-number-is-permanent-once-it-has-been-served.md) | A number is permanent once it has been served, and not before | Accepted |
 
 ## Conventions
 

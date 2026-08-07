@@ -322,6 +322,25 @@ can be the gate in whatever runs it across a fleet. Accounts the machine already
 resolves and Cardinal has never heard of are invisible — enumeration is usually
 off on both sides — so name them with `-users alice,bob`.
 
+### Adopting the numbers a fleet already uses
+
+The answer to that blocking finding, and the reason it is not a dead end:
+
+```bash
+cardinal-agent shadow -json > web-01.json      # on each host
+cardinal posix adopt -from web-01.json,web-02.json        # shows the changes
+cardinal posix adopt -from web-01.json,web-02.json -yes   # makes them
+```
+
+Cardinal takes the machine's number instead of the machine taking Cardinal's.
+Free while nothing has been told about it, and refused the moment it has — the
+window closes when the first host fetches an assignment containing it, which is
+a column rather than a caution
+([ADR 0029](adr/0029-a-number-is-permanent-once-it-has-been-served.md)).
+
+If two machines give one person different numbers, adoption refuses: no single
+value satisfies both, and picking one reattributes their files on the other.
+
 **The cache answers lookups; the network only updates it.** A host that cannot
 reach Cardinal keeps resolving the people it last knew about, across a reboot,
 indefinitely. That is not a degraded mode — combined with SSH certificates being

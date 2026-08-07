@@ -698,6 +698,7 @@ erDiagram
         text home_directory
         text login_shell
         timestamp_with_time_zone assigned_at
+        timestamp_with_time_zone first_served_at
     }
     ssh_ca_keys {
         uuid id PK
@@ -785,6 +786,7 @@ uid and gid numbers. One allocator for both, never reused, never changed.
 | `home_directory` | `text` | yes |  |  |
 | `login_shell` | `text` | yes |  |  |
 | `assigned_at` | `timestamp with time zone` | no | `now()` |  |
+| `first_served_at` | `timestamp with time zone` | yes |  | When a host was first told this number. NULL means it may still be changed; set means it is on a filesystem somewhere and is now permanent. |
 
 ### `ssh_ca_keys`
 

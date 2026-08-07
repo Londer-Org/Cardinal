@@ -173,6 +173,14 @@ POSIX IDENTITY (uid and gid numbers)
   posix show <user|group> <name>           The passwd or group line
   posix set <user> [-home] [-shell]        Change where a login lands
   posix list                               Every number handed out
+  posix adopt <user> <number>              Take a number a machine already uses
+  posix adopt -from <report.json,...>      The same, from the output of
+                                           cardinal-agent shadow -json. Shows
+                                           the changes; -yes applies them.
+                                           Refused once a number has been served
+                                           to a host: it is on a filesystem by
+                                           then, and changing it moves files
+                                           rather than editing a row.
 
 HOSTS (a machine proving which host it is)
   host enroll <name>                       Print the join command for a machine.

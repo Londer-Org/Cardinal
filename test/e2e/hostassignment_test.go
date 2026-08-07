@@ -396,3 +396,64 @@ func TestTheRenderedSudoersFileNamesOnlyTheSudoers(t *testing.T) {
 		t.Fatalf("somebody with no access to this host at all is in the file:\n%s", rendered)
 	}
 }
+
+// TestServingAnAssignmentClosesTheAdoptionWindow.
+//
+// The guard on adopting a number is a column, and the column is only meaningful
+// if the endpoint that hands numbers out actually sets it. Without this the
+// whole safety property is decorative: `posix adopt` would keep saying yes long
+// after machines had written the number to their filesystems.
+func TestServingAnAssignmentClosesTheAdoptionWindow(t *testing.T) {
+	defer hostAccessFixture(t)()
+
+	tryCardinalCLI(t, "user", "create", "e2e-adoptme")
+	tryCardinalCLI(t, "posix", "assign", "user", "e2e-adoptme")
+	tryCardinalCLI(t, "grant", "e2e-linux-users", "e2e-adoptme")
+
+	// Established rather than assumed. The stack outlives a `go test` run, so on
+	// the second run this identity has already been served by the first — which
+	// is exactly what the test is about to check for, and would make it pass or
+	// fail depending on history rather than on behaviour.
+	seedSQL(t, `
+		UPDATE posix_identities SET first_served_at = NULL
+		 WHERE entity_id = (SELECT id FROM entities WHERE name = 'e2e-adoptme')`)
+
+	before := seedQuery(t, `
+		SELECT first_served_at IS NULL FROM posix_identities p
+		  JOIN entities e ON e.id = p.entity_id
+		 WHERE e.name = 'e2e-adoptme'`)
+	if before != "t" {
+		t.Fatalf("a freshly assigned number is already marked served (%q)", before)
+	}
+
+	host := enrolledHostInGroup(t, "e2e-linux-06")
+	assignment := fetchAssignment(t, host)
+	if _, ok := assignment.user("e2e-adoptme"); !ok {
+		t.Fatalf("the fixture user was not in the assignment: %v", assignment.names())
+	}
+
+	after := seedQuery(t, `
+		SELECT first_served_at IS NULL FROM posix_identities p
+		  JOIN entities e ON e.id = p.entity_id
+		 WHERE e.name = 'e2e-adoptme'`)
+	if after != "f" {
+		t.Fatal("a number was handed to a host and not marked as served — " +
+			"it could still be changed after the machine wrote it to disk")
+	}
+
+	// And the group's gid too. A directory group's number is on files just as a
+	// user's is, and serving it in the same response has to close its window as
+	// well. Cleared and re-served in one go for the same reason as above.
+	seedSQL(t, `
+		UPDATE posix_identities SET first_served_at = NULL
+		 WHERE entity_id = (SELECT id FROM entities WHERE name = 'e2e-linux-users')`)
+	drain(signedGET{signer: host.Signer, path: "/api/hosts/assignment"}.send(t))
+
+	group := seedQuery(t, `
+		SELECT first_served_at IS NULL FROM posix_identities p
+		  JOIN entities e ON e.id = p.entity_id
+		 WHERE e.name = 'e2e-linux-users'`)
+	if group != "f" {
+		t.Fatal("a gid was served to a host and left adoptable")
+	}
+}
