@@ -107,7 +107,15 @@ func LoadKey(path string) (ssh.Signer, error) {
 }
 
 // Enroll redeems a token, registering this host's public key.
+//
+// A nil client means the default one. Enrolling happens once, at a console, and
+// making the caller construct an http.Client to do it is friction with no
+// upside.
 func Enroll(ctx context.Context, client *http.Client, server, token string, public ssh.PublicKey) (string, error) {
+	if client == nil {
+		client = &http.Client{Timeout: 30 * time.Second}
+	}
+
 	body, err := json.Marshal(map[string]string{
 		"token":     token,
 		"publicKey": string(ssh.MarshalAuthorizedKey(public)),

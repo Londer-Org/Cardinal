@@ -234,6 +234,36 @@ header authorises nothing but the one request it was made for, for at most a
 minute. A proxy in front of Cardinal must pass the `Authorization` header
 through untouched and must not rewrite the path.
 
+### The agent
+
+`cardinal-agent` is what turns that assignment into a working machine. It runs
+as a service, refreshes every few minutes, and answers `nss-systemd` over a Unix
+socket — so `getent`, `id`, `sudo` and `sshd` resolve directory users with no
+NSS module, no C, and nothing loaded into anybody else's process:
+
+```bash
+cardinal-agent enroll -server https://id.example -token …
+cardinal-agent run    -server https://id.example
+cardinal-agent status
+```
+
+```
+$ getent passwd alice
+alice:x:100000:100000:alice:/home/alice:/bin/bash
+$ id alice
+uid=100000(alice) gid=100000(alice) groups=100000(alice),100004(sre)
+```
+
+**The cache answers lookups; the network only updates it.** A host that cannot
+reach Cardinal keeps resolving the people it last knew about, across a reboot,
+indefinitely. That is not a degraded mode — combined with SSH certificates being
+authorised at issuance rather than at login, it means a Cardinal outage does not
+lock anybody out of anything they already had.
+
+`getent passwd` with no argument does not list directory users. A host holds
+only its own people, so enumerating them would advertise exactly the set worth
+not advertising, and the interface has an error for declining.
+
 ## Where authorization stops
 
 Cardinal answers *may you reach this* and *who are you*. It does not answer

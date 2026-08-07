@@ -62,6 +62,14 @@ schema: ## Regenerate docs/schema.md from the running database
 	@go run ./tools/schemadoc
 	@echo "==> docs/schema.md regenerated from the live schema"
 
+.PHONY: verify-userdb
+verify-userdb: ## Check the varlink provider against the real nss-systemd
+	@# The Go tests in internal/userdb prove the server agrees with a client
+	@# written from the same reading of the specification, which is the trap
+	@# this project has walked into before. This asks getent instead.
+	@docker build -q -f tools/userdbcheck/Dockerfile -t cardinal-userdbcheck . >/dev/null
+	@docker run --rm cardinal-userdbcheck
+
 .PHONY: lint
 lint: ## Run linters and vulnerability scanning
 	gofumpt -l -d .

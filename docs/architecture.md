@@ -50,7 +50,9 @@ additional moving part is another way for nobody to be able to log in.
 | `internal/policy` | Cedar: entity projection, evaluation, named decisions | Fails closed if no policy is loaded |
 | `internal/oidcprovider` | The OpenID Connect provider, over `zitadel/oidc` | Adapts Cardinal's storage to the library's interfaces |
 | `internal/sshca` | Signs SSH certificates | Holds no key; is handed one per call |
-| `internal/hostclient` | The *machine's* half of host authentication | The only package that runs somewhere other than the server |
+| `internal/hostclient` | The *machine's* half of host authentication | Shared by the CLI and the agent, so the signing rules exist once |
+| `internal/userdb` | POSIX identity over systemd's varlink interface | Standard library only — no varlink dependency, no cgo |
+| `internal/agent` | The host's assignment, its cache, and the lookup index | Never blocks on Cardinal being reachable |
 | `internal/httpapi` | Routing, middleware, handlers | The only package that knows what a request is |
 | `internal/event` | The hash-chained journal and its payload allowlist | Refuses anything that could carry personal data |
 | `web` | React admin UI, embedded at build time | Talks only to the same public API |
@@ -153,6 +155,32 @@ host key are *public* keys: the holder proves possession by signing, so a
 database read yields the ability to recognise a principal and never to be one.
 That is the same reason there is no password column, applied to machines
 ([ADR 0024](adr/0024-hosts-prove-possession-not-a-secret.md)).
+
+## The agent, and why an outage is not an outage
+
+`cardinal-agent` runs on every managed host. It fetches that machine's
+assignment, keeps it in `/var/lib/cardinal/assignment.json`, and serves POSIX
+identity to `nss-systemd` over a Unix socket
+([ADR 0020](adr/0020-posix-identity-over-varlink.md)).
+
+The ordering is the whole design: **the cache answers lookups, and the network
+only updates it.** A failed refresh is a log line, never a state change. An
+agent that dropped its records when Cardinal became unreachable would turn a
+directory outage into a fleet outage — everybody locked out of every machine at
+once, which is the thing that makes people distrust centralised identity.
+
+The same property, twice over:
+
+| Question | Answered by | Survives a Cardinal outage |
+|---|---|---|
+| Who is uid 100003? | the agent's cache | yes |
+| May they log in? | a certificate issued minutes ago | yes, until it expires |
+
+It is a separate binary from `cardinal` because the two have opposite
+requirements — the CLI talks to the database from a workstation, the agent talks
+only to the HTTP API and runs unattended as root on a thousand machines — and it
+is deliberately not a container, because it serves a socket `nss-systemd` must
+reach and has to survive a reboot before any container runtime starts.
 
 ## Two things that constrain every change
 

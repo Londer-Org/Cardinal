@@ -1,6 +1,6 @@
 # ADR 0020: POSIX identity is served over systemd's varlink interface
 
-- **Status:** Accepted — the spike this was waiting on has been run.
+- **Status:** Accepted — spike run, and the provider built against it.
 - **Date:** 2026-08-06
 - **Resolves:** the `systemd-userdbd spike` question in Phase 4.
 
@@ -92,3 +92,41 @@ is the correct trade and worth documenting rather than discovering.
 **Availability is unchanged by this.** The agent answers from its cache, so
 identity resolution survives a Cardinal outage — the same property the SSH
 certificate design has, for the same reason.
+
+## What the implementation added (2026-08-07)
+
+The spike proved the interface works. Building the real provider settled three
+things the spike did not, each found by asking `getent` rather than by reading
+the specification.
+
+**The cache is authoritative, and the network only updates it.** Nothing in the
+serving path blocks on Cardinal being reachable, and a failed refresh is a log
+line rather than a state change: an agent that cleared its records when the
+directory became unreachable would turn a directory outage into a fleet outage,
+which is the failure that makes people distrust centralised identity in the
+first place. The cache lives in `/var/lib` and not `/run` — `/run` is a tmpfs,
+so a cache there is empty after a reboot, and a machine rebooting during an
+outage is exactly when this has to work.
+
+**nss-systemd does not validate the record's `service` field.** The provider
+sets it, because the record format defines it and systemd's own providers do —
+but setting it to a deliberately wrong value and asking `getent` produced a
+correct answer anyway on systemd 255. The check that *is* load-bearing is on the
+request side: nss-systemd sends the name it derived from the socket filename, so
+a provider whose name disagrees refuses everything with `BadService`, and
+anything resolving at all is proof that handshake is real.
+
+**The GECOS field is the login, not empty.** The provider deliberately omits
+`realName` — it is world-readable to every process on every machine — and
+nss-systemd fills the gap with the user name rather than leaving it blank. No Go
+test could have found this: it is glibc's rendering, not our record.
+
+The terminating reply of a `GetMemberships` stream is genuinely load-bearing.
+Sabotaging it — never clearing `continues` — makes `getent group` return nothing
+at all, which is why every check in the verification script is wrapped in a
+timeout: the documented symptom of getting this wrong is a hang, not an error.
+
+`make verify-userdb` runs all of it in a container. It exists because the Go
+tests prove only that the server agrees with a client written from the same
+reading of the specification, which is the trap this project has walked into
+before.
