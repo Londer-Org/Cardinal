@@ -68,6 +68,13 @@ package: ## Build .deb and .rpm for cardinal-agent (a snapshot, unsigned)
 	@# verify-package, not for publishing.
 	goreleaser release --snapshot --clean --skip=archive
 
+.PHONY: ui-contrast
+ui-contrast: ## Check every admin page reads, in both themes, against a real browser
+	@# Needs the end-to-end stack and a chromium. See tools/uishot/README.md —
+	@# including the two bugs this tool had, which are the reason it prints what
+	@# it could not measure rather than counting it as a pass.
+	@tools/uishot/check-contrast.sh
+
 .PHONY: verify-package
 verify-package: package ## Install the real .deb in a container and check what it did
 	@# Building a package proves it builds. This proves it installs on a machine

@@ -5,6 +5,29 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <title>Cardinal</title>
+    <!--
+      The theme, before anything renders.
+
+      Inline and blocking on purpose: any later and the page paints light and
+      then flips, which is the flash every themed site is judged by. It reads
+      the same key useTheme writes, and falls back to the system preference —
+      which is also what a first-time visitor gets.
+    -->
+    <script>
+      (function () {
+        try {
+          var stored = localStorage.getItem('cardinal-theme')
+          var dark =
+            stored === 'dark' ||
+            ((stored === null || stored === 'system') &&
+              window.matchMedia('(prefers-color-scheme: dark)').matches)
+          document.documentElement.classList.toggle('dark', dark)
+          document.documentElement.style.colorScheme = dark ? 'dark' : 'light'
+        } catch (e) {
+          /* A theme is not worth a blank page. */
+        }
+      })()
+    </script>
   </head>
   <body>
     <div id="root"></div>

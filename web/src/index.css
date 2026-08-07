@@ -108,7 +108,17 @@
   --ring: oklch(0.70 0.19 269.8);
 
   --warning: oklch(0.828 0.189 84.429);
-  --warning-foreground: oklch(0.279 0.077 45.635);
+
+  /* The dark block used to copy the light value here, and the light value is a
+     dark brown — 1.11:1 against this card, which is not low-contrast, it is
+     invisible. Nobody noticed because dark mode was unreachable until now.
+
+     The name is misleading and worth reading carefully: every use in this app
+     is `text-warning-foreground` on an otherwise transparent Alert, so it means
+     "warning text on the page", not "text on a warning fill". On white a dark
+     brown is right for that; on navy it has to be the amber. 9.70:1, and it
+     matches the icon beside it, which already used --warning. */
+  --warning-foreground: oklch(0.828 0.189 84.429);
 
   /* Sits one step above the page rather than below it. A sidebar darker than
      the content it frames reads as a well the content fell into. */

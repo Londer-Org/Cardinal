@@ -1,11 +1,23 @@
 import { Link, useNavigate, useRouterState } from '@tanstack/react-router'
-import { ChevronsUpDownIcon, LogOutIcon, UserIcon } from 'lucide-react'
+import {
+  CheckIcon,
+  ChevronsUpDownIcon,
+  LogOutIcon,
+  MonitorIcon,
+  MoonIcon,
+  PaletteIcon,
+  SunIcon,
+  UserIcon,
+} from 'lucide-react'
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import {
@@ -22,6 +34,7 @@ import {
 } from '@/components/ui/sidebar'
 import { CardinalMark } from '@/components/CardinalMark'
 import { useLogout, useSession } from '@/features/auth/useAuth'
+import { useTheme } from '@/features/theme/useTheme'
 import { ACCOUNT, HOME, NAV } from '@/lib/nav'
 import type { NavItem } from '@/lib/nav'
 
@@ -175,6 +188,10 @@ function NavUser() {
 
         <DropdownMenuSeparator />
 
+        <ThemeSubmenu />
+
+        <DropdownMenuSeparator />
+
         <DropdownMenuItem
           variant="destructive"
           disabled={logout.isPending}
@@ -191,6 +208,45 @@ function NavUser() {
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
+  )
+}
+
+/**
+ * Light, dark, or follow the machine.
+ *
+ * In the account menu rather than as a button in the chrome: it is a preference
+ * about this person's view, which is what everything else in this menu is, and
+ * a permanently visible sun/moon is a control people press once and never
+ * again taking up space forever.
+ */
+function ThemeSubmenu() {
+  const { theme, setTheme } = useTheme()
+
+  const options = [
+    { value: 'light' as const, label: 'Light', icon: SunIcon },
+    { value: 'dark' as const, label: 'Dark', icon: MoonIcon },
+    { value: 'system' as const, label: 'System', icon: MonitorIcon },
+  ]
+
+  return (
+    <DropdownMenuSub>
+      <DropdownMenuSubTrigger>
+        <PaletteIcon />
+        Theme
+      </DropdownMenuSubTrigger>
+      <DropdownMenuSubContent>
+        {options.map((option) => (
+          <DropdownMenuItem
+            key={option.value}
+            onSelect={() => { setTheme(option.value) }}
+          >
+            <option.icon />
+            {option.label}
+            {theme === option.value && <CheckIcon className="ml-auto size-4" />}
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuSubContent>
+    </DropdownMenuSub>
   )
 }
 
