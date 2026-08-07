@@ -31,6 +31,8 @@ isn't finished.
 | [0019](0019-in-app-authorization.md) | In-app authorization, if it happens, is a local decision | **Proposed** — design only |
 | [0020](0020-posix-identity-over-varlink.md) | POSIX identity is served over systemd's varlink interface | Accepted |
 | [0021](0021-ssh-ca-key-custody.md) | Where the SSH CA private key lives | Accepted |
+| [0022](0022-cardinal-issues-short-lived-credentials.md) | Cardinal decides, then issues a short-lived credential | Accepted |
+| [0023](0023-x509-certificates-via-acme.md) | Cardinal issues X.509 certificates, over ACME | Accepted |
 
 ## Conventions
 

@@ -231,6 +231,7 @@ Cardinal.
 | ⬜ | **Shadow mode** — the critical migration feature |
 | ⬜ | FreeIPA importer |
 | ⬜ | `.deb`/`.rpm` via goreleaser |
+| ⬜ | **X.509 certificates over ACME** ([ADR 0023](docs/adr/0023-x509-certificates-via-acme.md)) — after the SSH CA, since it reuses the same host identity, `crypto.Signer` custody, policy decision and audit trail. Closes one of the three reasons FreeIPA survives a migration; DNS and Windows remain out of scope |
 | ✅ | **CA key custody decided** ([ADR 0021](docs/adr/0021-ssh-ca-key-custody.md)) — the signing path takes a `crypto.Signer`, so the key material is configuration rather than a permanent choice. Default is envelope encryption in the database under its *own* key, PKCS#11 supported for anyone with an HSM, TPM sealing rejected because it would bind issuance to one host and break the standby failover plan. Rotation designed in from the start, since `TrustedUserCAKeys` holds several keys and the agent manages that file |
 
 ---
@@ -257,8 +258,17 @@ Recorded so these don't get relitigated:
   an auth-bypass minefield.
 - **LDAP server** — [ADR 0002](docs/adr/0002-identity-is-an-immutable-uuid.md).
   Reading LDAP as a *client* during migration is fine.
-- **Kerberos KDC, DNS, internal CA** — not used in the target environment.
-  Integrate `step-ca` if PKI is ever needed.
+- **Kerberos KDC and DNS** — neither is a decision followed by a short-lived
+  credential ([ADR 0022](docs/adr/0022-cardinal-issues-short-lived-credentials.md)).
+  A ticket-granting service is continuous dependence on the KDC, which is the
+  property SSH certificates exist to avoid; DNS is a name lookup. Run DNS
+  wherever it already runs.
+- ~~**Internal CA** — integrate `step-ca`~~ **reversed**
+  ([ADR 0023](docs/adr/0023-x509-certificates-via-acme.md)). The original reason
+  was "not used in the target environment", which is a statement about one
+  deployment — and the internal CA turns out to be among the most commonly cited
+  reasons FreeIPA survives a migration. Cardinal issues X.509 over ACME, reusing
+  the host identity, policy, key custody and audit it needs anyway for SSH.
 - **RADIUS** — PostgreSQL 19 removed its own RADIUS support as unfixably
   insecure over UDP. Take the hint.
 - **Redis / any second datastore** —
