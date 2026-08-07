@@ -53,6 +53,13 @@ const (
 	ActionAccessTokenIssued  = "access_token.issued"
 	ActionAccessTokenRevoked = "access_token.revoked"
 
+	// The SSH certificate authority. Creating or activating a CA key changes
+	// what an entire fleet will trust, which makes it among the most
+	// consequential things anyone can do here.
+	ActionSSHCAKeyCreated      = "ssh_ca.key_created"
+	ActionSSHCAKeyActivated    = "ssh_ca.key_activated"
+	ActionSSHCertificateIssued = "ssh_ca.certificate_issued"
+
 	ActionRecoveryCodesIssued = "recovery.codes_issued"
 	ActionRecoveryCodeUsed    = "recovery.code_used"
 

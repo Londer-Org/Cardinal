@@ -81,6 +81,8 @@ func run(ctx context.Context, args []string) error {
 		return runApp(ctx, rest)
 	case "token":
 		return runToken(ctx, rest)
+	case "ssh":
+		return runSSH(ctx, rest)
 	case "policy":
 		return runPolicy(ctx, rest)
 	case "serve":
@@ -150,6 +152,14 @@ ACCESS TOKENS (scripts and automation)
 
   A token authenticates its owner but is never device-bound, so existing policy
   refuses it administrative actions and SSH certificates.
+
+HOST ACCESS (SSH certificates)
+  ssh ca init [-activate]                  Create an authority key, print its
+                                           public half for TrustedUserCAKeys
+  ssh ca list                              Keys, and which one is signing
+  ssh ca trust                             The full TrustedUserCAKeys contents
+  ssh ca rotate <key-id> [-grace <dur>]    Make a key sign; the previous one
+                                           stays trusted for the grace period
 
 AUTHORIZATION
   policy test <file.cedar>                 Compile a policy file (offline)

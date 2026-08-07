@@ -31,6 +31,11 @@ var allowedPayloadKeys = []string{
 	"group_id",
 	"member_id",
 	"session_id",
+	// A signing or certificate-authority key's own id. Identifies a key, never
+	// a person — and which key signed something is exactly what an audit of a
+	// suspected compromise needs to reconstruct.
+	"key_id",
+
 	// An access token's own id. Opaque, and the row it points at is where the
 	// token's name lives — a name the owner wrote, so it stays out of the
 	// chain and in a table erasure can reach.

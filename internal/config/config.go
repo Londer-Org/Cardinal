@@ -33,6 +33,26 @@ type Config struct {
 	Sessions Sessions `toml:"sessions"`
 	Recovery Recovery `toml:"recovery"`
 	OIDC     OIDC     `toml:"oidc"`
+	SSH      SSH      `toml:"ssh"`
+}
+
+// SSH configures the certificate authority for host access.
+type SSH struct {
+	// Enabled turns certificate issuance on. Off by default, like the OIDC
+	// provider: a certificate authority nobody has enrolled hosts against is
+	// a signing key sitting in a database for no reason.
+	Enabled bool `toml:"enabled"`
+
+	// CAEncryptionKey encrypts the authority's private key at rest.
+	//
+	// Deliberately its own setting rather than reusing the OIDC one. Whoever
+	// holds the CA key can mint a certificate for any user on any host, and
+	// hosts accept it because that is what the key means — so one leaked
+	// configuration file must not yield both the token signer and the fleet
+	// (ADR 0021).
+	//
+	// Generate with `openssl rand -base64 32`.
+	CAEncryptionKey string `toml:"ca_encryption_key"`
 }
 
 // OIDC configures the OpenID Connect provider.
@@ -285,6 +305,27 @@ func (c *Config) Validate() error {
 			problems = append(problems, fmt.Errorf(
 				"%w: server.public_url — it is the OIDC issuer identifier and every "+
 					"token carries it, so it cannot be inferred", ErrMissing))
+		}
+	}
+
+	if c.SSH.Enabled {
+		if c.SSH.CAEncryptionKey == "" {
+			problems = append(problems, fmt.Errorf(
+				"%w: ssh.ca_encryption_key — the certificate authority key is not "+
+					"stored in the clear, so this is required when host access is "+
+					"enabled (generate with `openssl rand -base64 32`)", ErrMissing))
+		}
+		// Refused rather than warned about. Sharing the two means one leaked
+		// file yields both the token signer and a key that can log into every
+		// host as anybody, and a warning is something people read once.
+		if c.SSH.CAEncryptionKey != "" &&
+			c.SSH.CAEncryptionKey == c.OIDC.SigningKeyEncryptionKey {
+			problems = append(problems, fmt.Errorf(
+				"%w: ssh.ca_encryption_key is the same value as "+
+					"oidc.signing_key_encryption_key — they protect different keys "+
+					"and sharing one means a single leaked secret yields both the "+
+					"token signer and the SSH certificate authority (ADR 0021)",
+				ErrInvalid))
 		}
 	}
 

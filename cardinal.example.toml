@@ -138,3 +138,12 @@ enabled = false
 # Losing it makes every issued token unverifiable and forces every client to
 # re-fetch the JWKS, so keep it wherever this deployment keeps its secrets.
 signing_key_encryption_key = ""
+
+[ssh]
+# Host access by short-lived SSH certificates. Off until hosts are enrolled.
+enabled = false
+# Encrypts the certificate authority's private key at rest. Deliberately its
+# own value: whoever holds the CA key can log into every host as anybody, so
+# one leaked file must not yield both this and the token signer (ADR 0021).
+# Generate with `openssl rand -base64 32`.
+ca_encryption_key = ""
