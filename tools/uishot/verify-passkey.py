@@ -23,6 +23,7 @@ ceremony failed, 2 when the browser could not be driven at all.
 """
 
 import argparse
+import json
 import sys
 import time
 
@@ -154,6 +155,38 @@ def main() -> int:
         if login != args.login:
             print(f"signed in as {login}, expected {args.login}", file=sys.stderr)
             return 1
+
+        # The session that login just created must record where it came from.
+        #
+        # client_ip and user_agent have been columns since the first migration
+        # and nothing ever wrote them. Only a real login can populate them, and
+        # the only credential Cardinal accepts is a passkey — so this is the
+        # only place the write path can be checked at all. The Go suite covers
+        # the read half against seeded values and says so.
+        listing = browser.evaluate("""
+          (() => {
+            const r = new XMLHttpRequest();
+            r.open('GET', '/api/sessions', false);
+            r.setRequestHeader('Accept', 'application/json');
+            r.send(null);
+            if (r.status !== 200) return 'error ' + r.status;
+            const here = JSON.parse(r.responseText).sessions.find((s) => s.current);
+            if (!here) return 'no current session in the listing';
+            return JSON.stringify({ ip: here.clientIp, agent: here.userAgent });
+          })()
+        """)
+        if listing.startswith(("error", "no current")):
+            print(f"could not read the session listing: {listing}", file=sys.stderr)
+            return 1
+
+        origin = json.loads(listing)
+        if not origin["ip"] or not origin["agent"]:
+            print(f"the session recorded no origin: {origin}. Both columns have "
+                  f"existed since the first migration; something is not writing "
+                  f"them.", file=sys.stderr)
+            return 1
+        step(f"the session records {origin['ip']}, "
+             f"{origin['agent'][:40]}…")
 
         print()
         print("PASS: a passkey was registered in a real browser and then used to")

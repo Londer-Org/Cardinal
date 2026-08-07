@@ -475,3 +475,17 @@ func newToken() (string, error) {
 	}
 	return base64.RawURLEncoding.EncodeToString(b), nil
 }
+
+// sessionOrigin describes where a request came from, for the session it opens.
+//
+// The address comes from the resolver rather than RemoteAddr, so a deployment
+// behind Traefik records the browser's address and not the proxy's — and one
+// that is *not* behind a trusted proxy ignores a forwarded header a client made
+// up. Getting that backwards would fill the column with whatever an attacker
+// wanted somebody to see when they checked their sessions.
+func (s *Server) sessionOrigin(r *http.Request) store.SessionOrigin {
+	return store.SessionOrigin{
+		ClientIP:  s.clientIP.resolve(r),
+		UserAgent: r.UserAgent(),
+	}
+}

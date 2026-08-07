@@ -1,1 +1,0 @@
-Keeps //go:embed all:dist compiling before the UI is built.

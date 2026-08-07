@@ -103,6 +103,10 @@ type Session struct {
 
 	// AbsoluteExpiry is the hard end of this session, never extended.
 	AbsoluteExpiry time.Time
+
+	// Where it was created from. Empty when unknown.
+	ClientIP  string
+	UserAgent string
 }
 
 // Expired reports whether the session has passed its validity window.
@@ -128,6 +132,44 @@ type SessionSpec struct {
 
 	DeviceBound  bool
 	CredentialID *uuid.UUID
+
+	// ClientIP and UserAgent are what let somebody recognise a session as
+	// theirs, or fail to.
+	//
+	// Both columns have existed since the first migration and nothing ever
+	// wrote them, so every session looked identical to every other and a list
+	// of them would have been a list of timestamps. "Firefox on Linux, from
+	// this address, an hour ago" is what turns the list into a security
+	// control: the entry somebody does not recognise is the reason the revoke
+	// button is there.
+	//
+	// Both are personal data. They live here rather than in the event journal
+	// precisely because this table can be deleted (ADR 0010), and the payload
+	// allowlist refuses them for that reason.
+	SessionOrigin
+}
+
+// SessionOrigin is where a session was opened from.
+//
+// Its own type so it can be carried through the authentication layer without
+// that layer growing two loose strings it does nothing with.
+type SessionOrigin struct {
+	ClientIP  string
+	UserAgent string
+}
+
+// maxUserAgentLength bounds what a client can make us store.
+//
+// A User-Agent header is attacker-controlled and unbounded; without a cap,
+// signing in repeatedly with a megabyte of it is a cheap way to fill the
+// sessions table. 512 is longer than any real browser sends.
+const maxUserAgentLength = 512
+
+func truncate(value string, limit int) string {
+	if len(value) <= limit {
+		return value
+	}
+	return value[:limit]
 }
 
 // createSessionTx mints a session inside an existing transaction.
@@ -172,13 +214,29 @@ func createSessionTx(ctx context.Context, tx pgx.Tx, subjectID uuid.UUID, spec S
 	}
 	s.AbsoluteExpiry = now.Add(absolute)
 
+	// NULL rather than empty string when unknown, so "we did not record this"
+	// and "the client sent nothing" stay distinguishable — a session created by
+	// a CLI or a test legitimately has neither.
+	var ip, agent *string
+	if spec.ClientIP != "" {
+		ip = &spec.ClientIP
+	}
+	if spec.UserAgent != "" {
+		trimmed := truncate(spec.UserAgent, maxUserAgentLength)
+		agent = &trimmed
+	}
+	s.ClientIP, s.UserAgent = spec.ClientIP, spec.UserAgent
+
 	err := tx.QueryRow(ctx, `
 		INSERT INTO sessions (subject_id, token_hash, valid_period, auth_method,
-		                      auth_at, device_bound, credential_id, absolute_expiry)
-		VALUES ($1, $2, tstzrange($3::timestamptz, $4::timestamptz), $5, $6, $7, $8, $9)
+		                      auth_at, device_bound, credential_id, absolute_expiry,
+		                      client_ip, user_agent)
+		VALUES ($1, $2, tstzrange($3::timestamptz, $4::timestamptz), $5, $6, $7, $8, $9,
+		        $10::inet, $11)
 		RETURNING id`,
 		subjectID, sum[:], s.ValidFrom, s.ValidUntil,
 		s.AuthMethod, s.AuthAt, s.DeviceBound, s.CredentialID, s.AbsoluteExpiry,
+		ip, agent,
 	).Scan(&s.ID)
 	if err != nil {
 		return nil, fmt.Errorf("store: creating session: %w", err)
@@ -364,4 +422,131 @@ func (s *Store) RefreshSessionAuth(ctx context.Context, sessionID uuid.UUID, dev
 		}
 		return s.AppendEvent(ctx, tx, ev)
 	})
+}
+
+// SessionSummary is a session as its owner sees it in a list.
+//
+// Deliberately not Session: that type carries Token, which is populated at
+// creation and must never be reachable from a listing. A separate type makes
+// that a compile-time fact rather than a habit.
+type SessionSummary struct {
+	ID uuid.UUID
+
+	StartedAt      time.Time
+	ExpiresAt      time.Time
+	AbsoluteExpiry time.Time
+
+	AuthMethod  string
+	AuthAt      time.Time
+	DeviceBound bool
+
+	// Empty when the session predates these being recorded, or was created by
+	// something with no request behind it.
+	ClientIP  string
+	UserAgent string
+}
+
+// ListSessions returns a subject's currently-valid sessions, newest first.
+//
+// Only live ones. An expired session cannot be used and cannot be revoked, so
+// listing it would offer a button that does nothing next to a row nobody can
+// act on — while burying the entry that matters among months of history.
+//
+// The composite GiST index on (subject_id, valid_period) exists for exactly
+// this query; the comment in migration 0001 names it, years before anything
+// called it.
+func (s *Store) ListSessions(ctx context.Context, subjectID uuid.UUID) ([]SessionSummary, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT id, lower(valid_period), upper(valid_period), absolute_expiry,
+		       auth_method, auth_at, device_bound,
+		       host(client_ip), user_agent
+		  FROM sessions
+		 WHERE subject_id = $1 AND valid_period @> now()
+		 ORDER BY lower(valid_period) DESC`, subjectID)
+	if err != nil {
+		return nil, fmt.Errorf("store: listing sessions: %w", err)
+	}
+	defer rows.Close()
+
+	var out []SessionSummary
+	for rows.Next() {
+		var summary SessionSummary
+		var ip, agent *string
+		if err := rows.Scan(&summary.ID, &summary.StartedAt, &summary.ExpiresAt,
+			&summary.AbsoluteExpiry, &summary.AuthMethod, &summary.AuthAt,
+			&summary.DeviceBound, &ip, &agent); err != nil {
+			return nil, fmt.Errorf("store: reading session: %w", err)
+		}
+		if ip != nil {
+			summary.ClientIP = *ip
+		}
+		if agent != nil {
+			summary.UserAgent = *agent
+		}
+		out = append(out, summary)
+	}
+	return out, rows.Err()
+}
+
+// RevokeSessionFor ends one session belonging to a specific subject.
+//
+// The subject is part of the statement rather than checked beforehand, so
+// somebody who has obtained a session id — from a log, a screenshot, a shared
+// terminal — revokes nothing rather than signing a colleague out. RevokeSession
+// takes an id alone and is for administrative and internal callers, where the
+// authority to act has already been established by policy; this is the
+// self-service door and it cannot be widened by knowing an identifier.
+func (s *Store) RevokeSessionFor(ctx context.Context, id, subjectID uuid.UUID, actorID *uuid.UUID) error {
+	return s.InTx(ctx, func(tx pgx.Tx) error {
+		tag, err := tx.Exec(ctx, `
+			UPDATE sessions
+			   SET valid_period = tstzrange(lower(valid_period), now())
+			 WHERE id = $1 AND subject_id = $2 AND upper(valid_period) > now()`,
+			id, subjectID)
+		if err != nil {
+			return fmt.Errorf("store: revoking session: %w", err)
+		}
+		if tag.RowsAffected() == 0 {
+			return ErrNoSuchSession
+		}
+
+		ev, err := event.New(event.ActionSessionRevoked, &subjectID, actorID,
+			map[string]any{"session_id": id})
+		if err != nil {
+			return err
+		}
+		return s.AppendEvent(ctx, tx, ev)
+	})
+}
+
+// RevokeOtherSessions ends every session for a subject except one.
+//
+// The operation somebody actually wants after losing a laptop: sign out
+// everywhere, stay signed in here. Revoking all of them including the current
+// one is available too — that is RevokeAllSessions — but making it the only
+// option means the person doing the panicking is also immediately locked out of
+// the console they are panicking in.
+func (s *Store) RevokeOtherSessions(ctx context.Context, subjectID, keep uuid.UUID, actorID *uuid.UUID) (int64, error) {
+	var count int64
+	err := s.InTx(ctx, func(tx pgx.Tx) error {
+		tag, err := tx.Exec(ctx, `
+			UPDATE sessions
+			   SET valid_period = tstzrange(lower(valid_period), now())
+			 WHERE subject_id = $1 AND id <> $2 AND upper(valid_period) > now()`,
+			subjectID, keep)
+		if err != nil {
+			return fmt.Errorf("store: revoking sessions: %w", err)
+		}
+		count = tag.RowsAffected()
+		if count == 0 {
+			return nil
+		}
+
+		ev, err := event.New(event.ActionSessionRevoked, &subjectID, actorID, nil)
+		if err != nil {
+			return err
+		}
+		return s.AppendEvent(ctx, tx, ev)
+	})
+	return count, err
 }

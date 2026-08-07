@@ -352,3 +352,25 @@ export const createdTokenSchema = z.object({
   token: z.string(),
 })
 export type CreatedToken = z.infer<typeof createdTokenSchema>
+
+/** A live session, as its owner sees it. Never the token — only its hash exists. */
+export const sessionSchema = z.object({
+  id: z.string(),
+  // The session making the request. What stops somebody revoking the one they
+  // are using by accident, and what labels the row they should not worry about.
+  current: z.boolean(),
+  startedAt: z.string(),
+  expiresAt: z.string(),
+  // The hard end, never extended by use.
+  endsAt: z.string(),
+  authMethod: z.string(),
+  authAt: z.string(),
+  deviceBound: z.boolean(),
+  // Empty when unrecorded, which is a real state for sessions created before
+  // these were captured. Said plainly rather than rendered as "Unknown device".
+  clientIp: z.string(),
+  userAgent: z.string(),
+})
+export type Session = z.infer<typeof sessionSchema>
+
+export const sessionsSchema = z.object({ sessions: z.array(sessionSchema) })

@@ -227,6 +227,15 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("POST /api/tokens", selfService(http.HandlerFunc(s.handleCreateToken)))
 	mux.Handle("DELETE /api/tokens/{id}", selfService(http.HandlerFunc(s.handleRevokeToken)))
 
+	// Sessions, for the person signed into them. Behind the same door as
+	// passkeys for the same reason: seeing where somebody is signed in, and
+	// signing them out of it, is credential management. A leaked token that
+	// could do either would be able to enumerate its owner's devices and lock
+	// them out of all of them.
+	mux.Handle("GET /api/sessions", selfService(http.HandlerFunc(s.handleListSessions)))
+	mux.Handle("DELETE /api/sessions", selfService(http.HandlerFunc(s.handleRevokeOtherSessions)))
+	mux.Handle("DELETE /api/sessions/{id}", selfService(http.HandlerFunc(s.handleRevokeSession)))
+
 	mux.Handle("GET /api/credentials",
 		selfService(http.HandlerFunc(s.handleListCredentials)))
 	mux.Handle("DELETE /api/credentials/{id}",

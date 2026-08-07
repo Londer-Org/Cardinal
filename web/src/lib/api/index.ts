@@ -31,6 +31,7 @@ import {
   directoryGroupsSchema,
   accessTokensSchema,
   createdTokenSchema,
+  sessionsSchema,
   directoryHostsSchema,
   directoryUserDetailSchema,
   directoryUsersSchema,
@@ -232,6 +233,20 @@ export const api = {
         { method: 'DELETE' }),
   },
 
+  /** Sessions, always the signed-in person's own. */
+  sessions: {
+    list: () => request('/api/sessions', sessionsSchema),
+
+    revoke: (id: string) =>
+      request(`/api/sessions/${encodeURIComponent(id)}`, z.undefined(),
+        { method: 'DELETE' }),
+
+    /** Signs out everywhere else, deliberately keeping this session alive. */
+    revokeOthers: () =>
+      request('/api/sessions', z.object({ revoked: z.number() }),
+        { method: 'DELETE' }),
+  },
+
   directory: {
     users: (page: PageQuery, status: UserStatus = '') =>
       request(
@@ -398,6 +413,7 @@ export type {
   DirectoryGroup,
   AccessToken,
   CreatedToken,
+  Session,
   DirectoryHost,
   DirectoryGroupDetail,
   DirectoryUser,
@@ -434,6 +450,7 @@ export const queryKeys = {
     ['directory', 'ref-applications', page] as const,
   group: (name: string) => ['directory', 'groups', name] as const,
   credentials: ['credentials'] as const,
+  sessions: ['sessions'] as const,
   tokens: ['tokens'] as const,
   decisions: (deniedOnly: boolean) => ['decisions', deniedOnly] as const,
   policy: ['policy'] as const,

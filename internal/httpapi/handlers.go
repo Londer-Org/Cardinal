@@ -96,7 +96,7 @@ func (s *Server) handleLoginFinish(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ctx := r.Context()
-	session, err := s.auth.FinishLogin(ctx, ceremonyID, parsed)
+	session, err := s.auth.FinishLogin(ctx, ceremonyID, parsed, s.sessionOrigin(r))
 	if err != nil {
 		// A cloned authenticator is worth surfacing separately in the log — it
 		// is a security event rather than a failed login — but the client still

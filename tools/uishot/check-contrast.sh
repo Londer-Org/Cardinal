@@ -47,6 +47,21 @@ $PSQL -q -c "INSERT INTO access_tokens (subject_id, name, token_hash, prefix,
                FROM entities e WHERE e.name='uishot'
              ON CONFLICT (token_hash) DO NOTHING" >/dev/null
 
+# A second session, so /account shows a list with a revocable row rather than
+# one entry nobody may end. The user agent is a real Safari string, which is
+# what exercises the description heuristic — every Chromium browser also claims
+# to be Safari, so the ordering in describeAgent matters.
+$PSQL -q -c "INSERT INTO sessions (subject_id, token_hash, valid_period, auth_method,
+                                   auth_at, device_bound, absolute_expiry,
+                                   client_ip, user_agent)
+             SELECT e.id, sha256('uishot-second-device'::bytea),
+                    tstzrange(now() - interval '2 hours', now() + interval '5 hours'),
+                    'passkey', now() - interval '2 hours', false,
+                    now() + interval '6 days', '198.51.100.24'::inet,
+                    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 Safari/605.1.15'
+               FROM entities e WHERE e.name='uishot'
+             ON CONFLICT (token_hash) DO NOTHING" >/dev/null
+
 # path, then any selectors to click before measuring. Anything that only exists
 # after an interaction is invisible to a sweep that just navigates — and the
 # colours used least are the ones most likely to be wrong, because nobody has
@@ -55,6 +70,9 @@ $PSQL -q -c "INSERT INTO access_tokens (subject_id, name, token_hash, prefix,
 PAGES=(
   /
   /account
+  # The revoke confirmation on a session row: a destructive button and a
+  # cancel, neither of which exists until somebody clicks.
+  "/account|button.text-destructive"
   /access/passkeys
   /access/tokens
   "/access/tokens|button.text-destructive"

@@ -1,5 +1,6 @@
 import { ProfileCard } from '@/features/auth/ProfileCard'
 import { RecoveryCodes } from '@/features/recovery/RecoveryCodes'
+import { SessionList } from '@/features/sessions/SessionList'
 import { useSession } from '@/features/auth/useAuth'
 import { Skeleton } from '@/components/ui/skeleton'
 import { ViewHeader } from '@/views/ViewHeader'
@@ -18,6 +19,10 @@ export function AccountView() {
         <ProfileCard session={session} />
         <RecoveryCodes remaining={session.recoveryCodesRemaining} />
       </div>
+      {/* Full width: a session row carries a device, an address and two
+          expiries, and squeezing that into half a page is how people stop
+          reading it. */}
+      <SessionList />
     </div>
   )
 }

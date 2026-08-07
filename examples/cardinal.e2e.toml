@@ -37,6 +37,23 @@ cookie_domain = "cardinal.test"
 # compose network without pinning a container IP that changes on recreate.
 trusted_proxies = ["172.16.0.0/12", "127.0.0.1/32"]
 
+# One consequence, visible the moment you look at "Where you are signed in":
+# every session in this stack records Traefik's address rather than the
+# browser's.
+#
+# That is the resolver working, not failing. A browser on the host reaches the
+# containers through Docker's NAT, so Traefik sees the bridge gateway
+# (172.22.0.1) as the source and forwards it — and the gateway is inside the
+# range above, so every hop in the chain is a trusted proxy and there is no
+# untrusted address to attribute to. Cardinal reports the peer rather than
+# inventing one.
+#
+# The general rule is worth carrying to production: a trusted_proxies range
+# wider than your actual proxies silently destroys client attribution. Here it
+# is the honest trade, because pinning a container IP that changes on every
+# recreate would break the stack instead. In a real deployment, list the
+# proxies.
+
 [database]
 dsn = "postgres://cardinal:cardinal@postgres:5432/cardinal?sslmode=disable"
 

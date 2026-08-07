@@ -246,9 +246,13 @@ func (s *Service) BeginDiscoverableLogin(ctx context.Context) (*protocol.Credent
 }
 
 // FinishLogin verifies an assertion and opens a session.
+//
+// origin is recorded on the session so its owner can later recognise it — or
+// fail to, which is the entry the revoke button exists for.
 func (s *Service) FinishLogin(
 	ctx context.Context, ceremonyID uuid.UUID,
 	response *protocol.ParsedCredentialAssertionData,
+	origin store.SessionOrigin,
 ) (*store.Session, error) {
 	sessionData, entityID, err := s.consumeCeremony(ctx, ceremonyID, "authentication")
 	if err != nil {
@@ -304,8 +308,9 @@ func (s *Service) FinishLogin(
 		// Zero: the store applies the configured idle window.
 		// A credential that cannot be backed up stays on its hardware, which is
 		// what lets policy demand a device-bound factor for privileged actions.
-		DeviceBound:  !stored.BackupEligible,
-		CredentialID: &stored.ID,
+		DeviceBound:   !stored.BackupEligible,
+		CredentialID:  &stored.ID,
+		SessionOrigin: origin,
 	})
 }
 
