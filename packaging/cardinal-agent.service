@@ -1,0 +1,54 @@
+[Unit]
+Description=Cardinal agent — POSIX identity, sudo rules and host certificates
+Documentation=https://github.com/arthur-lonfils/cardinal
+
+# Before nss-systemd needs it, and before anything that resolves a name.
+# systemd-userdbd.socket is what nss-systemd talks to, and it discovers this
+# agent by finding its socket in /run/systemd/userdb.
+After=network-online.target systemd-userdbd.socket
+Wants=network-online.target
+
+# Deliberately NOT Before=sshd.service. An agent that must start before sshd is
+# an agent whose failure keeps people off the machine, which is the opposite of
+# what this design is for: the cache answers from disk, and a login that arrives
+# before the first refresh falls through to whatever else nsswitch names.
+
+[Service]
+Type=exec
+ExecStart=/usr/bin/cardinal-agent run -config /etc/cardinal/agent.toml
+
+# Root, and there is no way around it. The agent writes /etc/sudoers.d and
+# /etc/ssh, and creates a socket in /run/systemd/userdb that every process on the
+# machine must be able to reach. Running as a lesser user would mean granting
+# those three things individually, which is the same privilege spelled longer.
+User=root
+
+# What it may touch, stated rather than assumed. A bug that tried to write
+# anywhere else fails rather than succeeds.
+ProtectSystem=strict
+ReadWritePaths=/etc/cardinal /etc/sudoers.d /etc/ssh /var/lib/cardinal /run/systemd/userdb
+StateDirectory=cardinal
+ConfigurationDirectory=cardinal
+
+ProtectHome=yes
+PrivateTmp=yes
+NoNewPrivileges=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+
+# Restart forever. The failure this recovers from is Cardinal being unreachable
+# at boot, which is exactly when giving up would be worst — and the agent serves
+# from its cache in the meantime, so a restarting agent is not a broken machine.
+Restart=always
+RestartSec=30s
+
+[Install]
+WantedBy=multi-user.target

@@ -242,10 +242,24 @@ socket — so `getent`, `id`, `sudo` and `sshd` resolve directory users with no
 NSS module, no C, and nothing loaded into anybody else's process:
 
 ```bash
+apt install ./cardinal-agent_*.deb     # or the .rpm
+cardinal-agent doctor                  # what this machine still needs
 cardinal-agent enroll -server https://id.example -token …
-cardinal-agent run    -server https://id.example
-cardinal-agent status
+systemctl enable --now cardinal-agent
 ```
+
+Installing leaves a machine that does nothing, deliberately. The package writes
+only its own paths, ships no maintainer scripts, and does not enable the unit —
+a security product that rearranges how a machine resolves usernames as a side
+effect of an install is a surprise it cannot afford
+([ADR 0030](adr/0030-the-package-installs-and-reports.md)). `doctor` reports what
+is missing and exits non-zero while anything fatal is outstanding, so it can gate
+a rollout.
+
+One thing it does bring, through its dependency on `libnss-systemd`: `systemd`
+appended to the `passwd` and `group` lines of `nsswitch.conf`. Appended, not
+inserted — a directory already on that line keeps winning, so installing is
+additive rather than a cutover, and shadow mode stays meaningful.
 
 ```
 $ getent passwd alice

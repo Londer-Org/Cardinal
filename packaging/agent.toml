@@ -1,0 +1,46 @@
+# Cardinal agent configuration.
+#
+# The one setting with no sensible default is the server address, so the
+# smallest file that does anything is a single line.
+
+# server = "https://id.example"
+
+# How often to ask Cardinal for this host's assignment.
+#
+# Not a security boundary: SSH access is decided when a certificate is issued and
+# those last minutes, so a stale assignment delays a name resolving rather than a
+# login being authorised.
+# interval = "5m"
+
+# Where this host keeps the key it authenticates to Cardinal with. Written by
+# `cardinal-agent enroll` and never by anything else.
+# key_path = "/etc/cardinal/host_key"
+
+# The assignment, cached between runs.
+#
+# Under /var/lib and not /run: /run is a tmpfs, so a cache there is empty after a
+# reboot — and a machine rebooting while Cardinal is unreachable is precisely
+# when this has to work.
+# cache_path = "/var/lib/cardinal/assignment.json"
+
+# Where nss-systemd looks for identity providers. Empty disables serving POSIX
+# identity entirely, which is what a host wants if it runs the agent only for
+# sudo rules or certificates.
+# socket_dir = "/run/systemd/userdb"
+
+# The sudoers drop-in to render. Empty disables it, for a host whose sudo rules
+# are managed by configuration management.
+#
+# Cardinal writes this file and no other. /etc/sudoers is never edited, not even
+# to add the @includedir line that makes the drop-in take effect — run
+# `cardinal-agent doctor` to be told about that rather than surprised by it.
+# sudoers_path = "/etc/sudoers.d/50-cardinal"
+
+# This machine's own SSH host key, and where to put the certificate Cardinal
+# signs for it. Empty disables host certificate renewal.
+#
+# Deliberately not the key above: that one is how the machine talks to Cardinal,
+# this one is presented to every stranger who connects to port 22.
+# host_key_path = "/etc/ssh/ssh_host_ed25519_key.pub"
+# host_cert_path = "/etc/ssh/ssh_host_ed25519_key-cert.pub"
+# sshd_config_path = "/etc/ssh/sshd_config.d/50-cardinal.conf"

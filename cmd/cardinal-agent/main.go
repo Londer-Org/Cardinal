@@ -77,6 +77,8 @@ func run(ctx context.Context, args []string) error {
 		return runHostCert(args[1:])
 	case "shadow":
 		return runShadow(ctx, args[1:])
+	case "doctor":
+		return runDoctor(ctx, args[1:])
 	case "help", "-h", "--help":
 		usage()
 		return nil
@@ -103,6 +105,8 @@ USAGE
   shadow -server <url>                  Report what cutting over would change.
                                         Enforces nothing: no socket, no sudoers
                                         file, no certificate.
+  doctor                                Check this machine's prerequisites and
+                                        say what is missing. Changes nothing.
 
 FLAGS
   -key <path>        this host's private key (default `+hostclient.DefaultKeyPath+`)
@@ -156,6 +160,8 @@ func runEnroll(ctx context.Context, args []string) error {
 
 func runAgent(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("run", flag.ContinueOnError)
+	configPath := fs.String("config", "",
+		"configuration file; every flag below overrides what it sets")
 	server := fs.String("server", "", "base URL of the Cardinal server")
 	keyPath := fs.String("key", hostclient.DefaultKeyPath, "this host's key")
 	cachePath := fs.String("cache", agent.DefaultCachePath, "cached assignment")
@@ -172,6 +178,19 @@ func runAgent(ctx context.Context, args []string) error {
 	if err := fs.Parse(args); err != nil {
 		return errUsage
 	}
+
+	// A file, then flags on top. The systemd unit names only the file, so an
+	// operator changing a setting edits configuration rather than a unit — which
+	// would otherwise conflict on every package upgrade.
+	if *configPath != "" {
+		cfg, err := agent.LoadConfig(*configPath)
+		if err != nil {
+			return err
+		}
+		applyConfig(fs, cfg, server, keyPath, cachePath, interval, socketDir,
+			sudoersPath, hostKeyPath, hostCertPath, sshdDropIn)
+	}
+
 	if *server == "" {
 		return errUsage
 	}
@@ -532,13 +551,15 @@ var errBlocking = errors.New("cutting this host over would change uid or gid own
 func printReport(report *shadow.Report) {
 	fmt.Printf("%s\n\n", report.Host)
 
+	// Writes to a tabwriter cannot fail in a way worth handling — it buffers into
+	// memory, and Flush is where a real error would surface.
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "USER\tWHAT\tNOW\tCARDINAL\tVERDICT")
+	_, _ = fmt.Fprintln(w, "USER\tWHAT\tNOW\tCARDINAL\tVERDICT")
 	for _, f := range report.Findings {
 		if f.Severity == shadow.Match {
 			continue
 		}
-		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n",
+		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n",
 			f.User, f.What, f.Local, f.Cardinal, f.Severity)
 	}
 	_ = w.Flush()
@@ -571,4 +592,87 @@ func printReport(report *shadow.Report) {
 		"\n  Note: accounts this machine can already resolve and Cardinal has never\n"+
 			"  heard of are invisible here — enumeration is usually off on both\n"+
 			"  sides. Name them with -users.")
+}
+
+// applyConfig fills in every setting the command line did not.
+//
+// Explicitly, by asking the FlagSet which flags were actually given, rather than
+// comparing against defaults — a flag set to the same value as its default is
+// still an operator saying something, and treating it as unset would silently
+// ignore them.
+func applyConfig(fs *flag.FlagSet, cfg *agent.Config,
+	server, keyPath, cachePath *string, interval *time.Duration,
+	socketDir, sudoersPath, hostKeyPath, hostCertPath, sshdDropIn *string,
+) {
+	given := map[string]bool{}
+	fs.Visit(func(f *flag.Flag) { given[f.Name] = true })
+
+	set := func(name string, target *string, value string) {
+		if !given[name] {
+			*target = value
+		}
+	}
+
+	set("server", server, cfg.Server)
+	set("key", keyPath, cfg.KeyPath)
+	set("cache", cachePath, cfg.CachePath)
+	set("socket-dir", socketDir, cfg.SocketDir)
+	set("sudoers", sudoersPath, cfg.SudoersPath)
+	set("host-key", hostKeyPath, cfg.HostKeyPath)
+	set("host-cert", hostCertPath, cfg.HostCertPath)
+	set("sshd-config", sshdDropIn, cfg.SSHDConfigPath)
+
+	if !given["interval"] {
+		*interval = time.Duration(cfg.Interval)
+	}
+}
+
+// runDoctor reports what this machine still needs.
+//
+// The package installs a binary, a unit and a config file and stops — it does
+// not reorder nsswitch.conf or edit /etc/sudoers, because a security product
+// that rearranges how a machine resolves usernames as a side effect of an
+// install is the surprise that loses people's trust. This is the other half of
+// that decision: say precisely what is missing, and how to fix it.
+func runDoctor(ctx context.Context, args []string) error {
+	fs := flag.NewFlagSet("doctor", flag.ContinueOnError)
+	configPath := fs.String("config", agent.DefaultConfigPath, "configuration file")
+	if err := fs.Parse(args); err != nil {
+		return errUsage
+	}
+
+	cfg, err := agent.LoadConfig(*configPath)
+	if err != nil {
+		return err
+	}
+
+	checks := agent.Diagnose(ctx, cfg)
+
+	fmt.Printf("cardinal-agent, against %s\n\n", cfg.Server)
+	for _, c := range checks {
+		fmt.Println(c.Describe())
+	}
+
+	outstanding := 0
+	for _, c := range checks {
+		if c.OK {
+			continue
+		}
+		outstanding++
+		fmt.Printf("\n  %s:\n    %s\n", c.Name, c.Advice)
+	}
+
+	fmt.Println()
+	if outstanding == 0 {
+		fmt.Println("  Ready.")
+		return nil
+	}
+
+	if !agent.Ready(checks) {
+		// Non-zero only when something fatal is outstanding, so this can gate a
+		// rollout without failing on a machine that simply has no sshd.
+		return fmt.Errorf("%w: %d thing(s) to fix", agent.ErrNotReady, outstanding)
+	}
+	fmt.Printf("  %d thing(s) to fix, none of which stop the agent working.\n", outstanding)
+	return nil
 }

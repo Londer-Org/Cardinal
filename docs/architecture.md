@@ -198,7 +198,10 @@ It is a separate binary from `cardinal` because the two have opposite
 requirements — the CLI talks to the database from a workstation, the agent talks
 only to the HTTP API and runs unattended as root on a thousand machines — and it
 is deliberately not a container, because it serves a socket `nss-systemd` must
-reach and has to survive a reboot before any container runtime starts.
+reach and has to survive a reboot before any container runtime starts. It ships
+as a `.deb` and `.rpm` that install files and nothing else
+([ADR 0030](adr/0030-the-package-installs-and-reports.md)); `cardinal-agent
+doctor` reports what the machine still needs.
 
 ## Two things that constrain every change
 

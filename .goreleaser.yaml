@@ -1,0 +1,124 @@
+# Releases for Cardinal.
+#
+# Two binaries with opposite distribution needs. `cardinal` is an administrator's
+# tool that talks to the database — a container image and a static binary suit it,
+# and it lands wherever the server does. `cardinal-agent` runs unattended as root
+# on every machine in a fleet, so it needs to be a package the machine's own
+# package manager installs, upgrades and can be asked about.
+#
+# The agent is deliberately not a container. It serves a socket nss-systemd must
+# reach, writes /etc/sudoers.d, manages sshd trust configuration, and has to
+# survive a reboot before any container runtime starts — all the operational cost
+# of containerising, none of the isolation.
+
+version: 2
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: cardinal
+    main: ./cmd/cardinal
+    binary: cardinal
+    env: [CGO_ENABLED=0]
+    goos: [linux, darwin]
+    goarch: [amd64, arm64]
+    flags: [-trimpath]
+    ldflags:
+      - -s -w
+      - -X main.version={{.Version}}
+      - -X main.commit={{.FullCommit}}
+
+  - id: cardinal-agent
+    main: ./cmd/cardinal-agent
+    binary: cardinal-agent
+    env: [CGO_ENABLED=0]
+    # Linux only, and that is not an oversight. The agent's whole job is
+    # systemd's userdb interface, /etc/sudoers.d and sshd — none of which exist
+    # anywhere else.
+    goos: [linux]
+    goarch: [amd64, arm64]
+    flags: [-trimpath]
+    ldflags:
+      - -s -w
+      - -X main.version={{.Version}}
+      - -X main.commit={{.FullCommit}}
+
+archives:
+  - id: default
+    formats: [tar.gz]
+    name_template: >-
+      {{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}
+
+nfpms:
+  - id: cardinal-agent
+    package_name: cardinal-agent
+    ids: [cardinal-agent]
+    formats: [deb, rpm]
+
+    vendor: Cardinal
+    homepage: https://github.com/arthur-lonfils/cardinal
+    maintainer: Arthur Lonfils <alon@londer.be>
+    description: |
+      Cardinal agent — POSIX identity, sudo rules and host certificates.
+
+      Serves directory identity to nss-systemd over systemd's userdb interface,
+      renders the sudoers drop-in Cardinal's policy decides, and keeps this
+      machine's SSH host certificate current. Answers from a local cache, so a
+      Cardinal outage does not lock anybody out.
+    license: Apache-2.0
+    section: admin
+
+    dependencies:
+      # nss-systemd is what actually consults the agent. Without it the socket
+      # exists and nothing ever asks it anything.
+      - libnss-systemd
+    overrides:
+      rpm:
+        dependencies:
+          - systemd
+
+    recommends:
+      # Without visudo the agent installs no sudoers file at all, because it
+      # refuses to write one it could not check first. Recommended rather than
+      # required: a host may run the agent purely for identity.
+      - sudo
+
+    contents:
+      - src: packaging/cardinal-agent.service
+        dst: /usr/lib/systemd/system/cardinal-agent.service
+
+      - src: packaging/agent.toml
+        dst: /etc/cardinal/agent.toml
+        type: config|noreplace
+
+      - dst: /var/lib/cardinal
+        type: dir
+        file_info: {mode: 0o750}
+
+    # Deliberately no postinstall script.
+    #
+    # The two edits this machine needs — `systemd` in nsswitch.conf and
+    # `@includedir` in /etc/sudoers — are exactly the ones the agent refuses to
+    # make itself, and it would be strange for the package to be allowed what the
+    # daemon is not. A security product that reorders how a machine resolves
+    # every username, as a side effect of an install somebody did to have a look,
+    # is the surprise that costs people's trust.
+    #
+    # `cardinal-agent doctor` reports precisely what is missing and how to fix
+    # it. The unit is not enabled on install for the same reason.
+
+release:
+  # No repository to publish to yet. Building the artefacts is the useful half
+  # and works without one; turn this off when there is somewhere to release to.
+  disable: true
+
+checksum:
+  name_template: checksums.txt
+
+changelog:
+  use: github
+  sort: asc
+  filters:
+    exclude: ['^docs:', '^test:', '^chore:']

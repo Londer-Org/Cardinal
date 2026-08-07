@@ -62,6 +62,23 @@ schema: ## Regenerate docs/schema.md from the running database
 	@go run ./tools/schemadoc
 	@echo "==> docs/schema.md regenerated from the live schema"
 
+.PHONY: package
+package: ## Build .deb and .rpm for cardinal-agent (a snapshot, unsigned)
+	@# --snapshot because there is no tag: this is for looking at and for
+	@# verify-package, not for publishing.
+	goreleaser release --snapshot --clean --skip=archive
+
+.PHONY: verify-package
+verify-package: package ## Install the real .deb in a container and check what it did
+	@# Building a package proves it builds. This proves it installs on a machine
+	@# that has never heard of Cardinal, ships no maintainer scripts of its own,
+	@# and leaves an existing directory winning on nsswitch.conf — so installing
+	@# it is not a cutover.
+	@docker build -q -f tools/hostcheck/package.Dockerfile \
+		--build-arg DEB="$$(ls dist/cardinal-agent_*_linux_amd64.deb | head -1)" \
+		-t cardinal-packagecheck . >/dev/null
+	@docker run --rm cardinal-packagecheck
+
 .PHONY: verify-host
 verify-host: ## Check the host integration against real getent, id and sudo
 	@# The Go tests prove each package agrees with a client written from the
