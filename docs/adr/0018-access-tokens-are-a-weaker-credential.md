@@ -50,6 +50,44 @@ things its owner can**, even when its owner is a full directory administrator.
 That is a property of the policy rather than of the token table, which is why it
 holds for rules nobody has written yet.
 
+### Correction: that last sentence was wrong, and it cost something
+
+It holds for every route that *asks* Cedar. Credential self-service never did.
+Managing your own passkeys, recovery codes and tokens has no resource to
+authorize against — only the caller's own account — so the whole surface sat
+behind bare `requireAuth`, and a token reached all of it.
+
+Found while building the console's token page, by a test written to assert this
+document's claim. What a token could do, measured against a running stack:
+
+| Request | Effect |
+|---|---|
+| `POST /api/recovery/codes` | Read ten account-recovery credentials, **and invalidate the owner's in the same statement** |
+| `POST /api/credentials/register/begin` | Start attaching a passkey of the holder's choosing |
+| `DELETE /api/credentials/{id}` | Revoke the owner's passkeys |
+| `POST /api/tokens` | Mint its own successor, so revoking the leaked token achieved nothing |
+
+A string in a CI variable was one request away from owning the account it was
+scoped to serve — and the recovery-code path was worse than a takeover, because
+it removed the owner's way back at the same time.
+
+The fix is `requireDeviceBound`, a precondition on the credential sitting beside
+`requireAuth` rather than a Cedar rule. Two reasons it is code:
+
+- **Nothing varies.** Cedar answers "may this principal do this to that
+  resource". Here the answer is the same for every principal and every resource,
+  which makes it a property of the credential, like `requireAuth` and CSRF.
+- **A policy set is editable and this must not be.** An administrator who
+  published a set without the rule would hand every leaked token in the fleet an
+  account takeover, and the mistake would look like an ordinary policy change in
+  review.
+
+The general lesson is the one worth keeping: **"the policy forbids it" is only
+true where the policy is consulted.** Any route that does not reach the decision
+point is outside every guarantee expressed there, and reasoning from the policy
+alone will not reveal which routes those are. Only asking the running system
+does.
+
 ## Consequences
 
 CSRF is skipped for a token-authenticated request, because nothing attaches an

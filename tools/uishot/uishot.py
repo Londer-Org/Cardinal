@@ -290,6 +290,13 @@ def main() -> int:
     ap.add_argument("--token", default=os.environ.get("CARDINAL_SESSION", ""),
                     help="session cookie value")
     ap.add_argument("--search", default="", help="type this into a search box first")
+    ap.add_argument("--click", action="append", default=[], metavar="SELECTOR",
+                    help="click this before measuring; repeatable, in order. "
+                         "Reaches UI that only exists after an interaction — a "
+                         "confirmation, a dialog, a destructive button. Without "
+                         "it the sweep only ever sees a page's opening state, "
+                         "and the colours most likely to be wrong are the ones "
+                         "used least.")
     ap.add_argument("--contrast", action="store_true",
                     help="measure text contrast and fail on anything below AA")
     ap.add_argument("--width", type=int, default=1400)
@@ -331,6 +338,24 @@ def main() -> int:
               })()
             """ % json.dumps(args.search))
             time.sleep(2)
+
+        for selector in args.click:
+            # A missing selector is fatal rather than skipped. A sweep that
+            # silently fails to reach the state it was asked for reports "all
+            # pass" about a button it never rendered, which is the failure mode
+            # this whole tool exists to avoid.
+            got = browser.evaluate("""
+              (() => {
+                const el = document.querySelector(%s);
+                if (!el) return 'missing';
+                el.click();
+                return 'ok';
+              })()
+            """ % json.dumps(selector))
+            if got != "ok":
+                print(f"nothing matched {selector!r}", file=sys.stderr)
+                return 2
+            time.sleep(0.5)
 
         if args.out:
             shot = browser.page("Page.captureScreenshot", format="png",

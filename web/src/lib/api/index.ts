@@ -10,6 +10,8 @@ import {
   applicationRefsSchema,
   directoryGroupDetailSchema,
   directoryGroupsSchema,
+  accessTokensSchema,
+  createdTokenSchema,
   directoryHostsSchema,
   directoryUserDetailSchema,
   directoryUsersSchema,
@@ -185,6 +187,21 @@ export const api = {
   },
 
   /** People and groups. Admin-only, enforced server-side. */
+  /** Access tokens, always the signed-in person's own. */
+  tokens: {
+    list: () => request('/api/tokens', accessTokensSchema),
+
+    create: (input: { name: string; days: number }) =>
+      request('/api/tokens', createdTokenSchema, {
+        method: 'POST',
+        body: JSON.stringify(input),
+      }),
+
+    revoke: (id: string) =>
+      request(`/api/tokens/${encodeURIComponent(id)}`, z.undefined(),
+        { method: 'DELETE' }),
+  },
+
   directory: {
     users: (page: PageQuery, status: UserStatus = '') =>
       request(
@@ -356,6 +373,8 @@ export type {
   CreatedUser,
   Credential,
   DirectoryGroup,
+  AccessToken,
+  CreatedToken,
   DirectoryHost,
   DirectoryGroupDetail,
   DirectoryUser,
@@ -392,6 +411,7 @@ export const queryKeys = {
     ['directory', 'ref-applications', page] as const,
   group: (name: string) => ['directory', 'groups', name] as const,
   credentials: ['credentials'] as const,
+  tokens: ['tokens'] as const,
   decisions: (deniedOnly: boolean) => ['decisions', deniedOnly] as const,
   policy: ['policy'] as const,
 }

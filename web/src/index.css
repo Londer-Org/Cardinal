@@ -51,6 +51,7 @@
 
   /* #B41E30 — the centre dot. */
   --destructive: oklch(0.500 0.183 21.7);
+  --destructive-foreground: oklch(0.985 0 0);
 
   --border: oklch(0.925 0.012 249.3);
   --input: oklch(0.925 0.012 249.3);
@@ -101,7 +102,20 @@
   --accent: oklch(0.31 0.06 269.8);
   --accent-foreground: oklch(0.95 0.02 269.8);
 
-  --destructive: oklch(0.62 0.19 21.7);
+  /* Lightened, and the label goes dark — the same trade --primary makes above,
+     for the same reason and measured the same way.
+
+     The old value was doing neither job. As text on a card it was 4.20:1, and
+     as a button fill with white on it, 3.81:1: both below AA, in opposite
+     directions, so no single adjustment to the colour alone could fix it. Text
+     wants it lighter and a white-labelled fill wants it darker.
+
+     Nothing caught it for a long time because dark mode was unreachable, and
+     nothing caught the button afterwards because a destructive button only
+     appears once somebody has clicked something and the contrast sweep only
+     visits pages. */
+  --destructive: oklch(0.70 0.16 21.7);
+  --destructive-foreground: oklch(0.19 0.035 249.3);
 
   --border: oklch(1 0 0 / 12%);
   --input: oklch(1 0 0 / 16%);
@@ -153,6 +167,7 @@
   --color-accent: var(--accent);
   --color-accent-foreground: var(--accent-foreground);
   --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);

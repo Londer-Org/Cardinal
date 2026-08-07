@@ -327,3 +327,28 @@ export const consentSchema = z.object({
 export type Consent = z.infer<typeof consentSchema>
 
 export const consentsSchema = z.array(consentSchema)
+
+/** An access token, as its owner sees it — never the value. */
+export const accessTokenSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  // The leading characters, kept in clear. Enough to tell which of four tokens
+  // a value in a CI setting is, and not enough to authenticate with.
+  prefix: z.string(),
+  createdAt: z.string(),
+  expiresAt: z.string(),
+  lastUsedAt: z.string().nullable(),
+  expired: z.boolean(),
+})
+export type AccessToken = z.infer<typeof accessTokenSchema>
+
+export const accessTokensSchema = z.object({ tokens: z.array(accessTokenSchema) })
+
+/** The one response that carries the value, returned once and never again. */
+export const createdTokenSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  expiresAt: z.string(),
+  token: z.string(),
+})
+export type CreatedToken = z.infer<typeof createdTokenSchema>

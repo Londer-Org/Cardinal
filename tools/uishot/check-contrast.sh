@@ -37,10 +37,27 @@ $PSQL -q -c "INSERT INTO sessions (subject_id, token_hash, valid_period, auth_me
                     true, now()+interval '1 day'
                FROM entities e WHERE e.name='uishot'" >/dev/null
 
+# A token, so /access/tokens has a row to interact with rather than an empty
+# state. The hash is of a value nothing knows, which is the point: this exists
+# to be listed and clicked, never to authenticate.
+$PSQL -q -c "INSERT INTO access_tokens (subject_id, name, token_hash, prefix,
+                                        valid_period, created_by)
+             SELECT e.id, 'nightly export', sha256('uishot-fixture'::bytea),
+                    'crd_pat_uishot', tstzrange(now(), now()+interval '90 days'), e.id
+               FROM entities e WHERE e.name='uishot'
+             ON CONFLICT (token_hash) DO NOTHING" >/dev/null
+
+# path, then any selectors to click before measuring. Anything that only exists
+# after an interaction is invisible to a sweep that just navigates — and the
+# colours used least are the ones most likely to be wrong, because nobody has
+# looked at them. The destructive button was 3.81:1 in dark for exactly that
+# reason: a page-only sweep never rendered one.
 PAGES=(
   /
   /account
   /access/passkeys
+  /access/tokens
+  "/access/tokens|button.text-destructive"
   /access/connected
   /access/decisions
   /directory/people
@@ -53,27 +70,39 @@ PAGES=(
 port=9600
 failed=0
 errored=0
-for path in "${PAGES[@]}"; do
+for entry in "${PAGES[@]}"; do
+    path="${entry%%|*}"
+    clicks=()
+    if [ "$entry" != "$path" ]; then
+        IFS='|' read -r -a selectors <<< "${entry#*|}"
+        for selector in "${selectors[@]}"; do
+            clicks+=(--click "$selector")
+        done
+    fi
+    label="$path${entry#"$path"}"
+
     for theme in light dark; do
         port=$((port + 1))
         out=$("$PYTHON" tools/uishot/uishot.py --base "$BASE" --path "$path" \
-                 --theme "$theme" --token "$TOKEN" --contrast --port "$port" 2>&1) && status=0 || status=$?
+                 --theme "$theme" --token "$TOKEN" --contrast "${clicks[@]}" \
+                 --port "$port" 2>&1) && status=0 || status=$?
 
         case "$status" in
-            0)  printf '  ok    %-5s %s\n' "$theme" "$path" ;;
+            0)  printf '  ok    %-5s %s\n' "$theme" "$label" ;;
             2)  # The browser fell over, which says nothing about the page. Once
                 # more before deciding, because these are almost always a
                 # chromium that did not come up in time.
                 port=$((port + 1))
                 if out=$("$PYTHON" tools/uishot/uishot.py --base "$BASE" --path "$path" \
-                            --theme "$theme" --token "$TOKEN" --contrast --port "$port" 2>&1); then
-                    printf '  ok    %-5s %s (after a retry)\n' "$theme" "$path"
+                            --theme "$theme" --token "$TOKEN" --contrast "${clicks[@]}" \
+                            --port "$port" 2>&1); then
+                    printf '  ok    %-5s %s (after a retry)\n' "$theme" "$label"
                 else
-                    printf '  ERROR %-5s %s — could not check\n' "$theme" "$path"
+                    printf '  ERROR %-5s %s — could not check\n' "$theme" "$label"
                     echo "$out" | sed 's/^/        /'
                     errored=$((errored + 1))
                 fi ;;
-            *)  printf '  FAIL  %-5s %s\n' "$theme" "$path"
+            *)  printf '  FAIL  %-5s %s\n' "$theme" "$label"
                 echo "$out" | sed 's/^/        /'
                 failed=$((failed + 1)) ;;
         esac

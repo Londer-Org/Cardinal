@@ -6,6 +6,7 @@ import {
   LifeBuoyIcon,
   ScrollTextIcon,
   ServerIcon,
+  TerminalIcon,
   UsersIcon,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
@@ -53,6 +54,7 @@ export const NAV: NavSection[] = [
     label: 'Your access',
     items: [
       { label: 'Passkeys', to: '/access/passkeys', icon: KeyRoundIcon },
+      { label: 'Access tokens', to: '/access/tokens', icon: TerminalIcon },
       { label: 'Connected apps', to: '/access/connected', icon: AppWindowIcon },
       { label: 'Decisions', to: '/access/decisions', icon: ScrollTextIcon },
     ],

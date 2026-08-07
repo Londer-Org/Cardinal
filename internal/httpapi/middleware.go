@@ -194,6 +194,62 @@ func (s *Server) requireAuth(next http.Handler) http.Handler {
 	})
 }
 
+// requireDeviceBound refuses anything that is not a passkey session.
+//
+// Guards the credential self-service surface: passkeys, recovery codes, and
+// access tokens. Changing what can authenticate as you is not an ordinary
+// action a weaker credential may take on your behalf.
+//
+// ## Why this is code and not a Cedar policy
+//
+// ADR 0018 argued a token is safe because `admin-requires-fresh-device-bound-auth`
+// forbids it every dangerous action, and that this holds "for rules nobody has
+// written yet". The reasoning had a hole: it holds only for routes that ask
+// Cedar. Credential self-service never did — there is no resource to authorize
+// against, only the caller's own account — so the entire surface sat behind bare
+// requireAuth, and a token reached all of it.
+//
+// What that allowed, measured against a running stack rather than reasoned
+// about: a token could POST /api/recovery/codes and read a fresh set of
+// account-recovery credentials, which in the same statement invalidated the
+// owner's. It could begin registering a passkey of the holder's choosing. It
+// could revoke the owner's existing passkeys. And once /api/tokens existed it
+// could mint its own successor, so revoking the leaked token accomplished
+// nothing. A string in a CI variable was one request away from owning the
+// account it was scoped to serve.
+//
+// Two reasons it stays in code:
+//
+//   - There is nothing to decide. Cedar answers "may this principal do this to
+//     that resource"; here the answer does not vary by principal or resource. A
+//     universal precondition on the credential belongs with requireAuth and CSRF,
+//     which are the same category of check.
+//
+//   - A policy set is editable, and this must not be. An administrator who
+//     publishes a policy set that drops this rule would hand every leaked token
+//     in the fleet an account takeover, with the mistake looking like an ordinary
+//     policy change in review.
+func (s *Server) requireDeviceBound(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		session, ok := SessionFrom(r.Context())
+		if !ok {
+			writeError(w, http.StatusUnauthorized, "authentication required")
+			return
+		}
+		if !session.DeviceBound {
+			// Says what to do, not just no. Somebody hitting this from a script
+			// has hit a wall the design put there on purpose, and the useful
+			// information is that no token will ever work.
+			writeError(w, http.StatusForbidden,
+				"credentials can only be managed with a passkey — an access token "+
+					"cannot change what authenticates as you, however privileged "+
+					"its owner")
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
 // csrfProtect guards state-changing requests.
 //
 // Double-submit: the token is in both a cookie and a header, and they must

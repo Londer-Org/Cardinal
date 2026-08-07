@@ -198,20 +198,49 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("DELETE /api/invitations/{login}", people(s.handleRevokeInvitation))
 
 	// ── Credential self-service ────────────────────────────────────────────
+	//
+	// All of it behind requireDeviceBound rather than requireAuth: these are the
+	// routes that decide what can authenticate as you, and a bearer token must
+	// not be able to change that. See the comment on requireDeviceBound for what
+	// this was open to before, which was account takeover from a CI variable.
+	//
+	// Reads are refused too, not only mutations. There is no automation that
+	// needs to enumerate its owner's passkeys, and letting a leaked token look
+	// around tells its holder what else to go after.
+	selfService := func(h http.Handler) http.Handler {
+		return s.requireAuth(s.requireDeviceBound(h))
+	}
+
 	mux.Handle("POST /api/credentials/register/begin",
-		s.requireAuth(http.HandlerFunc(s.handleRegisterBegin)))
+		selfService(http.HandlerFunc(s.handleRegisterBegin)))
 	mux.Handle("POST /api/credentials/register/finish",
-		s.requireAuth(http.HandlerFunc(s.handleRegisterFinish)))
+		selfService(http.HandlerFunc(s.handleRegisterFinish)))
+
+	// Access tokens, for their owner only. There is deliberately no
+	// administrative path to issue somebody else a token, because an
+	// administrator who could would be able to act as them without any log
+	// distinguishing it from the person themselves.
+	//
+	// A token cannot manage tokens, which is what stops a leaked one from
+	// minting its own successor and outliving the revocation of the original.
+	mux.Handle("GET /api/tokens", selfService(http.HandlerFunc(s.handleListTokens)))
+	mux.Handle("POST /api/tokens", selfService(http.HandlerFunc(s.handleCreateToken)))
+	mux.Handle("DELETE /api/tokens/{id}", selfService(http.HandlerFunc(s.handleRevokeToken)))
+
 	mux.Handle("GET /api/credentials",
-		s.requireAuth(http.HandlerFunc(s.handleListCredentials)))
+		selfService(http.HandlerFunc(s.handleListCredentials)))
 	mux.Handle("DELETE /api/credentials/{id}",
-		s.requireAuth(http.HandlerFunc(s.handleRevokeCredential)))
+		selfService(http.HandlerFunc(s.handleRevokeCredential)))
 
 	// ── Recovery codes ─────────────────────────────────────────────────────
+	//
+	// The most valuable thing on this list. A fresh set is account-recovery
+	// authority in plain text, and generating one invalidates the owner's — so
+	// a token that could do this both gained a way in and took away the way back.
 	mux.Handle("POST /api/recovery/codes",
-		s.requireAuth(http.HandlerFunc(s.handleGenerateRecoveryCodes)))
+		selfService(http.HandlerFunc(s.handleGenerateRecoveryCodes)))
 	mux.Handle("GET /api/recovery/codes/remaining",
-		s.requireAuth(http.HandlerFunc(s.handleRemainingRecoveryCodes)))
+		selfService(http.HandlerFunc(s.handleRemainingRecoveryCodes)))
 
 	// ── Host enrollment ────────────────────────────────────────────────────
 	//

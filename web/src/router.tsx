@@ -35,6 +35,12 @@ const passkeysRoute = createRoute({
   component: lazyRouteComponent(() => import('@/views/passkeys'), 'PasskeysView'),
 })
 
+const tokensRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/access/tokens',
+  component: lazyRouteComponent(() => import('@/views/tokens'), 'TokensView'),
+})
+
 const connectedRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/access/connected',
@@ -93,6 +99,7 @@ const routeTree = rootRoute.addChildren([
   homeRoute,
   accountRoute,
   passkeysRoute,
+  tokensRoute,
   connectedRoute,
   decisionsRoute,
   usersRoute,
