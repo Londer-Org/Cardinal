@@ -58,6 +58,10 @@ PAGES=(
   /access/passkeys
   /access/tokens
   "/access/tokens|button.text-destructive"
+  # Submitting empty puts the form into its error state: red label, red border,
+  # red message. None of that exists on a page as it loads, and red on a card is
+  # exactly the pair that was failing in dark.
+  "/access/tokens|button[type=\"submit\"]"
   /access/connected
   /access/decisions
   /directory/people

@@ -8,8 +8,7 @@ export function useRecoveries() {
 export function useOpenRecovery() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (input: { login: string; reason: string }) =>
-      api.recoveries.open(input.login, input.reason),
+    mutationFn: api.recoveries.open,
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: queryKeys.recoveries })
     },

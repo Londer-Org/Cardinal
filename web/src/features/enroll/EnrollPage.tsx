@@ -1,4 +1,7 @@
 import { useState } from 'react'
+import { useForm } from 'react-hook-form'
+import { zodResolver } from '@hookform/resolvers/zod'
+import { z } from 'zod'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { CheckCircle2Icon, KeyRoundIcon, ShieldAlertIcon } from 'lucide-react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
@@ -10,13 +13,32 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from '@/components/ui/form'
 import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
 import { CardinalMark } from '@/components/CardinalMark'
 import { ErrorMessage } from '@/components/ErrorMessage'
-import { api } from '@/lib/api'
+import { api, enrollRequest } from '@/lib/api'
 import { createCredential, isSupported } from '@/lib/webauthn'
+
+/**
+ * What somebody types on their way to a first passkey.
+ *
+ * Extends `enrollRequest` — the profile half the API takes — with the device
+ * nickname, which is not part of that request because it names a credential
+ * rather than an account.
+ */
+const enrollForm = enrollRequest.extend({
+  keyName: z.string().trim().max(64, 'At most 64 characters.'),
+})
+type EnrollForm = z.infer<typeof enrollForm>
 
 /** Reads the invitation token from the URL, if this is an enrollment link. */
 export function invitationToken(): string | null {
@@ -42,22 +64,28 @@ export function EnrollPage({ token }: { token: string }) {
     retry: false,
   })
 
-  const [displayName, setDisplayName] = useState('')
-  const [email, setEmail] = useState('')
-  const [keyName, setKeyName] = useState('')
   const [done, setDone] = useState(false)
 
+  const form = useForm<EnrollForm>({
+    resolver: zodResolver(enrollForm),
+    defaultValues: { displayName: '', email: '', keyName: '' },
+  })
+
   const enroll = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (values: EnrollForm) => {
       const ceremony = await api.enroll.begin(token)
       const attestation = await createCredential(ceremony.options)
       return api.enroll.finish({
         token,
         ceremonyId: ceremony.ceremonyId,
         response: attestation,
-        name: keyName.trim() || 'Passkey',
-        displayName: displayName.trim(),
-        email: email.trim(),
+        // Unlike the passkey list, blank is fine here and becomes "Passkey":
+        // somebody registering their first credential has nothing to tell it
+        // apart from yet, and a required field between them and an account is
+        // a worse trade than a name they can change later.
+        name: values.keyName === '' ? 'Passkey' : values.keyName,
+        displayName: values.displayName,
+        email: values.email,
       })
     },
     onSuccess: () => { setDone(true) },
@@ -154,58 +182,78 @@ export function EnrollPage({ token }: { token: string }) {
             </Alert>
           )}
 
-          <form
-            className="space-y-4"
-            onSubmit={(event) => {
-              event.preventDefault()
-              enroll.mutate()
-            }}
-          >
-            <div className="space-y-1.5">
-              <Label htmlFor="enroll-name">Your name</Label>
-              <Input
-                id="enroll-name"
-                value={displayName}
-                onChange={(event) => { setDisplayName(event.target.value) }}
-                placeholder="How your name should appear"
-                autoComplete="name"
+          <Form {...form}>
+            <form
+              className="space-y-4"
+              onSubmit={(event) => {
+                void form.handleSubmit((values) => { enroll.mutate(values) })(event)
+              }}
+            >
+              <FormField
+                control={form.control}
+                name="displayName"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Your name</FormLabel>
+                    <FormControl>
+                      <Input
+                        placeholder="How your name should appear"
+                        autoComplete="name"
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
               />
-            </div>
 
-            <div className="space-y-1.5">
-              <Label htmlFor="enroll-email">Email</Label>
-              <Input
-                id="enroll-email"
-                type="email"
-                value={email}
-                onChange={(event) => { setEmail(event.target.value) }}
-                placeholder="you@example.com"
-                autoComplete="email"
+              <FormField
+                control={form.control}
+                name="email"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Email</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="email"
+                        placeholder="you@example.com"
+                        autoComplete="email"
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
               />
-            </div>
 
-            <div className="space-y-1.5">
-              <Label htmlFor="enroll-key">Name this device</Label>
-              <Input
-                id="enroll-key"
-                value={keyName}
-                onChange={(event) => { setKeyName(event.target.value) }}
-                placeholder="Laptop, or YubiKey"
+              <FormField
+                control={form.control}
+                name="keyName"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Name this device</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Laptop, or YubiKey" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
               />
-            </div>
 
-            <ErrorMessage error={enroll.error} />
+              <ErrorMessage error={enroll.error} />
 
-            <Button type="submit" className="w-full" disabled={enroll.isPending}>
-              <KeyRoundIcon />
-              {enroll.isPending ? 'Waiting for your device…' : 'Register a passkey'}
-            </Button>
+              <Button type="submit" className="w-full" disabled={enroll.isPending}>
+                <KeyRoundIcon />
+                {enroll.isPending ? 'Waiting for your device…' : 'Register a passkey'}
+              </Button>
 
-            <p className="text-xs text-muted-foreground">
-              There is no password to choose. Your passkey stays on this device
-              or your security key and cannot be phished or reused elsewhere.
-            </p>
-          </form>
+              <p className="text-xs text-muted-foreground">
+                There is no password to choose. Your passkey stays on this
+                device or your security key and cannot be phished or reused
+                elsewhere.
+              </p>
+            </form>
+          </Form>
         </CardContent>
       </Card>
     </Shell>

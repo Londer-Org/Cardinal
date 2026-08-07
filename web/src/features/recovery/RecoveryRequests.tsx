@@ -1,4 +1,6 @@
 import { useState } from 'react'
+import { useForm } from 'react-hook-form'
+import { zodResolver } from '@hookform/resolvers/zod'
 import { CopyIcon, LifeBuoyIcon, TriangleAlertIcon } from 'lucide-react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
@@ -20,11 +22,23 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog'
+import {
+  Form,
+  FormControl,
+  FormDescription,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from '@/components/ui/form'
 import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
 import { ErrorMessage } from '@/components/ErrorMessage'
-import type { RecoveryRequest } from '@/lib/api'
+import {
+  openRecoveryRequest,
+  type OpenRecoveryRequest,
+  type RecoveryRequest,
+} from '@/lib/api'
 import {
   useApproveRecovery,
   useCancelRecovery,
@@ -193,9 +207,12 @@ function IssuedLink({ url }: { url: string }) {
 
 function OpenRequest() {
   const [open, setOpen] = useState(false)
-  const [login, setLogin] = useState('')
-  const [reason, setReason] = useState('')
   const request = useOpenRecovery()
+
+  const form = useForm<OpenRecoveryRequest>({
+    resolver: zodResolver(openRecoveryRequest),
+    defaultValues: { login: '', reason: '' },
+  })
 
   return (
     <Dialog
@@ -203,8 +220,7 @@ function OpenRequest() {
       onOpenChange={(next) => {
         setOpen(next)
         if (!next) {
-          setLogin('')
-          setReason('')
+          form.reset()
           request.reset()
         }
       }}
@@ -225,56 +241,63 @@ function OpenRequest() {
           </DialogDescription>
         </DialogHeader>
 
-        <form
-          className="space-y-4"
-          onSubmit={(event) => {
-            event.preventDefault()
-            request.mutate(
-              { login: login.trim(), reason: reason.trim() },
-              { onSuccess: () => { setOpen(false) } },
-            )
-          }}
-        >
-          <div className="space-y-1.5">
-            <Label htmlFor="recovery-login">Account</Label>
-            <Input
-              id="recovery-login"
-              value={login}
-              onChange={(event) => { setLogin(event.target.value) }}
-              placeholder="jdoe"
-              required
+        <Form {...form}>
+          <form
+            className="space-y-4"
+            onSubmit={(event) => {
+              void form.handleSubmit((values) => {
+                request.mutate(values, { onSuccess: () => { setOpen(false) } })
+              })(event)
+            }}
+          >
+            <FormField
+              control={form.control}
+              name="login"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Account</FormLabel>
+                  <FormControl>
+                    <Input placeholder="jdoe" {...field} />
+                  </FormControl>
+                  <FormDescription>
+                    Not your own — someone who can authenticate does not need
+                    recovering.
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
             />
-            <p className="text-xs text-muted-foreground">
-              Not your own — someone who can authenticate does not need
-              recovering.
-            </p>
-          </div>
 
-          <div className="space-y-1.5">
-            <Label htmlFor="recovery-reason">Why</Label>
-            <Input
-              id="recovery-reason"
-              value={reason}
-              onChange={(event) => { setReason(event.target.value) }}
-              placeholder="Lost both keys · ticket 4412"
+            <FormField
+              control={form.control}
+              name="reason"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Why</FormLabel>
+                  <FormControl>
+                    <Input placeholder="Lost both keys · ticket 4412" {...field} />
+                  </FormControl>
+                  <FormDescription>
+                    {/* The approver reads this and takes it on trust. Cardinal
+                        cannot verify that someone really lost their laptop and
+                        should not pretend to — the control is that a second
+                        human is on the hook, not that the claim was checked. */}
+                    The second administrator sees this when deciding.
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
             />
-            <p className="text-xs text-muted-foreground">
-              {/* The approver reads this and takes it on trust. Cardinal cannot
-                  verify that someone really lost their laptop and should not
-                  pretend to — the control is that a second human is on the
-                  hook, not that the claim was checked. */}
-              The second administrator sees this when deciding.
-            </p>
-          </div>
 
-          <ErrorMessage error={request.error} />
+            <ErrorMessage error={request.error} />
 
-          <DialogFooter>
-            <Button type="submit" disabled={request.isPending}>
-              {request.isPending ? 'Opening…' : 'Open request'}
-            </Button>
-          </DialogFooter>
-        </form>
+            <DialogFooter>
+              <Button type="submit" disabled={request.isPending}>
+                {request.isPending ? 'Opening…' : 'Open request'}
+              </Button>
+            </DialogFooter>
+          </form>
+        </Form>
       </DialogContent>
     </Dialog>
   )

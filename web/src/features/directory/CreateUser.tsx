@@ -1,4 +1,6 @@
 import { useState } from 'react'
+import { useForm } from 'react-hook-form'
+import { zodResolver } from '@hookform/resolvers/zod'
 import { CopyIcon, PlusIcon, TriangleAlertIcon } from 'lucide-react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
@@ -11,25 +13,37 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog'
+import {
+  Form,
+  FormControl,
+  FormDescription,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from '@/components/ui/form'
 import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { ErrorMessage } from '@/components/ErrorMessage'
-import type { CreatedUser } from '@/lib/api'
+import { createUserRequest, type CreatedUser, type CreateUserRequest } from '@/lib/api'
 import { useCreateUser } from './useDirectory'
+
+// Invite on by default: an account created without one is an account nobody
+// can use, and issuing it is the step that gets forgotten.
+const EMPTY: CreateUserRequest = { login: '', displayName: '', invite: true }
 
 export function CreateUser() {
   const [open, setOpen] = useState(false)
-  const [login, setLogin] = useState('')
-  const [displayName, setDisplayName] = useState('')
-  const [invite, setInvite] = useState(true)
   const [created, setCreated] = useState<CreatedUser | null>(null)
   const create = useCreateUser()
 
+  const form = useForm<CreateUserRequest>({
+    resolver: zodResolver(createUserRequest),
+    defaultValues: EMPTY,
+  })
+
   function reset() {
-    setLogin('')
-    setDisplayName('')
-    setInvite(true)
+    form.reset(EMPTY)
     setCreated(null)
     create.reset()
   }
@@ -60,74 +74,82 @@ export function CreateUser() {
               </DialogDescription>
             </DialogHeader>
 
-            <form
-              className="space-y-4"
-              onSubmit={(event) => {
-                event.preventDefault()
-                create.mutate(
-                  {
-                    login: login.trim(),
-                    displayName: displayName.trim(),
-                    invite,
-                  },
-                  { onSuccess: setCreated },
-                )
-              }}
-            >
-              <div className="space-y-1.5">
-                <Label htmlFor="user-login">Username</Label>
-                <Input
-                  id="user-login"
-                  value={login}
-                  onChange={(event) => { setLogin(event.target.value) }}
-                  placeholder="jdoe"
-                  required
+            <Form {...form}>
+              <form
+                className="space-y-4"
+                onSubmit={(event) => {
+                  void form.handleSubmit((values) => {
+                    create.mutate(values, { onSuccess: setCreated })
+                  })(event)
+                }}
+              >
+                <FormField
+                  control={form.control}
+                  name="login"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Username</FormLabel>
+                      <FormControl>
+                        <Input placeholder="jdoe" {...field} />
+                      </FormControl>
+                      <FormDescription>
+                        Appears in policy and in the audit trail. They cannot
+                        change it.
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
                 />
-                <p className="text-xs text-muted-foreground">
-                  Appears in policy and in the audit trail. They cannot change it.
-                </p>
-              </div>
 
-              <div className="space-y-1.5">
-                <Label htmlFor="user-display">Name</Label>
-                <Input
-                  id="user-display"
-                  value={displayName}
-                  onChange={(event) => { setDisplayName(event.target.value) }}
-                  placeholder="J Doe"
+                <FormField
+                  control={form.control}
+                  name="displayName"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Name</FormLabel>
+                      <FormControl>
+                        <Input placeholder="J Doe" {...field} />
+                      </FormControl>
+                      <FormDescription>
+                        Optional — they set their own when they enrol.
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
                 />
-                <p className="text-xs text-muted-foreground">
-                  Optional — they set their own when they enrol.
-                </p>
-              </div>
 
-              <div className="flex items-start gap-3">
-                <Switch
-                  id="user-invite"
-                  checked={invite}
-                  onCheckedChange={setInvite}
-                  className="mt-0.5"
+                <FormField
+                  control={form.control}
+                  name="invite"
+                  render={({ field }) => (
+                    <FormItem className="flex items-start gap-3 space-y-0">
+                      <FormControl>
+                        <Switch
+                          checked={field.value}
+                          onCheckedChange={field.onChange}
+                          className="mt-0.5"
+                        />
+                      </FormControl>
+                      <div className="min-w-0 grid gap-1">
+                        <FormLabel>Send an enrollment link</FormLabel>
+                        <FormDescription>
+                          Single use, expires in 24 hours. Without it the
+                          account exists but nobody can sign in to it.
+                        </FormDescription>
+                      </div>
+                    </FormItem>
+                  )}
                 />
-                <div className="min-w-0">
-                  <Label htmlFor="user-invite">Send an enrollment link</Label>
-                  <p className="text-xs text-muted-foreground">
-                    {/* On by default: an account created without one is an
-                        account nobody can use, and the second step is the one
-                        that gets forgotten. */}
-                    Single use, expires in 24 hours. Without it the account
-                    exists but nobody can sign in to it.
-                  </p>
-                </div>
-              </div>
 
-              <ErrorMessage error={create.error} />
+                <ErrorMessage error={create.error} />
 
-              <DialogFooter>
-                <Button type="submit" disabled={create.isPending}>
-                  {create.isPending ? 'Creating…' : 'Create'}
-                </Button>
-              </DialogFooter>
-            </form>
+                <DialogFooter>
+                  <Button type="submit" disabled={create.isPending}>
+                    {create.isPending ? 'Creating…' : 'Create'}
+                  </Button>
+                </DialogFooter>
+              </form>
+            </Form>
           </>
         ) : (
           <Created

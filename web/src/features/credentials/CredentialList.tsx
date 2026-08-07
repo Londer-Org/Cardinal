@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useForm } from 'react-hook-form'
+import { zodResolver } from '@hookform/resolvers/zod'
 import { CloudIcon, KeyRoundIcon, PlusIcon, UsbIcon } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -9,10 +10,19 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from '@/components/ui/form'
 import { Input } from '@/components/ui/input'
 import { Separator } from '@/components/ui/separator'
 import { Skeleton } from '@/components/ui/skeleton'
 import { ErrorMessage } from '@/components/ErrorMessage'
+import { nameCredentialRequest, type NameCredentialRequest } from '@/lib/api'
 import type { Credential } from '@/lib/api'
 import {
   useCredentials,
@@ -24,7 +34,10 @@ export function CredentialList() {
   const { data: credentials, isPending } = useCredentials()
   const register = useRegisterCredential()
   const revoke = useRevokeCredential()
-  const [name, setName] = useState('')
+  const form = useForm<NameCredentialRequest>({
+    resolver: zodResolver(nameCredentialRequest),
+    defaultValues: { name: '' },
+  })
 
   const items = credentials ?? []
   // Revoking the last credential would be a self-inflicted lockout. The server
@@ -67,25 +80,36 @@ export function CredentialList() {
 
         <Separator className="my-4" />
 
-        <form
-          className="flex gap-2"
-          onSubmit={(event) => {
-            event.preventDefault()
-            register.mutate(name, { onSuccess: () => { setName('') } })
-          }}
-        >
-          <Input
-            value={name}
-            onChange={(event) => { setName(event.target.value) }}
-            placeholder="Name this device"
-            maxLength={64}
-            aria-label="Name for the new passkey"
-          />
-          <Button type="submit" disabled={register.isPending}>
-            <PlusIcon />
-            {register.isPending ? 'Waiting…' : 'Add'}
-          </Button>
-        </form>
+        <Form {...form}>
+          <form
+            className="flex items-start gap-2"
+            onSubmit={(event) => {
+              void form.handleSubmit(({ name }) => {
+                register.mutate(name, { onSuccess: () => { form.reset() } })
+              })(event)
+            }}
+          >
+            <FormField
+              control={form.control}
+              name="name"
+              render={({ field }) => (
+                <FormItem className="flex-1 gap-1">
+                  <FormLabel className="sr-only">
+                    Name for the new passkey
+                  </FormLabel>
+                  <FormControl>
+                    <Input placeholder="Name this device" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <Button type="submit" disabled={register.isPending}>
+              <PlusIcon />
+              {register.isPending ? 'Waiting…' : 'Add'}
+            </Button>
+          </form>
+        </Form>
 
         <ErrorMessage error={register.error ?? revoke.error} />
       </CardContent>

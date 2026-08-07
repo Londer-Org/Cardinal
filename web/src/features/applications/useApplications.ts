@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { api, queryKeys, type RegisterApplicationInput } from '@/lib/api'
+import { api, queryKeys, type RegisterApplicationRequest } from '@/lib/api'
 
 export function useApplications() {
   return useQuery({
@@ -27,7 +27,7 @@ export function useRegisterApplication() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: (input: RegisterApplicationInput) => api.applications.register(input),
+    mutationFn: (input: RegisterApplicationRequest) => api.applications.register(input),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: queryKeys.applications })
     },

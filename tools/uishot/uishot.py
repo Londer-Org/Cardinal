@@ -281,6 +281,28 @@ def required(size_px: float, weight: int) -> float:
     return 3.0 if large else 4.5
 
 
+def split_fill(pair: str) -> tuple[str, str]:
+    """Splits SELECTOR=VALUE on the separator, not on the selector's own `=`.
+
+    `input[placeholder="nightly export"]=hello` has two equals signs and only
+    the second one is the separator. Splitting naively on the first produced a
+    selector that matched nothing — which the tool then reported, so the failure
+    was loud rather than a screenshot of an empty form.
+
+    Bracket depth is enough: CSS puts attribute comparisons inside `[...]` and
+    nothing else in a selector uses `=`.
+    """
+    depth = 0
+    for i, char in enumerate(pair):
+        if char == "[":
+            depth += 1
+        elif char == "]":
+            depth -= 1
+        elif char == "=" and depth == 0:
+            return pair[:i], pair[i + 1:]
+    raise ToolError(f"--fill needs SELECTOR=VALUE, got {pair!r}")
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--base", default="http://id.localhost:8100")
@@ -290,6 +312,12 @@ def main() -> int:
     ap.add_argument("--token", default=os.environ.get("CARDINAL_SESSION", ""),
                     help="session cookie value")
     ap.add_argument("--search", default="", help="type this into a search box first")
+    ap.add_argument("--fill", action="append", default=[], metavar="SELECTOR=VALUE",
+                    help="type VALUE into SELECTOR before measuring; repeatable. "
+                         "Reaching a form's error state needs this: submitting "
+                         "an empty form is one way, and submitting a filled-in "
+                         "one that fails a rule is the other, and neither is "
+                         "the state a page loads in.")
     ap.add_argument("--click", action="append", default=[], metavar="SELECTOR",
                     help="click this before measuring; repeatable, in order. "
                          "Reaches UI that only exists after an interaction — a "
@@ -338,6 +366,30 @@ def main() -> int:
               })()
             """ % json.dumps(args.search))
             time.sleep(2)
+
+        for pair in args.fill:
+            selector, value = split_fill(pair)
+            # The native setter, then an input event — React tracks the value on
+            # the DOM node and ignores a plain assignment, so setting .value
+            # directly leaves the component's state untouched and the form
+            # submits empty while the screenshot shows text in the box.
+            got = browser.evaluate("""
+              (() => {
+                const el = document.querySelector(%s);
+                if (!el) return 'missing';
+                const proto = el instanceof window.HTMLTextAreaElement
+                  ? window.HTMLTextAreaElement.prototype
+                  : window.HTMLInputElement.prototype;
+                Object.getOwnPropertyDescriptor(proto, 'value').set.call(el, %s);
+                el.dispatchEvent(new Event('input', { bubbles: true }));
+                el.dispatchEvent(new Event('blur', { bubbles: true }));
+                return 'ok';
+              })()
+            """ % (json.dumps(selector), json.dumps(value)))
+            if got != "ok":
+                print(f"nothing matched {selector!r}", file=sys.stderr)
+                return 2
+            time.sleep(0.3)
 
         for selector in args.click:
             # A missing selector is fatal rather than skipped. A sweep that

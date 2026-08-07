@@ -1,6 +1,25 @@
 import { z } from 'zod'
 import { request } from './client'
 import {
+  createGroupRequest,
+  createTokenRequest,
+  createUserRequest,
+  enrollRequest,
+  grantRequest,
+  issueInvitationRequest,
+  nameCredentialRequest,
+  openRecoveryRequest,
+  registerApplicationRequest,
+  updateProfileRequest,
+  type CreateGroupRequest,
+  type CreateTokenRequest,
+  type CreateUserRequest,
+  type GrantRequest,
+  type OpenRecoveryRequest,
+  type RegisterApplicationRequest,
+  type UpdateProfileRequest,
+} from './requests'
+import {
   applicationDetailSchema,
   applicationsSchema,
   ceremonySchema,
@@ -49,8 +68,11 @@ export const api = {
      * colleague reads, so renaming stays an administrative act. Fields left
      * undefined are untouched rather than blanked.
      */
-    updateProfile: (input: { displayName?: string; email?: string }) =>
-      request('/api/auth/me', meSchema, { method: 'PATCH', body: input }),
+    updateProfile: (input: UpdateProfileRequest) =>
+      request('/api/auth/me', meSchema, {
+        method: 'PATCH',
+        body: updateProfileRequest.parse(input),
+      }),
 
     /**
      * Step-up: re-prove the credential without starting a new session.
@@ -126,10 +148,10 @@ export const api = {
       request(`/api/applications/${encodeURIComponent(clientID)}`,
         applicationDetailSchema),
 
-    register: (input: RegisterApplicationInput) =>
+    register: (input: RegisterApplicationRequest) =>
       request('/api/applications', registeredApplicationSchema, {
         method: 'POST',
-        body: input,
+        body: registerApplicationRequest.parse(input),
       }),
 
     /**
@@ -167,7 +189,15 @@ export const api = {
     }) =>
       request('/api/enroll/finish', z.looseObject({}), {
         method: 'POST',
-        body: input,
+        // Same split as registerFinish: the ceremony half is the
+        // authenticator's, the profile half is typed by a person.
+        body: {
+          ...input,
+          ...enrollRequest.parse({
+            displayName: input.displayName,
+            email: input.email,
+          }),
+        },
       }),
   },
 
@@ -178,7 +208,7 @@ export const api = {
     issue: (login: string) =>
       request('/api/invitations', issuedInvitationSchema, {
         method: 'POST',
-        body: { login },
+        body: issueInvitationRequest.parse({ login }),
       }),
 
     revoke: (login: string) =>
@@ -191,10 +221,10 @@ export const api = {
   tokens: {
     list: () => request('/api/tokens', accessTokensSchema),
 
-    create: (input: { name: string; days: number }) =>
+    create: (input: CreateTokenRequest) =>
       request('/api/tokens', createdTokenSchema, {
         method: 'POST',
-        body: JSON.stringify(input),
+        body: createTokenRequest.parse(input),
       }),
 
     revoke: (id: string) =>
@@ -213,10 +243,10 @@ export const api = {
       request(`/api/directory/users/${encodeURIComponent(login)}`,
         directoryUserDetailSchema),
 
-    createUser: (input: { login: string; displayName: string; invite: boolean }) =>
+    createUser: (input: CreateUserRequest) =>
       request('/api/directory/users', createdUserSchema, {
         method: 'POST',
-        body: input,
+        body: createUserRequest.parse(input),
       }),
 
     disableUser: (login: string) =>
@@ -244,16 +274,16 @@ export const api = {
       request(`/api/directory/groups/${encodeURIComponent(name)}`,
         directoryGroupDetailSchema),
 
-    createGroup: (input: { name: string; displayName: string; owner: string }) =>
+    createGroup: (input: CreateGroupRequest) =>
       request('/api/directory/groups', z.looseObject({}), {
         method: 'POST',
-        body: input,
+        body: createGroupRequest.parse(input),
       }),
 
     /** `until` omitted means unbounded — the grant that gets forgotten. */
-    grant: (group: string, input: { member: string; until?: string; reason: string }) =>
+    grant: (group: string, input: GrantRequest) =>
       request(`/api/directory/groups/${encodeURIComponent(group)}/members`,
-        z.undefined(), { method: 'POST', body: input }),
+        z.undefined(), { method: 'POST', body: grantRequest.parse(input) }),
 
     revoke: (group: string, member: string) =>
       request(
@@ -265,10 +295,10 @@ export const api = {
   recoveries: {
     list: () => request('/api/recoveries', recoveryRequestsSchema),
 
-    open: (login: string, reason: string) =>
+    open: (input: OpenRecoveryRequest) =>
       request('/api/recoveries', recoveryRequestSchema, {
         method: 'POST',
-        body: { login, reason },
+        body: openRecoveryRequest.parse(input),
       }),
 
     approve: (login: string) =>
@@ -299,7 +329,9 @@ export const api = {
     registerFinish: (ceremonyId: string, response: unknown, name: string) =>
       request('/api/credentials/register/finish', credentialSchema, {
         method: 'POST',
-        body: { ceremonyId, response, name },
+        // The ceremony fields come from the authenticator, not from a person,
+        // so only the nickname is checked.
+        body: { ceremonyId, response, ...nameCredentialRequest.parse({ name }) },
       }),
 
     revoke: (id: string) =>
@@ -354,17 +386,8 @@ function pageParams({ q, limit, offset }: PageQuery): string {
   return params.toString()
 }
 
-export interface RegisterApplicationInput {
-  name: string
-  displayName: string
-  redirectUris: string[]
-  scopes: string[]
-  confidential: boolean
-  requireConsent: boolean
-  devMode: boolean
-}
-
 export { ApiError, onStepUpNeeded } from './client'
+export * from './requests'
 export type {
   ApprovedRecovery,
   Application,

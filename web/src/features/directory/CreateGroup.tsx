@@ -1,4 +1,6 @@
 import { useState } from 'react'
+import { useForm } from 'react-hook-form'
+import { zodResolver } from '@hookform/resolvers/zod'
 import { PlusIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
@@ -10,18 +12,31 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog'
+import {
+  Form,
+  FormControl,
+  FormDescription,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from '@/components/ui/form'
 import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 import { ErrorMessage } from '@/components/ErrorMessage'
+import { createGroupRequest, type CreateGroupRequest } from '@/lib/api'
 import { ApplicationPicker } from './ApplicationPicker'
 import { useCreateGroup } from './useDirectory'
 
+const EMPTY: CreateGroupRequest = { name: '', displayName: '', owner: '' }
+
 export function CreateGroup() {
   const [open, setOpen] = useState(false)
-  const [name, setName] = useState('')
-  const [displayName, setDisplayName] = useState('')
-  const [owner, setOwner] = useState('')
   const create = useCreateGroup()
+
+  const form = useForm<CreateGroupRequest>({
+    resolver: zodResolver(createGroupRequest),
+    defaultValues: EMPTY,
+  })
 
   return (
     <Dialog
@@ -29,9 +44,7 @@ export function CreateGroup() {
       onOpenChange={(next) => {
         setOpen(next)
         if (!next) {
-          setName('')
-          setDisplayName('')
-          setOwner('')
+          form.reset(EMPTY)
           create.reset()
         }
       }}
@@ -53,67 +66,77 @@ export function CreateGroup() {
           </DialogDescription>
         </DialogHeader>
 
-        <form
-          className="space-y-4"
-          onSubmit={(event) => {
-            event.preventDefault()
-            create.mutate(
-              {
-                name: name.trim(),
-                displayName: displayName.trim(),
-                owner: owner.trim(),
-              },
-              { onSuccess: () => { setOpen(false) } },
-            )
-          }}
-        >
-          <div className="space-y-1.5">
-            <Label htmlFor="group-name">Name</Label>
-            <Input
-              id="group-name"
-              value={name}
-              onChange={(event) => { setName(event.target.value) }}
-              placeholder="engineers"
-              required
+        <Form {...form}>
+          <form
+            className="space-y-4"
+            onSubmit={(event) => {
+              void form.handleSubmit((values) => {
+                create.mutate(values, { onSuccess: () => { setOpen(false) } })
+              })(event)
+            }}
+          >
+            <FormField
+              control={form.control}
+              name="name"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Name</FormLabel>
+                  <FormControl>
+                    <Input placeholder="engineers" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
             />
-          </div>
 
-          <div className="space-y-1.5">
-            <Label htmlFor="group-display">Description</Label>
-            <Input
-              id="group-display"
-              value={displayName}
-              onChange={(event) => { setDisplayName(event.target.value) }}
-              placeholder="Engineering"
+            <FormField
+              control={form.control}
+              name="displayName"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Description</FormLabel>
+                  <FormControl>
+                    <Input placeholder="Engineering" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
             />
-          </div>
 
-          <div className="space-y-1.5">
-            <Label htmlFor="group-owner">For an application</Label>
-            <ApplicationPicker
-              id="group-owner"
-              value={owner}
-              onChange={setOwner}
+            <FormField
+              control={form.control}
+              name="owner"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>For an application</FormLabel>
+                  <ApplicationPicker
+                    id={`${field.name}-picker`}
+                    value={field.value}
+                    onChange={field.onChange}
+                  />
+                  <FormDescription>
+                    {/* Organisational only. Cardinal treats an owned group
+                        exactly like any other and still sends it in the groups
+                        claim — this records who it is for, so `aura-users` sits
+                        beside `aura` rather than in a flat list. */}
+                    Optional. Groups like <code>aura-users</code> exist for one
+                    application; naming it here keeps them together. Cardinal
+                    treats them like any other group.
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
             />
-            <p className="text-xs text-muted-foreground">
-              {/* Organisational only. Cardinal treats an owned group exactly
-                  like any other and still sends it in the groups claim — this
-                  records who it is for, so `aura-users` sits beside `aura`
-                  rather than in a flat list. */}
-              Optional. Groups like <code>aura-users</code> exist for one
-              application; naming it here keeps them together. Cardinal treats
-              them like any other group.
-            </p>
-          </div>
 
-          <ErrorMessage error={create.error} />
+            <ErrorMessage error={create.error} />
 
-          <DialogFooter>
-            <Button type="submit" disabled={create.isPending}>
-              {create.isPending ? 'Creating…' : 'Create'}
-            </Button>
-          </DialogFooter>
-        </form>
+            <DialogFooter>
+              <Button type="submit" disabled={create.isPending}>
+                {create.isPending ? 'Creating…' : 'Create'}
+              </Button>
+            </DialogFooter>
+          </form>
+        </Form>
       </DialogContent>
     </Dialog>
   )

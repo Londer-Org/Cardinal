@@ -269,6 +269,20 @@ func TestSessionCookieIsScopedToTheParentDomain(t *testing.T) {
 		}
 	}
 
+	// This says the server *sent* the right Domain. It does not say a browser
+	// kept it, and against the shipped example a browser does not: Chrome
+	// discards any cookie whose Domain attribute is a public suffix, and
+	// `localhost` is one. So this passes while, in Chrome, no session cookie is
+	// stored and every mutation from the console returns 403.
+	//
+	// net/http/cookiejar accepts Domain=localhost, which is why an entire
+	// browser-less suite agrees with itself here. Nothing in Go can catch it —
+	// the check has to be a real browser, and it lives in tools/uishot.
+	//
+	// Not fixable by changing this setting either. Every parent of a *.localhost
+	// name is `localhost`, so with these hostnames a parent-domain cookie is
+	// impossible in a browser and host-only breaks the forwardAuth demo this
+	// test exists to protect. The example needs different hostnames.
 	if domain == "" {
 		t.Fatal("cookies are host-only — forwardAuth SSO cannot work, " +
 			"set server.cookie_domain")

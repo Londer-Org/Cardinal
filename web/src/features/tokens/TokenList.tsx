@@ -1,4 +1,6 @@
 import { useState } from 'react'
+import { useForm } from 'react-hook-form'
+import { zodResolver } from '@hookform/resolvers/zod'
 import { CheckIcon, CopyIcon, KeyIcon } from 'lucide-react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
@@ -10,8 +12,16 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
+import {
+  Form,
+  FormControl,
+  FormDescription,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from '@/components/ui/form'
 import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 import {
   Select,
   SelectContent,
@@ -22,6 +32,7 @@ import {
 import { Skeleton } from '@/components/ui/skeleton'
 import { ErrorMessage } from '@/components/ErrorMessage'
 import { useCreateToken, useRevokeToken, useTokens } from '@/features/tokens/useTokens'
+import { createTokenRequest, type CreateTokenRequest } from '@/lib/api'
 import type { AccessToken, CreatedToken } from '@/lib/api'
 
 const LIFETIMES = [
@@ -156,9 +167,12 @@ export function TokenList() {
   const { data, isPending, error } = useTokens()
   const create = useCreateToken()
 
-  const [name, setName] = useState('')
-  const [days, setDays] = useState(90)
   const [created, setCreated] = useState<CreatedToken | null>(null)
+
+  const form = useForm<CreateTokenRequest>({
+    resolver: zodResolver(createTokenRequest),
+    defaultValues: { name: '', days: 90 },
+  })
 
   const tokens = data?.tokens ?? []
 
@@ -196,62 +210,77 @@ export function TokenList() {
             </ul>
           )}
 
-          <form
-            className="space-y-3 rounded-md border p-3"
-            onSubmit={(event) => {
-              event.preventDefault()
-              create.mutate(
-                { name, days },
-                {
-                  onSuccess: (result) => {
-                    setCreated(result)
-                    setName('')
-                  },
-                },
-              )
-            }}
-          >
-            <p className="text-sm font-medium">New token</p>
+          <Form {...form}>
+            <form
+              className="space-y-3 rounded-md border p-3"
+              onSubmit={(event) => {
+                void form.handleSubmit((values) => {
+                  create.mutate(values, {
+                    onSuccess: (result) => {
+                      setCreated(result)
+                      // The lifetime stays — somebody issuing a second token
+                      // usually wants the same one — but the name must not, or
+                      // the next submission silently reuses it.
+                      form.reset({ name: '', days: values.days })
+                    },
+                  })
+                })(event)
+              }}
+            >
+              <p className="text-sm font-medium">New token</p>
 
-            <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
-              <div className="space-y-1.5">
-                <Label htmlFor="token-name">Name</Label>
-                <Input
-                  id="token-name"
-                  value={name}
-                  onChange={(event) => { setName(event.target.value) }}
-                  placeholder="nightly export"
-                  required
+              <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
+                <FormField
+                  control={form.control}
+                  name="name"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Name</FormLabel>
+                      <FormControl>
+                        <Input placeholder="nightly export" {...field} />
+                      </FormControl>
+                      <FormDescription>
+                        How you tell four of them apart in six months.
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
                 />
-                <p className="text-xs text-muted-foreground">
-                  How you tell four of them apart in six months.
-                </p>
+
+                <FormField
+                  control={form.control}
+                  name="days"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Expires</FormLabel>
+                      <Select
+                        value={String(field.value)}
+                        onValueChange={(value) => { field.onChange(Number(value)) }}
+                      >
+                        <FormControl>
+                          <SelectTrigger className="w-[130px]">
+                            <SelectValue />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {LIFETIMES.map((l) => (
+                            <SelectItem key={l.days} value={String(l.days)}>
+                              {l.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
               </div>
 
-              <div className="space-y-1.5">
-                <Label htmlFor="token-days">Expires</Label>
-                <Select
-                  value={String(days)}
-                  onValueChange={(value) => { setDays(Number(value)) }}
-                >
-                  <SelectTrigger id="token-days" className="w-[130px]">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {LIFETIMES.map((l) => (
-                      <SelectItem key={l.days} value={String(l.days)}>
-                        {l.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
-            <Button type="submit" size="sm" disabled={create.isPending || name === ''}>
-              {create.isPending ? 'Creating…' : 'Create token'}
-            </Button>
-          </form>
+              <Button type="submit" size="sm" disabled={create.isPending}>
+                {create.isPending ? 'Creating…' : 'Create token'}
+              </Button>
+            </form>
+          </Form>
         </CardContent>
       </Card>
     </div>
