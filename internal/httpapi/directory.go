@@ -615,3 +615,55 @@ func (s *Server) lookupMember(ctx context.Context, name string) (*directory.Enti
 	}
 	return s.store.LookupEntity(ctx, directory.TypeGroup, name)
 }
+
+// hostResponse is one machine in the inventory.
+type hostResponse struct {
+	Name        string `json:"name"`
+	DisplayName string `json:"displayName"`
+
+	Enrolled bool `json:"enrolled"`
+
+	// LastSeen is RFC3339 or empty. Empty means never, which is a different
+	// thing from long ago and has to be distinguishable in the table.
+	LastSeen string `json:"lastSeen"`
+
+	Aliases  int  `json:"aliases"`
+	Groups   int  `json:"groups"`
+	Disabled bool `json:"disabled"`
+}
+
+// handleListHosts answers what the fleet looks like.
+//
+// The question nothing else in Cardinal can answer: which machines are still
+// checking in. A host that enrolled six months ago and has not been seen since
+// is either decommissioned or broken, and both are worth knowing about before
+// somebody tries to log into it.
+func (s *Server) handleListHosts(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	hosts, total, err := s.store.ListHosts(ctx, pageFrom(r))
+	if err != nil {
+		s.log.ErrorContext(ctx, "listing hosts failed", "error", err)
+		writeError(w, http.StatusInternalServerError, "could not list hosts")
+		return
+	}
+
+	out := make([]hostResponse, 0, len(hosts))
+	for _, h := range hosts {
+		row := hostResponse{
+			Name: h.Name, DisplayName: h.DisplayName,
+			Enrolled: h.Enrolled, Aliases: h.Aliases,
+			Groups: h.Groups, Disabled: h.Disabled,
+		}
+		if h.LastSeenAt != nil {
+			row.LastSeen = h.LastSeenAt.UTC().Format(time.RFC3339)
+		}
+		out = append(out, row)
+	}
+
+	page := pageFrom(r)
+	writeJSON(w, http.StatusOK, pagedResponse[hostResponse]{
+		Items: out, Total: total,
+		Limit: len(out), Offset: page.Offset,
+	})
+}

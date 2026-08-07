@@ -372,3 +372,84 @@ func (s *Store) ListApplicationNames(ctx context.Context, page Page) ([]Applicat
 	}
 	return out, total, rows.Err()
 }
+
+// HostSummary is one machine, as the inventory shows it.
+type HostSummary struct {
+	ID          uuid.UUID
+	Name        string
+	DisplayName string
+
+	// Enrolled means a live credential exists — the machine has proved which
+	// host it is at least once.
+	Enrolled bool
+
+	// LastSeenAt is the operational question the whole page exists to answer.
+	// Nil for a host that has never authenticated.
+	LastSeenAt *time.Time
+
+	// Aliases is how many additional names it may prove. Worth a column because
+	// each one is the power to *be* that name, and a machine quietly holding
+	// four of them is worth noticing.
+	Aliases int
+
+	// Groups it belongs to, which is what policy matches on. A host in no group
+	// is one no rule can reach.
+	Groups int
+
+	Disabled bool
+}
+
+// ListHosts returns the fleet.
+//
+// Deliberately includes disabled hosts, unlike the other listings. A machine
+// somebody cut off is exactly what an operator comes here looking for, and a
+// page that hid it would answer "no such host" to the question "did we disable
+// that one?".
+func (s *Store) ListHosts(ctx context.Context, page Page) ([]*HostSummary, int, error) {
+	page = page.normalise()
+	pattern := "%" + strings.ToLower(page.Search) + "%"
+	where := `
+		 WHERE e.type = 'host'
+		   AND ($1 = '' OR lower(e.name) LIKE $2
+		        OR lower(coalesce(e.display_name, '')) LIKE $2
+		        OR EXISTS (SELECT 1 FROM host_aliases a
+		                    WHERE a.host_id = e.id AND lower(a.name) LIKE $2))`
+
+	var total int
+	if err := s.pool.QueryRow(ctx,
+		`SELECT count(*) FROM entities e`+where,
+		page.Search, pattern).Scan(&total); err != nil {
+		return nil, 0, fmt.Errorf("store: counting hosts: %w", err)
+	}
+
+	// The credential columns come from the live row only. A retired one carries
+	// a last-seen from before a rebuild, and showing it would say a machine is
+	// healthy when what is actually alive is a key nobody uses.
+	rows, err := s.pool.Query(ctx, `
+		SELECT e.id, e.name, coalesce(e.display_name, ''),
+		       c.id IS NOT NULL, c.last_seen_at,
+		       (SELECT count(*) FROM host_aliases a WHERE a.host_id = e.id),
+		       (SELECT count(*) FROM group_members m
+		         WHERE m.member_id = e.id AND m.valid_period @> now()),
+		       e.disabled_at IS NOT NULL
+		  FROM entities e
+		  LEFT JOIN host_credentials c
+		         ON c.host_id = e.id AND c.valid_period @> now()`+where+`
+		 ORDER BY e.name
+		 LIMIT $3 OFFSET $4`, page.Search, pattern, page.Limit, page.Offset)
+	if err != nil {
+		return nil, 0, fmt.Errorf("store: listing hosts: %w", err)
+	}
+	defer rows.Close()
+
+	var out []*HostSummary
+	for rows.Next() {
+		var h HostSummary
+		if err := rows.Scan(&h.ID, &h.Name, &h.DisplayName, &h.Enrolled,
+			&h.LastSeenAt, &h.Aliases, &h.Groups, &h.Disabled); err != nil {
+			return nil, 0, fmt.Errorf("store: scanning host: %w", err)
+		}
+		out = append(out, &h)
+	}
+	return out, total, rows.Err()
+}

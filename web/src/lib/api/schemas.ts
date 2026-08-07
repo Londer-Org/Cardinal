@@ -220,6 +220,25 @@ export type DirectoryGroup = z.infer<typeof directoryGroupSchema>
 
 export const directoryGroupsSchema = paged(directoryGroupSchema)
 
+export const directoryHostSchema = z.object({
+  name: z.string(),
+  displayName: z.string(),
+  // Whether a live credential exists — the machine has proved which host it is
+  // at least once.
+  enrolled: z.boolean(),
+  // RFC3339, or empty for never. The two are different facts: never enrolled is
+  // a machine nobody has set up, and long ago is one that stopped checking in.
+  lastSeen: z.string(),
+  // Each alias is the power to *be* that name, so a machine quietly holding
+  // several is worth noticing.
+  aliases: z.number(),
+  groups: z.number(),
+  disabled: z.boolean(),
+})
+export type DirectoryHost = z.infer<typeof directoryHostSchema>
+
+export const directoryHostsSchema = paged(directoryHostSchema)
+
 /** Applications by name only, for an owner picker. */
 export const applicationRefSchema = z.object({
   name: z.string(),

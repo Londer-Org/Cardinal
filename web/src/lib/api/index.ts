@@ -10,6 +10,7 @@ import {
   applicationRefsSchema,
   directoryGroupDetailSchema,
   directoryGroupsSchema,
+  directoryHostsSchema,
   directoryUserDetailSchema,
   directoryUsersSchema,
   invitationSchema,
@@ -208,6 +209,9 @@ export const api = {
         directoryGroupsSchema,
       ),
 
+    hosts: (page: PageQuery) =>
+      request(`/api/directory/hosts?${pageParams(page)}`, directoryHostsSchema),
+
     /** Applications by name, readable by whoever manages groups. */
     applications: (page: PageQuery) =>
       request(`/api/directory/applications?${pageParams(page)}`, applicationRefsSchema),
@@ -342,6 +346,7 @@ export type {
   CreatedUser,
   Credential,
   DirectoryGroup,
+  DirectoryHost,
   DirectoryGroupDetail,
   DirectoryUser,
   DirectoryUserDetail,
@@ -371,6 +376,7 @@ export const queryKeys = {
   user: (login: string) => ['directory', 'users', login] as const,
   groups: (page: PageQuery, kind: GroupKind) =>
     ['directory', 'groups', kind, page] as const,
+  hosts: (page: PageQuery) => ['directory', 'hosts', page] as const,
   refApplications: (page: PageQuery) =>
     ['directory', 'ref-applications', page] as const,
   group: (name: string) => ['directory', 'groups', name] as const,

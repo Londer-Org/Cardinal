@@ -28,6 +28,15 @@ export function useGroups(page: PageQuery, kind: GroupKind = '') {
   })
 }
 
+/** The fleet, for the host inventory. */
+export function useHosts(page: PageQuery) {
+  return useQuery({
+    queryKey: queryKeys.hosts(page),
+    queryFn: () => api.directory.hosts(page),
+    placeholderData: (previous) => previous,
+  })
+}
+
 /** Applications by name, for an owner picker. */
 export function useApplicationRefs(page: PageQuery) {
   return useQuery({

@@ -5,6 +5,7 @@ import {
   LayersIcon,
   LifeBuoyIcon,
   ScrollTextIcon,
+  ServerIcon,
   UsersIcon,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
@@ -62,6 +63,7 @@ export const NAV: NavSection[] = [
     items: [
       { label: 'People', to: '/directory/people', icon: UsersIcon },
       { label: 'Groups', to: '/directory/groups', icon: LayersIcon },
+      { label: 'Hosts', to: '/directory/hosts', icon: ServerIcon },
       { label: 'Recovery', to: '/directory/recovery', icon: LifeBuoyIcon },
     ],
   },
