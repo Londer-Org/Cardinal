@@ -94,8 +94,13 @@ func (a *Agent) LoadCache() (*Assignment, error) {
 	return cached, nil
 }
 
-// Refresh fetches the assignment and replaces the cache.
-func (a *Agent) Refresh(ctx context.Context) (*Assignment, error) {
+// Fetch asks Cardinal for the assignment and touches nothing on disk.
+//
+// Separate from Refresh so shadow mode can read without writing. That is not a
+// convenience: shadow mode's whole claim is that it changes nothing, and a
+// version of it built on Refresh would have written the cache to /var/lib
+// while saying so.
+func (a *Agent) Fetch(ctx context.Context) (*Assignment, error) {
 	resp, err := a.Identity.Do(ctx, a.client(), http.MethodGet, "/api/hosts/assignment", nil)
 	if err != nil {
 		return nil, fmt.Errorf("agent: fetching assignment: %w", err)
@@ -121,13 +126,23 @@ func (a *Agent) Refresh(ctx context.Context) (*Assignment, error) {
 		a.log().Warn("assignment is empty: nobody may log into this host")
 	}
 
+	return &fetched, nil
+}
+
+// Refresh fetches the assignment and installs everything that follows from it.
+func (a *Agent) Refresh(ctx context.Context) (*Assignment, error) {
+	fetched, err := a.Fetch(ctx)
+	if err != nil {
+		return nil, err
+	}
+
 	// Cache first, install second. A crash between the two costs one refresh
 	// interval; the other order costs the cache being older than what is being
 	// served, which is the state that makes an outage confusing to reason about.
-	if err := Save(a.cachePath(), &fetched); err != nil {
+	if err := Save(a.cachePath(), fetched); err != nil {
 		return nil, err
 	}
-	a.install(&fetched)
+	a.install(fetched)
 
 	// After the identity is installed, and deliberately not before: a sudoers
 	// file naming somebody the POSIX provider cannot resolve is a rule sudo
@@ -137,7 +152,7 @@ func (a *Agent) Refresh(ctx context.Context) (*Assignment, error) {
 	// already installed and correct, and the previous sudoers file is still in
 	// place — throwing away a good refresh because one of its two outputs did
 	// not land would make the machine less current, not safer.
-	if err := a.writeSudoers(ctx, &fetched); err != nil {
+	if err := a.writeSudoers(ctx, fetched); err != nil {
 		a.log().Error("sudoers were not updated; the previous file is still in place",
 			"error", err)
 	}
@@ -151,7 +166,7 @@ func (a *Agent) Refresh(ctx context.Context) (*Assignment, error) {
 			"error", err)
 	}
 
-	return &fetched, nil
+	return fetched, nil
 }
 
 // writeSudoers renders and installs the drop-in.

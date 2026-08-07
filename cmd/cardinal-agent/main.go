@@ -15,6 +15,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -25,10 +26,12 @@ import (
 	"path/filepath"
 	"strings"
 	"syscall"
+	"text/tabwriter"
 	"time"
 
 	"github.com/arthur-lonfils/cardinal/internal/agent"
 	"github.com/arthur-lonfils/cardinal/internal/hostclient"
+	"github.com/arthur-lonfils/cardinal/internal/shadow"
 	"github.com/arthur-lonfils/cardinal/internal/sudoers"
 	"github.com/arthur-lonfils/cardinal/internal/userdb"
 )
@@ -72,6 +75,8 @@ func run(ctx context.Context, args []string) error {
 		return runSudoers(ctx, args[1:])
 	case "hostcert":
 		return runHostCert(args[1:])
+	case "shadow":
+		return runShadow(ctx, args[1:])
 	case "help", "-h", "--help":
 		usage()
 		return nil
@@ -95,6 +100,9 @@ USAGE
   sudoers                               Print the drop-in that would be
                                         installed, without installing it.
   hostcert                              Show the installed host certificate.
+  shadow -server <url>                  Report what cutting over would change.
+                                        Enforces nothing: no socket, no sudoers
+                                        file, no certificate.
 
 FLAGS
   -key <path>        this host's private key (default `+hostclient.DefaultKeyPath+`)
@@ -424,4 +432,141 @@ func runHostCert(args []string) error {
 		"\n  For clients, in known_hosts — one line, for the whole fleet:\n"+
 			"    @cert-authority <pattern> $(cardinal ssh ca trust)")
 	return nil
+}
+
+// runShadow reports what would change, and changes nothing.
+//
+// The command an operator runs on every machine before deciding to cut any of
+// them over. It builds an Agent that installs nothing — every path left empty
+// on purpose, so the "changes nothing" claim is a property of the object rather
+// than of remembering not to call something.
+func runShadow(ctx context.Context, args []string) error {
+	fs := flag.NewFlagSet("shadow", flag.ContinueOnError)
+	server := fs.String("server", "", "base URL of the Cardinal server")
+	keyPath := fs.String("key", hostclient.DefaultKeyPath, "this host's key")
+	asJSON := fs.Bool("json", false, "emit the report as JSON, for collecting across a fleet")
+	extra := fs.String("users", "",
+		"comma-separated names to check that Cardinal does not know about")
+	if err := fs.Parse(args); err != nil {
+		return errUsage
+	}
+	if *server == "" {
+		return errUsage
+	}
+
+	signer, err := hostclient.LoadKey(*keyPath)
+	if err != nil {
+		return err
+	}
+
+	// Deliberately not given a cache path, a sudoers path, a host key or a
+	// socket directory. An Agent with none of those cannot write anything, so
+	// shadow mode is read-only by construction rather than by discipline.
+	a := &agent.Agent{
+		Identity: &hostclient.Identity{Server: *server, Signer: signer},
+	}
+
+	// Fetch, not Refresh. Refresh writes the cache, renders sudoers and renews
+	// the certificate — everything shadow mode exists not to do.
+	assignment, err := a.Fetch(ctx)
+	if err != nil {
+		return err
+	}
+
+	expected := make([]shadow.Expected, 0, len(assignment.Users))
+	byGID := map[int]string{}
+	for _, g := range assignment.Groups {
+		byGID[g.GID] = g.Name
+	}
+	for _, u := range assignment.Users {
+		want := shadow.Expected{
+			Name: u.Name, UID: u.UID, GID: u.GID,
+			Home: u.Home, Shell: u.Shell, Sudo: u.Sudo,
+		}
+		for _, gid := range u.Groups {
+			if name, ok := byGID[gid]; ok {
+				want.Groups = append(want.Groups, name)
+			}
+		}
+		expected = append(expected, want)
+	}
+
+	// Names Cardinal has never heard of, which is the one thing this cannot
+	// discover on its own: SSSD disables enumeration by default, so there is no
+	// asking the machine who else it knows. Passed separately from the
+	// assignment because the question is different — "does Cardinal know this
+	// person at all", not "do the two agree about them".
+	var alsoCheck []string
+	for _, name := range strings.Split(*extra, ",") {
+		if name = strings.TrimSpace(name); name != "" {
+			alsoCheck = append(alsoCheck, name)
+		}
+	}
+
+	report, err := shadow.Compare(ctx, assignment.Host, expected, alsoCheck, shadow.Local{})
+	if err != nil {
+		return err
+	}
+
+	if *asJSON {
+		encoder := json.NewEncoder(os.Stdout)
+		encoder.SetIndent("", "  ")
+		return encoder.Encode(report)
+	}
+
+	printReport(report)
+
+	// Non-zero when cutting over would destroy something, so this can be the
+	// gate in whatever runs it across a fleet.
+	if len(report.Blocking()) > 0 {
+		return errBlocking
+	}
+	return nil
+}
+
+// errBlocking is not a failure of the command — the comparison worked. It is
+// the answer being "no".
+var errBlocking = errors.New("cutting this host over would change uid or gid ownership")
+
+func printReport(report *shadow.Report) {
+	fmt.Printf("%s\n\n", report.Host)
+
+	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+	fmt.Fprintln(w, "USER\tWHAT\tNOW\tCARDINAL\tVERDICT")
+	for _, f := range report.Findings {
+		if f.Severity == shadow.Match {
+			continue
+		}
+		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n",
+			f.User, f.What, f.Local, f.Cardinal, f.Severity)
+	}
+	_ = w.Flush()
+
+	counts := report.Counts()
+	fmt.Printf("\n  %d matching, %d additive, %d to review, %d blocking\n",
+		counts[shadow.Match], counts[shadow.Additive],
+		counts[shadow.Review], counts[shadow.Blocking])
+
+	for _, f := range report.Blocking() {
+		fmt.Fprintf(os.Stderr, "\n  BLOCKING  %s %s: %s → %s\n    %s\n",
+			f.User, f.What, f.Local, f.Cardinal, f.Why)
+	}
+
+	if len(report.Blocking()) > 0 {
+		fmt.Fprintln(os.Stderr,
+			"\n  Do not cut this host over. Align the numbers first — either import\n"+
+				"  the existing ones into Cardinal, or move the files. There is no\n"+
+				"  third option: the filesystem recorded a number, not a name.")
+	}
+
+	// Names that were asked about and turned up nowhere. Printed rather than
+	// dropped, because "I checked and there is no such account" and "I forgot to
+	// check" look identical in a report that omits them.
+	if len(report.Unchecked) > 0 {
+		fmt.Printf("\n  Neither system knows: %s\n", strings.Join(report.Unchecked, ", "))
+	}
+
+	fmt.Fprintln(os.Stderr,
+		"\n  Note: people SSSD serves that Cardinal has never heard of are invisible\n"+
+			"  here — enumeration is disabled by default on both. Name them with -users.")
 }

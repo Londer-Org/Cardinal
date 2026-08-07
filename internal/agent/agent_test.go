@@ -385,6 +385,52 @@ func TestRunKeepsGoingAfterAFailure(t *testing.T) {
 	}
 }
 
+// TestFetchWritesNothing.
+//
+// Shadow mode's entire claim. An earlier version of it called Refresh, which
+// writes the cache to /var/lib, renders sudoers and renews the certificate —
+// while the command's own help text said it changes nothing.
+func TestFetchWritesNothing(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(
+		func(w http.ResponseWriter, _ *http.Request) {
+			_ = json.NewEncoder(w).Encode(sample())
+		}))
+	defer server.Close()
+
+	dir := t.TempDir()
+	a := &agent.Agent{
+		Identity: testIdentity(t, server.URL),
+		// Every path pointed somewhere observable, so anything written shows up.
+		CachePath:      filepath.Join(dir, "assignment.json"),
+		SudoersPath:    filepath.Join(dir, "50-cardinal"),
+		HostKeyPath:    filepath.Join(dir, "ssh_host_ed25519_key.pub"),
+		HostCertPath:   filepath.Join(dir, "cert.pub"),
+		SSHDDropInPath: filepath.Join(dir, "50-cardinal.conf"),
+	}
+
+	fetched, err := a.Fetch(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fetched.Host != "web-01.prod" {
+		t.Fatalf("wrong assignment: %+v", fetched)
+	}
+
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 0 {
+		t.Fatalf("Fetch wrote %d file(s): %v", len(entries), entries)
+	}
+
+	// And nothing was installed in memory either, so a shadow run cannot start
+	// answering lookups as a side effect.
+	if a.Source() != nil {
+		t.Fatal("Fetch installed a snapshot")
+	}
+}
+
 // TestStatusReportsUnnumberedUsers.
 //
 // The silent failure: policy allows the login, a certificate is issued, and

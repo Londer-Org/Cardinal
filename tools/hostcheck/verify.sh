@@ -230,6 +230,47 @@ case "$got" in
 esac
 echo "  correctly refused — so the acceptance above was the certificate, not luck"
 
+# ---------------------------------------------------------------------------
+# Shadow mode
+#
+# The comparison a migration turns on, run against real getent and real sudo.
+# The interesting case is a uid that disagrees: a local account with the same
+# name and a different number is exactly the FreeIPA-to-Cardinal situation, and
+# exactly the one that cannot be undone.
+# ---------------------------------------------------------------------------
+
+echo
+echo "== a local account with the same name and a different uid"
+useradd -u 4242 -m -s /bin/sh cardinalclash
+getent passwd cardinalclash | sed 's/^/  /'
+
+got=$(timeout 20 hostcheck -shadow 2>&1 || true)
+echo "$got" | sed 's/^/  /'
+case "$got" in
+    *"uid"*"4242"*"blocking"*) ;;
+    *) fail "shadow mode did not flag the uid mismatch as blocking" "$got" ;;
+esac
+echo "  correctly blocking"
+
+echo "== the same comparison once the numbers agree"
+userdel -r cardinalclash 2>/dev/null || true
+# 100007 rather than a number the varlink provider is already serving: useradd
+# consults NSS, so `useradd -u 100002` fails with "UID is not unique" because
+# nss-systemd is answering for a user that exists only in Cardinal. Which is its
+# own small proof the provider is in the chain.
+# The group has to be created explicitly with a matching gid. Left to itself
+# useradd picks the next free gid — 1000 — and the comparison then blocks on the
+# gid instead, which is the check doing its job on a fixture that was wrong.
+groupadd -g 100007 cardinalagree
+useradd -u 100007 -g 100007 -m -d /home/cardinalagree -s /bin/bash cardinalagree
+got=$(timeout 20 hostcheck -shadow -expect-name cardinalagree -expect-uid 100007 2>&1 || true)
+echo "$got" | sed 's/^/  /'
+case "$got" in
+    *blocking*) fail "shadow mode blocked on an account that matches" "$got" ;;
+esac
+echo "  correctly clear — so the block above was the mismatch, not the default"
+
 echo
 echo "PASS: nss-systemd agrees with the provider, sudo honours the rendered file,"
-echo "      and a real ssh client verifies this machine by certificate"
+echo "      a real ssh client verifies this machine by certificate, and shadow"
+echo "      mode catches a uid that would silently reassign every file"

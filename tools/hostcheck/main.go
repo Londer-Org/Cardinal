@@ -14,6 +14,7 @@ import (
 	"context"
 	"crypto/ed25519"
 	"crypto/rand"
+	"flag"
 	"fmt"
 	"net"
 	"os"
@@ -22,6 +23,7 @@ import (
 	"time"
 
 	"github.com/arthur-lonfils/cardinal/internal/agent"
+	"github.com/arthur-lonfils/cardinal/internal/shadow"
 	"github.com/arthur-lonfils/cardinal/internal/sshca"
 	"github.com/arthur-lonfils/cardinal/internal/sudoers"
 	"github.com/arthur-lonfils/cardinal/internal/userdb"
@@ -31,7 +33,21 @@ import (
 
 func main() { os.Exit(main1()) }
 
+// The shadow-mode half runs the comparison and exits, rather than serving
+// anything. Same binary because it needs the same fixture.
+var (
+	shadowMode = flag.Bool("shadow", false, "run the shadow comparison and exit")
+	expectName = flag.String("expect-name", "cardinalclash", "the account to compare")
+	expectUID  = flag.Int("expect-uid", 100003, "the uid Cardinal would assign it")
+)
+
 func main1() int {
+	flag.Parse()
+
+	if *shadowMode {
+		return runShadowCheck()
+	}
+
 	ctx, stop := signal.NotifyContext(context.Background(),
 		os.Interrupt, syscall.SIGTERM)
 	defer stop()
@@ -157,4 +173,23 @@ func writeHostCertificate() error {
 	//nolint:gosec // a public key, in a container that exists for one command
 	return os.WriteFile("/tmp/cardinal-ca.pub",
 		ssh.MarshalAuthorizedKey(caSigner.PublicKey()), 0o644)
+}
+
+// runShadowCheck compares a fixture against whatever the container's own NSS and
+// sudo currently say, using the same code the agent runs.
+func runShadowCheck() int {
+	report, err := shadow.Compare(context.Background(), "verify", []shadow.Expected{{
+		Name: *expectName, UID: *expectUID, GID: *expectUID,
+		Home: "/home/" + *expectName, Shell: "/bin/bash",
+	}}, nil, shadow.Local{})
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
+
+	for _, f := range report.Findings {
+		fmt.Printf("%s %s: now=%s cardinal=%s %s\n",
+			f.User, f.What, f.Local, f.Cardinal, f.Severity)
+	}
+	return 0
 }

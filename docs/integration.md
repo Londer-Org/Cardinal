@@ -295,6 +295,31 @@ The agent writes the certificate and an `sshd_config.d` drop-in and stops — it
 will not restart sshd, because reloading the daemon carrying your session as a
 side effect of a periodic refresh is not a thing to do automatically.
 
+### Before cutting anything over
+
+```bash
+cardinal-agent shadow -server https://id.example
+```
+
+It fetches the assignment, asks the machine what it currently believes, prints
+the difference, and writes nothing. One kind of finding stops a migration:
+
+```
+USER   WHAT  NOW   CARDINAL  VERDICT
+alice  uid   1234  100003    blocking
+```
+
+If FreeIPA says alice is 1234 and Cardinal says 100003, then the moment Cardinal
+wins every file she owns belongs to a stranger. The filesystem recorded a number
+([ADR 0028](adr/0028-shadow-mode-reports-and-does-not-act.md)). Everything else
+— a moved home directory, sudo appearing or disappearing, groups gained — is
+recoverable and is reported for review rather than as a stop sign.
+
+A non-zero exit means blocking, so this can be the gate in whatever runs it
+across a fleet. People SSSD serves that Cardinal has never heard of are
+invisible — enumeration is off by default on both — so name them with
+`-users alice,bob`.
+
 **The cache answers lookups; the network only updates it.** A host that cannot
 reach Cardinal keeps resolving the people it last knew about, across a reboot,
 indefinitely. That is not a degraded mode — combined with SSH certificates being

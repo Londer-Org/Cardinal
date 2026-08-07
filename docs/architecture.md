@@ -54,6 +54,7 @@ additional moving part is another way for nobody to be able to log in.
 | `internal/userdb` | POSIX identity over systemd's varlink interface | Standard library only — no varlink dependency, no cgo |
 | `internal/agent` | The host's assignment, its cache, and the lookup index | Never blocks on Cardinal being reachable |
 | `internal/sudoers` | Renders and installs `/etc/sudoers.d/50-cardinal` | Writes one file, reads none — it cannot remove local root |
+| `internal/shadow` | Compares a cutover against what the machine does today | Asks the system through `getent` and `sudo`; writes nothing |
 | `internal/httpapi` | Routing, middleware, handlers | The only package that knows what a request is |
 | `internal/event` | The hash-chained journal and its payload allowlist | Refuses anything that could carry personal data |
 | `web` | React admin UI, embedded at build time | Talks only to the same public API |
