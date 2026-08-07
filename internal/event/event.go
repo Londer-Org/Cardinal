@@ -56,6 +56,14 @@ const (
 	// The SSH certificate authority. Creating or activating a CA key changes
 	// what an entire fleet will trust, which makes it among the most
 	// consequential things anyone can do here.
+	// The X.509 authority. Same stakes as the SSH one — whoever holds this key
+	// can issue a certificate for any name the fleet trusts.
+	ActionX509CAKeyCreated      = "x509_ca.key_created"
+	ActionX509CAKeyActivated    = "x509_ca.key_activated"
+	ActionX509CertificateIssued = "x509_ca.certificate_issued"
+	ActionACMEAccountCreated    = "acme.account_created"
+	ActionACMECredentialIssued  = "acme.credential_issued"
+
 	ActionSSHCAKeyCreated      = "ssh_ca.key_created"
 	ActionSSHCAKeyActivated    = "ssh_ca.key_activated"
 	ActionSSHCertificateIssued = "ssh_ca.certificate_issued"

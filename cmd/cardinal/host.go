@@ -23,7 +23,8 @@ import (
 // which key it came in with.
 func runHost(ctx context.Context, args []string) error {
 	if len(args) == 0 {
-		return fmt.Errorf("%w: cardinal host <create|enroll|join|whoami|credentials|alias>", errUsage)
+		return fmt.Errorf("%w: cardinal host "+
+			"<create|enroll|join|whoami|credentials|alias|acme-credentials>", errUsage)
 	}
 	switch args[0] {
 	case "enroll":
@@ -36,6 +37,8 @@ func runHost(ctx context.Context, args []string) error {
 		return runHostCredentials(ctx, args[1:])
 	case "alias":
 		return runHostAlias(ctx, args[1:])
+	case "acme-credentials":
+		return runACMECredentials(ctx, args[1:])
 	default:
 		return runEntityCommand(ctx, "host", args)
 	}

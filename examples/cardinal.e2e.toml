@@ -61,3 +61,16 @@ enabled = true
 # and the fleet. Reusing the value here would make the example teach the wrong
 # lesson — and the config validator refuses it outright.
 ca_encryption_key = "e2e-fixture-ssh-ca-encryption-key-not-for-real-use"
+
+[x509]
+enabled = true
+
+# A third fixture, and a third distinct value. The config validator refuses two
+# authorities sharing an encryption key — one leaked file must not yield both.
+ca_encryption_key = "e2e-fixture-x509-ca-encryption-key-not-for-real-use"
+
+# ACME is the one thing in this stack served over TLS, on its own port, because
+# RFC 8555 requires HTTPS and every client enforces it. The rest stays on plain
+# HTTP because *.localhost is a secure context to a browser and the other tests
+# have no such requirement.
+public_url = "https://id.localhost:8543"

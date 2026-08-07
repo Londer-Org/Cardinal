@@ -86,6 +86,13 @@ verify-package: package ## Install the real .deb in a container and check what i
 		-t cardinal-packagecheck . >/dev/null
 	@docker run --rm cardinal-packagecheck
 
+.PHONY: verify-acme
+verify-acme: ## Drive the ACME server with lego, a client nobody here wrote
+	@# The only check that says an implementation from outside this project will
+	@# talk to Cardinal, which is the whole claim of ADR 0023. Everything else is
+	@# Cardinal agreeing with Cardinal.
+	@tools/acmecheck/check.sh
+
 .PHONY: verify-host
 verify-host: ## Check the host integration against real getent, id and sudo
 	@# The Go tests prove each package agrees with a client written from the
@@ -134,6 +141,19 @@ serve: build ## Run the server in development mode
 
 .PHONY: e2e-up
 e2e-up: ## Build and start the end-to-end stack (Traefik + a protected app)
+	@# A self-signed certificate for the TLS entrypoint ACME needs. Generated
+	@# rather than committed: it is a fixture, it expires, and nothing outside
+	@# this stack should ever trust it.
+	@if [ ! -f examples/traefik/tls/e2e.crt ]; then \
+		mkdir -p examples/traefik/tls; \
+		openssl req -x509 -newkey rsa:2048 -nodes -days 365 \
+			-keyout examples/traefik/tls/e2e.key \
+			-out examples/traefik/tls/e2e.crt \
+			-subj "/CN=id.localhost" \
+			-addext "subjectAltName=DNS:id.localhost,DNS:localhost,IP:127.0.0.1" \
+			2>/dev/null; \
+		echo "  generated a fixture TLS certificate for the ACME entrypoint"; \
+	fi
 	docker compose -f examples/compose.yml up -d --build
 	@printf 'waiting for the stack'
 	@for i in $$(seq 1 90); do \
@@ -169,6 +189,14 @@ e2e-seed: ## Create the end-to-end user and activate the policy set
 		$(COMPOSE_E2E) exec -T cardinal cardinal ssh ca init -activate \
 			-config /etc/cardinal/cardinal.toml >/dev/null; \
 		echo "  SSH certificate authority created"; \
+	fi
+	@# An X.509 authority, so ACME can issue. -activate for the same reason as
+	@# the SSH one: nothing in this stack trusts an older key.
+	@if ! $(COMPOSE_E2E) exec -T cardinal cardinal x509 ca list 2>/dev/null | grep -q signing; then \
+		$(COMPOSE_E2E) exec -T cardinal cardinal x509 ca init -activate \
+			-subject 'Cardinal end-to-end CA' \
+			-config /etc/cardinal/cardinal.toml >/dev/null 2>&1; \
+		echo "  X.509 certificate authority created"; \
 	fi
 	@# The server loads policy at startup, so it has to be restarted to pick up
 	@# the version just activated.

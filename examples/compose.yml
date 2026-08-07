@@ -95,6 +95,8 @@ services:
       # over a difference with a separate internal URL is how "issuer mismatch"
       # reaches production.
       - --entrypoints.web.address=:8100
+      # TLS, for ACME. Its own port so nothing already using 8100 changes.
+      - --entrypoints.websecure.address=:8543
       - --api.dashboard=false
       - --log.level=INFO
       # Access logs make it visible which requests were admitted and which the
@@ -103,8 +105,10 @@ services:
       - --accesslog=true
     ports:
       - "8100:8100"
+      - "8543:8543"
     volumes:
       - ./traefik/dynamic.yml:/etc/traefik/dynamic.yml:ro
+      - ./traefik/tls:/etc/traefik/tls:ro
 
   # An OpenID Connect relying party, using coreos/go-oidc.
   #

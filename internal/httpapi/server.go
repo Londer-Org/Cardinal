@@ -17,6 +17,7 @@ import (
 	"github.com/arthur-lonfils/cardinal/internal/policy"
 	"github.com/arthur-lonfils/cardinal/internal/sshca"
 	"github.com/arthur-lonfils/cardinal/internal/store"
+	"github.com/arthur-lonfils/cardinal/internal/x509ca"
 )
 
 // Server holds the HTTP surface.
@@ -43,6 +44,11 @@ type Server struct {
 	// nobody has enrolled hosts against is a signing key sitting in a database
 	// for no reason, so it stays off until asked for.
 	sshCA *sshca.CA
+
+	// x509CA is nil unless X.509 issuance is configured. Optional in exactly
+	// the same way and for the same reason: a deployment that already has a CA
+	// keeps it, and nothing else in Cardinal depends on this (ADR 0023).
+	x509CA *x509ca.CA
 
 	// oidc is nil when the provider is disabled, which is the default: an
 	// identity provider nobody has registered clients for is attack surface
@@ -94,6 +100,9 @@ type Options struct {
 	// the default: a certificate authority nobody has enrolled hosts against
 	// is a signing key in a database for no reason.
 	SSHCA *sshca.CA
+
+	// X509CA enables ACME issuance. Nil leaves it off.
+	X509CA *x509ca.CA
 }
 
 func New(s *store.Store, a *auth.Service, cfg *config.Config, opts Options) (*Server, error) {
@@ -124,6 +133,7 @@ func New(s *store.Store, a *auth.Service, cfg *config.Config, opts Options) (*Se
 		claims:        claims.NewResolver(s),
 		oidc:          opts.OIDC,
 		sshCA:         opts.SSHCA,
+		x509CA:        opts.X509CA,
 	}
 	return srv, nil
 }
@@ -216,6 +226,27 @@ func (s *Server) Handler() http.Handler {
 		s.requireHost(http.HandlerFunc(s.handleHostAssignment)))
 	mux.Handle("POST /api/hosts/certificate",
 		s.requireHost(http.HandlerFunc(s.handleIssueHostCertificate)))
+
+	// ── ACME (RFC 8555) ────────────────────────────────────────────────────
+	//
+	// Unauthenticated at this layer and authenticated at every one of them: a
+	// JWS signed by an account key, whose account was bound to a host by a
+	// credential Cardinal issued. Session cookies and host signatures are both
+	// meaningless here, which is why none of these sit behind requireAuth or
+	// requireHost.
+	//
+	// The directory endpoint is the only GET. Everything else is a POST because
+	// ACME has no authenticated GET — a client reads by posting an empty
+	// payload, which looks wrong and is §6.3.
+	mux.HandleFunc("GET /acme/directory", s.handleACMEDirectory)
+	mux.HandleFunc("GET /acme/new-nonce", s.handleACMENewNonce)
+	mux.HandleFunc("HEAD /acme/new-nonce", s.handleACMENewNonce)
+	mux.HandleFunc("POST /acme/new-account", s.handleACMENewAccount)
+	mux.HandleFunc("POST /acme/new-order", s.handleACMENewOrder)
+	mux.HandleFunc("POST /acme/order/{id}", s.handleACMEOrder)
+	mux.HandleFunc("POST /acme/order/{id}/finalize", s.handleACMEFinalize)
+	mux.HandleFunc("POST /acme/authz/{id}", s.handleACMEAuthorization)
+	mux.HandleFunc("POST /acme/cert/{id}", s.handleACMECertificate)
 
 	// ── Host access ────────────────────────────────────────────────────────
 	//

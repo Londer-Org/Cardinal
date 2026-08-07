@@ -665,6 +665,50 @@ erDiagram
 
 ```mermaid
 erDiagram
+    acme_accounts {
+        uuid id PK
+        uuid subject_id FK
+        text thumbprint
+        jsonb public_jwk
+        text_array contact
+        timestamp_with_time_zone created_at
+        timestamp_with_time_zone deactivated_at
+    }
+    acme_authorizations {
+        uuid id PK
+        uuid order_id FK
+        text identifier
+        text status
+        timestamp_with_time_zone expires_at
+    }
+    acme_eab_credentials {
+        uuid id PK
+        uuid subject_id FK
+        text key_id
+        bytea hmac_sealed
+        uuid issued_by FK
+        timestamp_with_time_zone issued_at
+        timestamp_with_time_zone expires_at
+        timestamp_with_time_zone redeemed_at
+        timestamp_with_time_zone revoked_at
+    }
+    acme_nonces {
+        text nonce PK
+        timestamp_with_time_zone issued_at
+    }
+    acme_orders {
+        uuid id PK
+        uuid account_id FK
+        text status
+        text_array identifiers
+        timestamp_with_time_zone not_before
+        timestamp_with_time_zone not_after
+        timestamp_with_time_zone created_at
+        timestamp_with_time_zone expires_at
+        bytea certificate
+        uuid ca_key_id FK
+        text serial
+    }
     host_aliases {
         uuid host_id PK
         text name PK
@@ -722,6 +766,26 @@ erDiagram
         timestamp_with_time_zone issued_at
         timestamp_with_time_zone expires_at
     }
+    x509_ca_keys {
+        uuid id PK
+        text algorithm
+        bytea private_key_sealed
+        bytea certificate
+        bytea_array chain
+        text fingerprint
+        text subject
+        timestamp_with_time_zone not_before
+        timestamp_with_time_zone not_after
+        timestamp_with_time_zone created_at
+        timestamp_with_time_zone active_at
+        timestamp_with_time_zone retired_at
+    }
+    entities ||--o{ acme_accounts : subject_id
+    acme_orders ||--o{ acme_authorizations : order_id
+    entities ||--o{ acme_eab_credentials : issued_by
+    entities ||--o{ acme_eab_credentials : subject_id
+    acme_accounts ||--o{ acme_orders : account_id
+    x509_ca_keys ||--o{ acme_orders : ca_key_id
     entities ||--o{ host_aliases : added_by
     entities ||--o{ host_aliases : host_id
     entities ||--o{ host_credentials : host_id
@@ -732,6 +796,67 @@ erDiagram
     entities ||--o{ ssh_certificates : host_id
     entities ||--o{ ssh_certificates : subject_id
 ```
+
+### `acme_accounts`
+
+| Column | Type | Null | Default | Notes |
+|---|---|---|---|---|
+| `id` | `uuid` | no | `uuidv7()` |  |
+| `subject_id` | `uuid` | no |  | → `entities.id` |
+| `thumbprint` | `text` | no |  |  |
+| `public_jwk` | `jsonb` | no |  |  |
+| `contact` | `text[]` | no | `'{}'::text[]` |  |
+| `created_at` | `timestamp with time zone` | no | `now()` |  |
+| `deactivated_at` | `timestamp with time zone` | yes |  |  |
+
+### `acme_authorizations`
+
+One per identifier. Always born valid: control of the name was established at enrollment, not by a challenge.
+
+| Column | Type | Null | Default | Notes |
+|---|---|---|---|---|
+| `id` | `uuid` | no | `uuidv7()` |  |
+| `order_id` | `uuid` | no |  | → `acme_orders.id` |
+| `identifier` | `text` | no |  |  |
+| `status` | `text` | no |  |  |
+| `expires_at` | `timestamp with time zone` | no |  |  |
+
+### `acme_eab_credentials`
+
+| Column | Type | Null | Default | Notes |
+|---|---|---|---|---|
+| `id` | `uuid` | no | `uuidv7()` |  |
+| `subject_id` | `uuid` | no |  | → `entities.id` |
+| `key_id` | `text` | no |  |  |
+| `hmac_sealed` | `bytea` | no |  |  |
+| `issued_by` | `uuid` | yes |  | → `entities.id` |
+| `issued_at` | `timestamp with time zone` | no | `now()` |  |
+| `expires_at` | `timestamp with time zone` | no |  |  |
+| `redeemed_at` | `timestamp with time zone` | yes |  |  |
+| `revoked_at` | `timestamp with time zone` | yes |  |  |
+
+### `acme_nonces`
+
+| Column | Type | Null | Default | Notes |
+|---|---|---|---|---|
+| `nonce` | `text` | no |  |  |
+| `issued_at` | `timestamp with time zone` | no | `now()` |  |
+
+### `acme_orders`
+
+| Column | Type | Null | Default | Notes |
+|---|---|---|---|---|
+| `id` | `uuid` | no | `uuidv7()` |  |
+| `account_id` | `uuid` | no |  | → `acme_accounts.id` |
+| `status` | `text` | no |  |  |
+| `identifiers` | `text[]` | no |  |  |
+| `not_before` | `timestamp with time zone` | yes |  |  |
+| `not_after` | `timestamp with time zone` | yes |  |  |
+| `created_at` | `timestamp with time zone` | no | `now()` |  |
+| `expires_at` | `timestamp with time zone` | no |  |  |
+| `certificate` | `bytea` | yes |  |  |
+| `ca_key_id` | `uuid` | yes |  | → `x509_ca_keys.id` |
+| `serial` | `text` | yes |  |  |
 
 ### `host_aliases`
 
@@ -819,4 +944,23 @@ A record that a certificate was issued. The certificate itself is not stored: it
 | `key_id` | `text` | no |  |  |
 | `issued_at` | `timestamp with time zone` | no | `now()` |  |
 | `expires_at` | `timestamp with time zone` | no |  |  |
+
+### `x509_ca_keys`
+
+X.509 authority keys. Several may be trusted at once; exactly one signs.
+
+| Column | Type | Null | Default | Notes |
+|---|---|---|---|---|
+| `id` | `uuid` | no | `uuidv7()` |  |
+| `algorithm` | `text` | no | `'ecdsa-p256'::text` |  |
+| `private_key_sealed` | `bytea` | no |  |  |
+| `certificate` | `bytea` | no |  |  |
+| `chain` | `bytea[]` | no | `'{}'::bytea[]` | Intermediates above this key, leaf-to-root, excluding the root. Empty when this key is the root. |
+| `fingerprint` | `text` | no |  |  |
+| `subject` | `text` | no |  |  |
+| `not_before` | `timestamp with time zone` | no |  |  |
+| `not_after` | `timestamp with time zone` | no |  |  |
+| `created_at` | `timestamp with time zone` | no | `now()` |  |
+| `active_at` | `timestamp with time zone` | yes |  |  |
+| `retired_at` | `timestamp with time zone` | yes |  |  |
 

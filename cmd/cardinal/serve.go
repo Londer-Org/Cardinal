@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/arthur-lonfils/cardinal/internal/auth"
@@ -18,6 +19,7 @@ import (
 	"github.com/arthur-lonfils/cardinal/internal/policy"
 	"github.com/arthur-lonfils/cardinal/internal/sshca"
 	"github.com/arthur-lonfils/cardinal/internal/store"
+	"github.com/arthur-lonfils/cardinal/internal/x509ca"
 	"github.com/arthur-lonfils/cardinal/web"
 )
 
@@ -89,12 +91,26 @@ func runServe(ctx context.Context, args []string) error {
 		log.Info("host access enabled — SSH certificates may be issued")
 	}
 
+	var certificateAuthority *x509ca.CA
+	if cfg.X509.Enabled {
+		certificateAuthority, err = x509ca.New(st, cfg.X509.CAEncryptionKey)
+		if err != nil {
+			return err
+		}
+		// Same reasoning as the SSH authority above: no check that a key exists
+		// or is active, because publishing a root and distributing it before
+		// activating is the safe order and refusing to start would punish it.
+		log.Info("ACME enabled — X.509 certificates may be issued",
+			"directory", strings.TrimRight(cfg.Server.PublicURL, "/")+"/acme/directory")
+	}
+
 	apiServer, err := httpapi.New(st, authSvc, cfg, httpapi.Options{
 		DevMode: *dev,
 		UI:      ui,
 		Logger:  log,
 		OIDC:    oidcProvider,
 		SSHCA:   hostCA,
+		X509CA:  certificateAuthority,
 	})
 	if err != nil {
 		return err

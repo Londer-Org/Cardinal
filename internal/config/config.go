@@ -39,7 +39,43 @@ type Config struct {
 	Recovery Recovery `toml:"recovery"`
 	OIDC     OIDC     `toml:"oidc"`
 	SSH      SSH      `toml:"ssh"`
+	X509     X509     `toml:"x509"`
 	POSIX    POSIX    `toml:"posix"`
+}
+
+// X509 configures the certificate authority reached over ACME.
+type X509 struct {
+	// Enabled turns issuance on. Off by default, like everything else that
+	// holds a signing key: an authority nobody has pointed a client at is a key
+	// sitting in a database for no reason.
+	Enabled bool `toml:"enabled"`
+
+	// CAEncryptionKey encrypts the authority's private key at rest.
+	//
+	// Its own value, distinct from the SSH and OIDC ones. Whoever holds this
+	// can issue a certificate for any name the fleet trusts, and one leaked
+	// configuration file must not yield more than one authority (ADR 0021).
+	//
+	// Generate with `openssl rand -base64 32`.
+	CAEncryptionKey string `toml:"ca_encryption_key"`
+
+	// PublicURL is where ACME clients reach Cardinal. Defaults to
+	// server.public_url.
+	//
+	// Its own setting because RFC 8555 §6.1 requires HTTPS and every client
+	// enforces it — lego refuses an http directory outright. A deployment
+	// serving Cardinal over plain HTTP behind a terminating proxy, or reaching
+	// ACME through a different ingress, needs to say so rather than have every
+	// client refuse the URLs in its own directory document.
+	PublicURL string `toml:"public_url"`
+}
+
+// ACMEBaseURL is where ACME clients reach this deployment.
+func (x X509) ACMEBaseURL(serverPublicURL string) string {
+	if x.PublicURL != "" {
+		return x.PublicURL
+	}
+	return serverPublicURL
 }
 
 // SSH configures the certificate authority for host access.
@@ -290,6 +326,7 @@ func (c *Config) Validate() error {
 
 	problems = append(problems, c.validateWebAuthn()...)
 	problems = append(problems, c.validatePOSIX()...)
+	problems = append(problems, c.validateX509()...)
 
 	// An absolute cap inside the idle window means every session ends at its
 	// cap, so the idle setting silently does nothing — a configuration that
@@ -405,6 +442,49 @@ func (c *Config) validatePOSIX() []error {
 			ErrInvalid, r.High, r.Low))
 	}
 
+	return problems
+}
+
+// validateX509 checks the authority is configured coherently.
+func (c *Config) validateX509() []error {
+	if !c.X509.Enabled {
+		return nil
+	}
+
+	var problems []error
+	if c.X509.CAEncryptionKey == "" {
+		problems = append(problems, fmt.Errorf(
+			"%w: x509.ca_encryption_key — the authority key is not stored in the "+
+				"clear, so it cannot be created or read without it", ErrMissing))
+		return problems
+	}
+
+	// Every URL in the directory document is absolute, and a client that
+	// fetched it over HTTPS and then found http links would refuse them —
+	// correctly. Caught at startup rather than by the first client to try.
+	base := c.X509.ACMEBaseURL(c.Server.PublicURL)
+	if !strings.HasPrefix(base, "https://") {
+		problems = append(problems, fmt.Errorf(
+			"%w: ACME requires HTTPS (RFC 8555 §6.1) and %q is not — set "+
+				"x509.public_url, or serve Cardinal over HTTPS",
+			ErrInvalid, base))
+	}
+
+	// Three keys, three values. Sharing one would mean a single leaked
+	// configuration file yields the token signer, the fleet's SSH access and
+	// the fleet's TLS — which is the concentration ADR 0021 exists to prevent,
+	// and it is worth refusing rather than warning about.
+	for name, other := range map[string]string{
+		"oidc.signing_key_encryption_key": c.OIDC.SigningKeyEncryptionKey,
+		"ssh.ca_encryption_key":           c.SSH.CAEncryptionKey,
+	} {
+		if other != "" && other == c.X509.CAEncryptionKey {
+			problems = append(problems, fmt.Errorf(
+				"%w: x509.ca_encryption_key is the same value as %s — one leaked "+
+					"file must not yield two authorities (ADR 0021)",
+				ErrInvalid, name))
+		}
+	}
 	return problems
 }
 

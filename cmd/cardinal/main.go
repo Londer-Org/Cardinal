@@ -87,6 +87,8 @@ func run(ctx context.Context, args []string) error {
 		return runSSH(ctx, rest)
 	case "posix":
 		return runPOSIX(ctx, rest)
+	case "x509":
+		return runX509(ctx, rest)
 	case "policy":
 		return runPolicy(ctx, rest)
 	case "serve":
@@ -195,6 +197,20 @@ HOSTS (a machine proving which host it is)
                                            one name is the ambiguity host
                                            certificates exist to remove.
   host alias remove <host> <name>          Withdraw one
+  host acme-credentials <host>             Issue an ACME external account
+                                           binding, so this machine can order
+                                           X.509 certificates for its names
+
+CERTIFICATE AUTHORITY (X.509, over ACME)
+  x509 ca init -subject <name>             Create an authority. Not signing
+                                           until distributed and rotated to.
+  x509 ca list                             Keys, and which one is signing
+  x509 ca trust                            Every trusted certificate, PEM —
+                                           what has to reach every trust store
+  x509 ca rotate <key-id>                  Make a key sign
+
+  Clients point at <public-url>/acme/directory and speak RFC 8555. Nothing is
+  issued for a name the directory has not granted, whatever the CSR asks for.
 
   join and whoami run on the host and never touch the database. Everything else
   here is administration and does.

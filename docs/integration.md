@@ -365,6 +365,40 @@ lock anybody out of anything they already had.
 only its own people, so enumerating them would advertise exactly the set worth
 not advertising, and the interface has an error for declining.
 
+## X.509 certificates, over ACME
+
+Optional, and off unless configured. A deployment that already has a CA keeps
+it.
+
+```bash
+cardinal x509 ca init -subject "Example Internal CA"
+cardinal x509 ca trust > /usr/local/share/ca-certificates/example.crt
+cardinal host acme-credentials web-01.prod
+```
+
+Then point any ACME client at Cardinal instead of Let's Encrypt:
+
+```bash
+lego --server https://id.example/acme/directory      --eab --kid … --hmac … --domains web-01.prod run
+```
+
+Three things differ from a public CA, and all three come from Cardinal already
+knowing who is asking ([ADR 0023](adr/0023-x509-certificates-via-acme.md)):
+
+- **No challenge.** Nothing to prove — the host proved which host it is when it
+  enrolled. Clients log `authorization already valid` and carry on.
+- **The names come from the directory.** A CSR is a request; asking for another
+  machine's name is refused, naming the fix.
+- **The decision is in the journal**, with the host that made it.
+
+ACME requires HTTPS, so `x509.public_url` must be an https URL — it defaults to
+`server.public_url` and Cardinal refuses to start otherwise. Note the
+bootstrapping: Cardinal's own ACME endpoint cannot get its certificate from
+Cardinal's ACME, so the first one comes from somewhere else.
+
+Getting the root into every trust store is the part that takes the time, and no
+software does it for you.
+
 ## Where authorization stops
 
 Cardinal answers *may you reach this* and *who are you*. It does not answer

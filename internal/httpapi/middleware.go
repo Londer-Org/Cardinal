@@ -229,6 +229,14 @@ func (s *Server) csrfProtect(next http.Handler) http.Handler {
 			return
 		}
 
+		// ACME, for the third time and the same reason. Every request is a JWS
+		// signed by an account key; there is no cookie, no ambient authority,
+		// and a client is a machine with no browser to be tricked.
+		if strings.HasPrefix(r.URL.Path, "/acme/") {
+			next.ServeHTTP(w, r)
+			return
+		}
+
 		// A request authenticated by a bearer token has no ambient authority to
 		// abuse: nothing attaches an Authorization header on a browser's behalf
 		// the way it attaches a cookie, which is the entire premise of CSRF.

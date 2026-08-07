@@ -1,6 +1,6 @@
 # ADR 0023: Cardinal issues X.509 certificates, over ACME
 
-- **Status:** Accepted — decided; implementation follows the SSH CA.
+- **Status:** Accepted — implemented.
 - **Date:** 2026-08-07
 - **Reverses:** "Integrate `step-ca` if PKI is ever needed" (roadmap).
 
@@ -94,6 +94,46 @@ honesty about the work involved.
 short-lived certificates for enrolled hosts and services over ACME. Revocation
 for a certificate measured in hours is renewal refusal, not a CRL, and that
 should stay true rather than drifting into building a general-purpose PKI.
+
+## What the implementation settled (2026-08-07)
+
+**Authorizations are born valid, and no challenge is ever issued.** The whole
+apparatus of http-01 and dns-01 exists to establish that a stranger controls a
+name. The client here is an enrolled host that proved which host it is, and the
+names it may hold are in the directory — so there is nothing left to
+demonstrate. RFC 8555 §7.1.6 permits this and every client handles it: lego
+logs `authorization already valid; skipping challenge` and goes straight to
+finalize.
+
+**External Account Binding is how an account acquires an identity.** An ACME
+account is anonymous by construction — a key the client generated. §7.3.4's
+binding is the standard way to attach it to something out of band, it is what
+cert-manager, lego, certbot and acme.sh all support, and the alternative was
+carrying Cardinal's own host signature through a protocol with nowhere to put
+it. `cardinal host acme-credentials <host>` issues one; it is single use, like
+a host enrollment token and for the same reason.
+
+**Nothing on the certificate comes from the CSR except the public key.** A CSR
+carries a subject and SANs, and both are what the client would *like*. The names
+issued are the ones the order was authorised for, which Cardinal took from the
+directory. Asking for another machine's name is refused with
+`rejectedIdentifier` and a message naming the fix.
+
+**ACME needs its own public URL.** §6.1 requires HTTPS and clients enforce it —
+lego refuses an http directory outright. Every URL in the directory document is
+absolute, so a deployment terminating TLS elsewhere, or reaching ACME through a
+different ingress, has to say where. `x509.public_url` defaults to
+`server.public_url` and startup refuses anything that is not https.
+
+There is a bootstrapping fact here worth stating plainly: **Cardinal's own ACME
+endpoint cannot get its certificate from Cardinal's ACME.** The first
+certificate always comes from somewhere else.
+
+**Verified against a client nobody here wrote.** `make verify-acme` drives the
+whole flow with lego: obtain, refuse another machine's name, issue an entitled
+alias, and refuse to reuse a spent credential. Everything else in this project's
+test suite is Cardinal agreeing with Cardinal; this is the only check that says
+an outside implementation will talk to it, which is the entire claim above.
 
 **Whether an existing root can be imported is open.** The SSH side generates its
 own key because there is rarely an existing SSH CA to adopt. X.509 is the

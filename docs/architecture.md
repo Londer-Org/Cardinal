@@ -50,6 +50,8 @@ additional moving part is another way for nobody to be able to log in.
 | `internal/policy` | Cedar: entity projection, evaluation, named decisions | Fails closed if no policy is loaded |
 | `internal/oidcprovider` | The OpenID Connect provider, over `zitadel/oidc` | Adapts Cardinal's storage to the library's interfaces |
 | `internal/sshca` | Signs SSH certificates | Holds no key; is handed one per call |
+| `internal/x509ca` | Holds the X.509 authority's encryption key | A small surface around the one secret that can issue for any name |
+| `internal/acme` | JWS, JWK thumbprints and external account binding | Refuses `none` and the HMAC family everywhere but the binding |
 | `internal/hostclient` | The *machine's* half of host authentication | Shared by the CLI and the agent, so the signing rules exist once |
 | `internal/userdb` | POSIX identity over systemd's varlink interface | Standard library only — no varlink dependency, no cgo |
 | `internal/agent` | The host's assignment, its cache, and the lookup index | Never blocks on Cardinal being reachable |
