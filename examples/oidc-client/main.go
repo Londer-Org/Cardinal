@@ -29,9 +29,9 @@ import (
 
 func main() {
 	var (
-		issuer      = env("OIDC_ISSUER", "http://id.localhost:8100")
+		issuer      = env("OIDC_ISSUER", "https://id.cardinal.test:8443")
 		clientID    = os.Getenv("OIDC_CLIENT_ID")
-		redirectURL = env("OIDC_REDIRECT_URL", "http://client.localhost:8100/callback")
+		redirectURL = env("OIDC_REDIRECT_URL", "https://client.cardinal.test:8443/callback")
 		listen      = env("LISTEN", "0.0.0.0:8000")
 	)
 	if clientID == "" {

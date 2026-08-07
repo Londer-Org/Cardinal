@@ -29,12 +29,20 @@ import (
 const (
 	// Everything reaches the stack through Traefik on this port. Nothing else
 	// is published, which is what makes trusting the identity headers sound.
-	gateway = "127.0.0.1:8100"
+	gateway = "127.0.0.1:8443"
 
-	hostCardinal    = "id.localhost"
-	hostProtected   = "app.localhost"
-	hostUnprotected = "open.localhost"
+	hostCardinal    = "id.cardinal.test"
+	hostProtected   = "app.cardinal.test"
+	hostUnprotected = "open.cardinal.test"
 )
+
+// origin is where a hostname actually lives.
+//
+// HTTPS, and not as a formality. The stack cannot be served over plain HTTP and
+// still work in a browser: WebAuthn needs a secure context, forwardAuth SSO
+// needs a parent-domain cookie, and no http origin gives both. Testing against
+// http would be testing an arrangement that cannot exist.
+func origin(host string) string { return "https://" + host + ":8443" }
 
 // sessionCookie is established once and reused.
 //
@@ -61,14 +69,32 @@ func TestMain(m *testing.M) {
 	}
 	_ = conn.Close()
 
+	// And separately: the stack can be up while its certificate is not trusted,
+	// which produces a handshake failure in every test and looks like the whole
+	// suite breaking at once. Said here, once, with the fix.
+	if _, err := client(&testing.T{}).Get(origin(hostCardinal) + "/api/health"); err != nil { //nolint:noctx,bodyclose // one probe, message is the point
+		fmt.Fprintf(os.Stderr,
+			"the stack is listening but %s did not verify:\n  %v\n\n"+
+				"  The certificate comes from the local CA mkcert installed.\n"+
+				"  Check `make e2e-check`, then `mkcert -install`.\n",
+			origin(hostCardinal), err)
+		os.Exit(1)
+	}
+
 	os.Exit(m.Run())
 }
 
 // client builds an HTTP client that talks to Traefik regardless of hostname.
 //
-// *.localhost resolves to 127.0.0.1 on most systems, but not all, and CI is
-// exactly where it does not. Dialling the gateway directly and letting the Host
-// header do the routing removes that dependency.
+// The names are in /etc/hosts on a developer machine and nowhere in CI.
+// Dialling the gateway directly and letting SNI and the Host header do the
+// routing removes that dependency.
+//
+// TLS is verified rather than skipped, deliberately. The certificate comes from
+// the local CA mkcert installed, and checking it here means this suite fails
+// the same way a browser would if that setup is missing or has expired —
+// InsecureSkipVerify would hide exactly the class of problem that made this
+// stack unusable in a browser for months.
 func client(t *testing.T) *http.Client {
 	t.Helper()
 
@@ -97,7 +123,7 @@ func client(t *testing.T) *http.Client {
 func request(t *testing.T, c *http.Client, method, host, path string, accept string) *http.Response {
 	t.Helper()
 
-	req, err := http.NewRequest(method, "http://"+host+path, nil) //nolint:noctx // bounded by client timeout
+	req, err := http.NewRequest(method, origin(host)+path, nil) //nolint:noctx // bounded by client timeout
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -205,7 +231,7 @@ func TestForgedIdentityHeadersAreStripped(t *testing.T) {
 	c := client(t)
 
 	req, err := http.NewRequest(http.MethodGet, //nolint:noctx // bounded by client timeout
-		"http://"+hostProtected+"/whoami.json", nil)
+		origin(hostProtected)+"/whoami.json", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -357,7 +383,7 @@ func TestDecisionIsLogged(t *testing.T) {
 // withSession puts the shared session cookie on a client, for every host.
 //
 // Go's cookiejar keys its storage with a "last two labels" heuristic, so
-// id.localhost and app.localhost land under different keys and a cookie is
+// id.cardinal.test and app.cardinal.test land under different keys and a cookie is
 // never shared between them — whatever its Domain attribute says. Browsers do
 // not behave that way, which is why the scoping is asserted separately, above,
 // rather than relied upon here.
@@ -470,7 +496,7 @@ func postJSON(t *testing.T, c *http.Client, path, csrf string, body, out any) *h
 	}
 
 	req, err := http.NewRequest(http.MethodPost, //nolint:noctx // bounded by client timeout
-		"http://"+hostCardinal+path, payload)
+		origin(hostCardinal)+path, payload)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -106,9 +106,10 @@ class Browser:
                 "--disable-gpu",
                 "--hide-scrollbars",
                 f"--window-size={width},{height}",
-                # *.localhost does not resolve everywhere, and the stack is only
-                # reachable on the gateway.
-                "--host-resolver-rules=MAP *.localhost 127.0.0.1",
+                # The stack is only reachable on the gateway, and the names are
+                # in /etc/hosts on a developer machine and nowhere in CI. This
+                # makes the browser agree without either.
+                "--host-resolver-rules=MAP *.cardinal.test 127.0.0.1",
                 "about:blank",
             ],
             stdout=subprocess.DEVNULL,
@@ -305,7 +306,7 @@ def split_fill(pair: str) -> tuple[str, str]:
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--base", default="http://id.localhost:8100")
+    ap.add_argument("--base", default="https://id.cardinal.test:8443")
     ap.add_argument("--path", default="/")
     ap.add_argument("--out", help="write a PNG here")
     ap.add_argument("--theme", choices=["light", "dark"], default="light")

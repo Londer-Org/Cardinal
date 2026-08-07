@@ -46,7 +46,7 @@ func TestEnrollmentRequiresAnInvitation(t *testing.T) {
 	t.Run("begin refuses a made-up token", func(t *testing.T) {
 		body := strings.NewReader(`{"token":"clearly-not-a-real-invitation"}`)
 		req, err := http.NewRequest(http.MethodPost, //nolint:noctx // bounded by client timeout
-			"http://"+hostCardinal+"/api/enroll/begin", body)
+			origin(hostCardinal)+"/api/enroll/begin", body)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -106,7 +106,7 @@ func TestIssuingAnInvitationIsAdministration(t *testing.T) {
 
 	body := strings.NewReader(`{"login":"e2e-user"}`)
 	req, err := http.NewRequest(http.MethodPost, //nolint:noctx // bounded by client timeout
-		"http://"+hostCardinal+"/api/invitations", body)
+		origin(hostCardinal)+"/api/invitations", body)
 	if err != nil {
 		t.Fatal(err)
 	}

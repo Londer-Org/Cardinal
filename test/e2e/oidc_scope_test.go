@@ -31,13 +31,13 @@ func TestUnregisteredScopeIsNotGranted(t *testing.T) {
 	form := url.Values{
 		"grant_type":    {"authorization_code"},
 		"code":          {code},
-		"redirect_uri":  {"http://client.localhost:8100/callback"},
+		"redirect_uri":  {"https://client.cardinal.test:8443/callback"},
 		"client_id":     {clientID},
 		"code_verifier": {verifier},
 	}
 
 	req, err := http.NewRequest(http.MethodPost, //nolint:noctx // bounded by client timeout
-		"http://"+hostCardinal+"/oidc/token", strings.NewReader(form.Encode()))
+		origin(hostCardinal)+"/oidc/token", strings.NewReader(form.Encode()))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -83,7 +83,7 @@ func registerNarrowClient(t *testing.T) string {
 	if !strings.Contains(cardinalCLI(t, "app", "list"), name) {
 		out, err := exec.Command("docker", "compose", "-f", "../../examples/compose.yml",
 			"exec", "-T", "cardinal", "cardinal", "app", "register", name,
-			"-redirect", "http://client.localhost:8100/callback",
+			"-redirect", "https://client.cardinal.test:8443/callback",
 			"-dev-mode",
 			// Deliberately no offline_access.
 			"-scopes", "openid,profile",
@@ -119,7 +119,7 @@ func authorizeAs(t *testing.T, c *http.Client, clientID, scope string) (code, ve
 		"client_id":             {clientID},
 		"response_type":         {"code"},
 		"scope":                 {scope},
-		"redirect_uri":          {"http://client.localhost:8100/callback"},
+		"redirect_uri":          {"https://client.cardinal.test:8443/callback"},
 		"state":                 {"scope-test"},
 		"nonce":                 {"scope-test-nonce"},
 		"code_challenge":        {challenge},

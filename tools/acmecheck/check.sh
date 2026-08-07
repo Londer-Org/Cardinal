@@ -15,7 +15,7 @@ cd "$(dirname "$0")/../.."
 COMPOSE="docker compose -f examples/compose.yml"
 CARDINAL="$COMPOSE exec -T cardinal cardinal"
 CONF="-config /etc/cardinal/cardinal.toml"
-DIRECTORY="${DIRECTORY:-https://id.localhost:8543/acme/directory}"
+DIRECTORY="${DIRECTORY:-https://id.cardinal.test:8443/acme/directory}"
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
@@ -23,7 +23,13 @@ command -v lego >/dev/null || {
     echo "lego is not on PATH: go install github.com/go-acme/lego/v4/cmd/lego@latest" >&2
     exit 2
 }
-export LEGO_CA_CERTIFICATES="$PWD/examples/traefik/tls/e2e.crt"
+# The stack's certificate now comes from the local CA mkcert installed, so lego
+# is pointed at that root rather than at a self-signed leaf. It would also work
+# from the system trust store on most machines; naming the root keeps this
+# working where a Go binary does not read the same store the browser does.
+if command -v mkcert >/dev/null 2>&1; then
+    export LEGO_CA_CERTIFICATES="$(mkcert -CAROOT)/rootCA.pem"
+fi
 
 fail() { echo "FAIL: $1"; [ $# -gt 1 ] && echo "  got: $2"; exit 1; }
 

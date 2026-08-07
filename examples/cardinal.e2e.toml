@@ -12,10 +12,10 @@
 # 0.0.0.0 because this runs in a container: 127.0.0.1 would be the container's
 # own loopback and Traefik could not reach it.
 listen = "0.0.0.0:8080"
-public_url = "http://id.localhost:8100"
+public_url = "https://id.cardinal.test:8443"
 
 # The session cookie is scoped to the parent domain, so signing in at
-# id.localhost is also being signed in at app.localhost.
+# id.cardinal.test is also being signed in at app.cardinal.test.
 #
 # Without this, forwardAuth single sign-on does not work at all: the browser
 # simply never sends a cookie set on one sibling host to another. It is the
@@ -23,7 +23,13 @@ public_url = "http://id.localhost:8100"
 #
 # The cost, stated plainly: this cookie reaches EVERY subdomain. Never host
 # untrusted or user-generated content under a domain you scope a session to.
-cookie_domain = "localhost"
+#
+# This said "localhost" for a long time, and every browser silently threw the
+# cookie away: a Domain attribute that is a public suffix is discarded, and
+# `localhost` is one. Nobody could sign in and every mutation failed CSRF, while
+# the Go end-to-end suite passed — net/http/cookiejar accepts what browsers
+# refuse. Configuration validation now rejects a single-label domain outright.
+cookie_domain = "cardinal.test"
 
 # Traefik is the only route in, so its forwarded client addresses are
 # trustworthy. This holds ONLY because protected-app is not published to the
@@ -35,12 +41,22 @@ trusted_proxies = ["172.16.0.0/12", "127.0.0.1/32"]
 dsn = "postgres://cardinal:cardinal@postgres:5432/cardinal?sslmode=disable"
 
 [webauthn]
-# rp_id "localhost" covers id.localhost and app.localhost, since both are
-# subdomains of it. Browsers treat *.localhost as a secure context, which is
-# what lets WebAuthn work here without TLS.
-rp_id = "localhost"
+# rp_id "cardinal.test" covers id. and app.cardinal.test, since both are
+# subdomains of it.
+#
+# The reason this stack is served over TLS at all. WebAuthn requires a secure
+# context, and the only http origins browsers consider trustworthy are
+# localhost, 127.0.0.1 and *.localhost — which is exactly the set that cannot
+# carry a parent-domain cookie. Measured, not assumed: on
+# http://id.cardinal.test, `window.PublicKeyCredential` is undefined, so the
+# enrollment page correctly reports that passkeys are unavailable.
+#
+# So the two requirements together — SSO across sibling hosts, and passkeys —
+# admit exactly one arrangement: a real domain over HTTPS with a certificate the
+# browser trusts. `make e2e-up` says how.
+rp_id = "cardinal.test"
 rp_display_name = "Cardinal (end-to-end stack)"
-origins = ["http://id.localhost:8100"]
+origins = ["https://id.cardinal.test:8443"]
 
 [recovery]
 email_enabled = false
@@ -69,8 +85,14 @@ enabled = true
 # authorities sharing an encryption key — one leaked file must not yield both.
 ca_encryption_key = "e2e-fixture-x509-ca-encryption-key-not-for-real-use"
 
-# ACME is the one thing in this stack served over TLS, on its own port, because
-# RFC 8555 requires HTTPS and every client enforces it. The rest stays on plain
-# HTTP because *.localhost is a secure context to a browser and the other tests
-# have no such requirement.
-public_url = "https://id.localhost:8543"
+# The ACME base URL, which is now simply the stack's own URL.
+#
+# This used to be a second entrypoint on a second port: everything else was
+# plain HTTP, and RFC 8555 §6.1 requires HTTPS, so ACME needed somewhere of its
+# own. Moving the whole stack to TLS for WebAuthn's sake collapsed that — one
+# entrypoint, one scheme, one URL.
+#
+# Still worth noticing as a deployment fact rather than a test detail:
+# Cardinal's own ACME endpoint cannot get its certificate from Cardinal's ACME.
+# The first certificate always comes from somewhere else — here, mkcert.
+public_url = "https://id.cardinal.test:8443"

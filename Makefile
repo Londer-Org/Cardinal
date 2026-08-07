@@ -1,5 +1,6 @@
 SHELL := /bin/bash
 PSQL  := docker exec -i cardinal-postgres psql -U cardinal -d cardinal -v ON_ERROR_STOP=1
+PYTHON ?= python3
 DSN   ?= postgres://cardinal:cardinal@localhost:5433/cardinal?sslmode=disable
 
 .PHONY: help
@@ -86,6 +87,23 @@ verify-package: package ## Install the real .deb in a container and check what i
 		-t cardinal-packagecheck . >/dev/null
 	@docker run --rm cardinal-packagecheck
 
+.PHONY: verify-passkey
+verify-passkey: ## Register a passkey and sign in with it, in a real browser
+	@# The Phase 1 check the plan asks for and nothing could run until now:
+	@# WebAuthn needs a secure context, and the stack could not offer one while
+	@# its hostnames were the only ones that could not also carry the
+	@# parent-domain cookie single sign-on needs.
+	@#
+	@# Chrome's virtual authenticator makes the ceremony real in every respect
+	@# except the hardware — the browser checks the origin against the relying
+	@# party and signs, and Cardinal verifies it exactly as it would a YubiKey.
+	@$(COMPOSE_E2E) exec -T cardinal cardinal user create passkey-check \
+		-display 'Passkey Check' >/dev/null 2>&1 || true
+	@invite=$$($(COMPOSE_E2E) exec -T cardinal cardinal invite passkey-check 2>&1 \
+		| grep -oE 'https://[^ ]+' | head -1); \
+	[ -n "$$invite" ] || { echo 'could not issue an invitation'; exit 1; }; \
+	$(PYTHON) tools/uishot/verify-passkey.py --invite "$$invite" --login passkey-check
+
 .PHONY: verify-acme
 verify-acme: ## Drive the ACME server with lego, a client nobody here wrote
 	@# The only check that says an implementation from outside this project will
@@ -139,29 +157,78 @@ release: ui build ## Build the UI and a binary containing it
 serve: build ## Run the server in development mode
 	./bin/cardinal serve -config cardinal.toml -dev
 
+.PHONY: hosts
+hosts: ## Print the /etc/hosts line the example stack needs
+	@echo '127.0.0.1  id.cardinal.test app.cardinal.test client.cardinal.test open.cardinal.test'
+	@echo
+	@echo '  Add that to /etc/hosts, or on Windows to'
+	@echo '  C:/Windows/System32/drivers/etc/hosts (backslashes there).'
+	@echo '  .test is reserved by IANA for exactly this, so it resolves nowhere else'
+	@echo '  and needs no DNS server.'
+
+.PHONY: e2e-check
+e2e-check: ## Check the one-time setup the example stack needs
+	@# Two prerequisites, both one-time, both with a specific fix. Checked here
+	@# rather than left to fail inside the stack, because "connection refused"
+	@# and "certificate error" are a long way from "add a line to /etc/hosts".
+	@ok=1; \
+	if ! getent hosts id.cardinal.test >/dev/null 2>&1; then \
+		echo 'id.cardinal.test does not resolve.'; \
+		echo '  Run `make hosts` and add the line it prints.'; \
+		echo; ok=0; \
+	fi; \
+	if ! command -v mkcert >/dev/null 2>&1; then \
+		echo 'mkcert is not installed.'; \
+		echo '  Debian/Ubuntu:  sudo apt install mkcert libnss3-tools'; \
+		echo '  macOS:          brew install mkcert'; \
+		echo '  Then:           mkcert -install'; \
+		echo; ok=0; \
+	elif [ ! -f "$$(mkcert -CAROOT)/rootCA.pem" ]; then \
+		echo 'mkcert has no local CA yet.'; \
+		echo '  Run `mkcert -install` — it writes a CA into your trust store,'; \
+		echo '  and `mkcert -uninstall` takes it back out.'; \
+		echo; ok=0; \
+	fi; \
+	[ "$$ok" = 1 ] || { \
+		echo 'The stack needs both. Why, briefly:'; \
+		echo; \
+		echo '  Passkeys need a secure context, and the only plain-http origins'; \
+		echo '  browsers trust are localhost, 127.0.0.1 and *.localhost. Those are'; \
+		echo '  exactly the names that cannot carry a parent-domain cookie, which'; \
+		echo '  is what forwardAuth single sign-on runs on. Doing both at once'; \
+		echo '  leaves one option: a real domain, over HTTPS, with a certificate'; \
+		echo '  the browser trusts.'; \
+		exit 1; }
+	@echo 'setup looks right'
+
 .PHONY: e2e-up
-e2e-up: ## Build and start the end-to-end stack (Traefik + a protected app)
-	@# A self-signed certificate for the TLS entrypoint ACME needs. Generated
-	@# rather than committed: it is a fixture, it expires, and nothing outside
-	@# this stack should ever trust it.
-	@if [ ! -f examples/traefik/tls/e2e.crt ]; then \
+e2e-up: e2e-check ## Build and start the end-to-end stack (Traefik + a protected app)
+	@# A certificate the browser actually trusts, from the local CA mkcert
+	@# installed. Generated rather than committed: it is a certificate for a
+	@# domain anybody can claim on their own machine, and committing a private
+	@# key is a bad habit even when the key is worthless.
+	@if [ ! -f examples/traefik/tls/cardinal.test.crt ]; then \
 		mkdir -p examples/traefik/tls; \
-		openssl req -x509 -newkey rsa:2048 -nodes -days 365 \
-			-keyout examples/traefik/tls/e2e.key \
-			-out examples/traefik/tls/e2e.crt \
-			-subj "/CN=id.localhost" \
-			-addext "subjectAltName=DNS:id.localhost,DNS:localhost,IP:127.0.0.1" \
-			2>/dev/null; \
-		echo "  generated a fixture TLS certificate for the ACME entrypoint"; \
+		(cd examples/traefik/tls && mkcert \
+			-cert-file cardinal.test.crt -key-file cardinal.test.key \
+			id.cardinal.test app.cardinal.test client.cardinal.test \
+			open.cardinal.test cardinal.test) 2>/dev/null; \
+		echo "  issued a TLS certificate for *.cardinal.test"; \
 	fi
+	@# The root, for workloads inside the network. A container inherits nothing
+	@# from the host's trust store, so the OIDC relying party needs this to
+	@# verify Cardinal at all — the same work every workload needs against an
+	@# internal CA, and the part `cardinal x509 ca init` warns takes the time.
+	@cp -f "$$(mkcert -CAROOT)/rootCA.pem" examples/traefik/tls/local-ca.pem
 	docker compose -f examples/compose.yml up -d --build
 	@printf 'waiting for the stack'
 	@for i in $$(seq 1 90); do \
-		if curl -sf -H 'Host: id.localhost' http://127.0.0.1:8100/api/health >/dev/null 2>&1; then \
+		if curl -sf --resolve id.cardinal.test:8443:127.0.0.1 \
+			https://id.cardinal.test:8443/api/health >/dev/null 2>&1; then \
 			echo ' ready'; break; fi; printf '.'; sleep 1; done
 	@$(MAKE) --no-print-directory e2e-seed
-	@echo '==> http://app.localhost:8100 (forwardAuth)  ·  http://client.localhost:8100 (OIDC)'
-	@echo '    http://id.localhost:8100 (Cardinal)'
+	@echo '==> https://app.cardinal.test:8443 (forwardAuth)  ·  https://client.cardinal.test:8443 (OIDC)'
+	@echo '    https://id.cardinal.test:8443 (Cardinal)'
 
 COMPOSE_E2E := docker compose -f examples/compose.yml
 
@@ -212,7 +279,7 @@ e2e-seed-oidc: ## Register the relying party and start it with its client id
 	@if ! $(COMPOSE_E2E) exec -T cardinal cardinal app list 2>/dev/null | grep -q e2e-client; then \
 		$(COMPOSE_E2E) exec -T cardinal cardinal app register e2e-client \
 			-display 'End-to-end relying party' \
-			-redirect 'http://client.localhost:8100/callback' \
+			-redirect 'https://client.cardinal.test:8443/callback' \
 			-dev-mode \
 			-scopes 'openid,profile,email,groups,offline_access' \
 			-config /etc/cardinal/cardinal.toml >/dev/null; \

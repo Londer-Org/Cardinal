@@ -202,7 +202,7 @@ func revokeConsent(t *testing.T, c *http.Client, csrf, clientID string) {
 	t.Helper()
 
 	req, err := http.NewRequest(http.MethodDelete, //nolint:noctx // bounded by client timeout
-		"http://"+hostCardinal+"/api/consents/"+url.PathEscape(clientID), nil)
+		origin(hostCardinal)+"/api/consents/"+url.PathEscape(clientID), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -275,7 +275,7 @@ func handoff(t *testing.T, c *http.Client, clientID, scope string) string {
 		"client_id":             {clientID},
 		"response_type":         {"code"},
 		"scope":                 {scope},
-		"redirect_uri":          {"http://client.localhost:8100/callback"},
+		"redirect_uri":          {"https://client.cardinal.test:8443/callback"},
 		"state":                 {"consent-test"},
 		"nonce":                 {"consent-test-nonce"},
 		"code_challenge":        {s256(pkceVerifier)},
@@ -303,7 +303,7 @@ func registerConsentClient(t *testing.T) string {
 	if !strings.Contains(cardinalCLI(t, "app", "list"), name) {
 		out, err := exec.Command("docker", "compose", "-f", "../../examples/compose.yml",
 			"exec", "-T", "cardinal", "cardinal", "app", "register", name,
-			"-redirect", "http://client.localhost:8100/callback",
+			"-redirect", "https://client.cardinal.test:8443/callback",
 			"-dev-mode",
 			"-consent",
 			"-scopes", "openid,profile,email",

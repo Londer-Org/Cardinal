@@ -60,7 +60,7 @@ func enrolledHost(t *testing.T, name string) *hostclient.Identity {
 		token, string(ssh.MarshalAuthorizedKey(sshPublic)))
 
 	req, err := http.NewRequest(http.MethodPost, //nolint:noctx // bounded by client timeout
-		"http://"+hostCardinal+"/api/hosts/enroll", strings.NewReader(body))
+		origin(hostCardinal)+"/api/hosts/enroll", strings.NewReader(body))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -76,7 +76,7 @@ func enrolledHost(t *testing.T, name string) *hostclient.Identity {
 	}
 	drain(resp)
 
-	identity := &hostclient.Identity{Server: "http://" + hostCardinal, Signer: signer}
+	identity := &hostclient.Identity{Server: origin(hostCardinal), Signer: signer}
 
 	// A control, before any test uses this identity to prove something cannot be
 	// done. Every refusal below would pass just as happily if signing were
@@ -141,7 +141,7 @@ func (g signedGET) send(t *testing.T) *http.Response {
 		t.Fatal(err)
 	}
 
-	req, err := http.NewRequest(http.MethodGet, "http://"+hostCardinal+g.path, nil) //nolint:noctx // bounded by client timeout
+	req, err := http.NewRequest(http.MethodGet, origin(hostCardinal)+g.path, nil) //nolint:noctx // bounded by client timeout
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -358,7 +358,7 @@ func TestSpentTokenIsRefused(t *testing.T) {
 			token, string(ssh.MarshalAuthorizedKey(sshPublic)))
 
 		req, err := http.NewRequest(http.MethodPost, //nolint:noctx // bounded by client timeout
-			"http://"+hostCardinal+"/api/hosts/enroll", strings.NewReader(body))
+			origin(hostCardinal)+"/api/hosts/enroll", strings.NewReader(body))
 		if err != nil {
 			t.Fatal(err)
 		}

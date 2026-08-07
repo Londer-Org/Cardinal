@@ -48,7 +48,7 @@ func requestCertificate(t *testing.T, identity *hostclient.Identity, body []byte
 	}
 
 	req, err := http.NewRequest(http.MethodPost, //nolint:noctx // bounded by client timeout
-		"http://"+hostCardinal+path, bytes.NewReader(body))
+		origin(hostCardinal)+path, bytes.NewReader(body))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -218,7 +218,7 @@ func TestAnUnauthenticatedRequestGetsNothing(t *testing.T) {
 	body, _ := hostKeyRequest(t)
 
 	req, err := http.NewRequest(http.MethodPost, //nolint:noctx // bounded by client timeout
-		"http://"+hostCardinal+"/api/hosts/certificate", bytes.NewReader(body))
+		origin(hostCardinal)+"/api/hosts/certificate", bytes.NewReader(body))
 	if err != nil {
 		t.Fatal(err)
 	}

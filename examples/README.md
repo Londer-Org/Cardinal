@@ -12,11 +12,41 @@ make e2e           # run the end-to-end tests against it
 make e2e-down      # stop and remove
 ```
 
+## One-time setup
+
+Two things, both once, both checked by `make e2e-check` before anything starts.
+
+```sh
+sudo apt install mkcert libnss3-tools   # macOS: brew install mkcert
+mkcert -install                         # a local CA in your trust store
+make hosts                              # prints the /etc/hosts line to add
+```
+
+**Why a real domain and a real certificate**, since a demo asking for both
+deserves a reason:
+
+Passkeys need a secure context. The only plain-http origins browsers consider
+trustworthy are `localhost`, `127.0.0.1` and `*.localhost` — and those are
+exactly the names that cannot carry a parent-domain cookie, because a `Domain`
+attribute that is a public suffix gets discarded and `localhost` is one. A
+parent-domain cookie is what makes signing in at `id.` also count at `app.`,
+which is the whole forwardAuth demo.
+
+So: passkeys or single sign-on, pick one — unless the stack is served over
+HTTPS on a domain the browser will scope a cookie to. That is the only
+arrangement where both work, and it is also what production looks like.
+
+This stack ran on `http://*.localhost` with `cookie_domain = "localhost"` for
+months. Every browser silently threw the session cookie away, so nobody could
+sign in, while the Go end-to-end suite passed — `net/http/cookiejar` accepts
+what browsers refuse. `mkcert -uninstall` removes the CA again when you are
+done.
+
 Two applications, protected two different ways:
 
-- <http://app.localhost:8100> — knows nothing about authentication; Traefik asks
+- <https://app.cardinal.test:8443> — knows nothing about authentication; Traefik asks
   Cardinal on its behalf via `forwardAuth`.
-- <http://client.localhost:8100> — speaks OpenID Connect itself, and needs no
+- <https://client.cardinal.test:8443> — speaks OpenID Connect itself, and needs no
   proxy in front of it.
 
 Both send you to Cardinal to sign in. The first lands on a page showing the
@@ -55,7 +85,7 @@ network property, and no amount of application code can enforce it. This is why
 Cardinal sets that is not listed is silently dropped — far and away the most
 common cause of "it worked with curl but not through the proxy".
 
-`open.localhost:8100` routes to the same application with the middleware
+`open.cardinal.test:8443` routes to the same application with the middleware
 removed, so you can see it fail closed. Never do that in a real deployment.
 
 ## Trying the consent screen
@@ -69,7 +99,7 @@ the other path, register a client that must ask:
 docker compose -f examples/compose.yml exec cardinal \
   cardinal app register partner-app \
     -display 'A third-party integration' \
-    -redirect 'http://client.localhost:8100/callback' \
+    -redirect 'https://client.cardinal.test:8443/callback' \
     -dev-mode -consent \
     -scopes 'openid,profile,email' \
     -config /etc/cardinal/cardinal.toml

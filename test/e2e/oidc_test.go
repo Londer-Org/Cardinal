@@ -20,7 +20,7 @@ import (
 // Using a different library from the provider's own is the point. zitadel's
 // server satisfying zitadel's client would mostly show the two agree.
 
-const hostRP = "client.localhost"
+const hostRP = "client.cardinal.test"
 
 // TestRelyingPartyDiscoversTheProvider.
 //
@@ -59,7 +59,7 @@ func TestAuthorizationRequestIsWellFormed(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if target.Host != "id.localhost:8100" || target.Path != "/oidc/authorize" {
+	if target.Host != hostCardinal+":8443" || target.Path != "/oidc/authorize" {
 		t.Fatalf("redirected to %s, want the issuer's authorize endpoint", target)
 	}
 

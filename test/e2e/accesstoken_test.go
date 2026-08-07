@@ -47,7 +47,7 @@ func tokenFor(t *testing.T) string {
 func bearerRequest(t *testing.T, method, path, token string, headers map[string]string) *http.Response {
 	t.Helper()
 
-	req, err := http.NewRequest(method, "http://"+hostCardinal+path, nil) //nolint:noctx // bounded by client timeout
+	req, err := http.NewRequest(method, origin(hostCardinal)+path, nil) //nolint:noctx // bounded by client timeout
 	if err != nil {
 		t.Fatal(err)
 	}

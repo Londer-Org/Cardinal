@@ -209,7 +209,7 @@ func postRaw(t *testing.T, c *http.Client, csrf, path, body string) *http.Respon
 	t.Helper()
 
 	req, err := http.NewRequest(http.MethodPost, //nolint:noctx // bounded by client timeout
-		"http://"+hostCardinal+path, strings.NewReader(body))
+		origin(hostCardinal)+path, strings.NewReader(body))
 	if err != nil {
 		t.Fatal(err)
 	}

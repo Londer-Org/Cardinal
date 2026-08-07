@@ -321,7 +321,7 @@ func TestAdminCannotRegisterAWildcardRedirect(t *testing.T) {
 	}
 
 	req, err := http.NewRequest(http.MethodPost, //nolint:noctx // bounded by client timeout
-		"http://"+hostCardinal+"/api/applications", strings.NewReader(string(body)))
+		origin(hostCardinal)+"/api/applications", strings.NewReader(string(body)))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -352,7 +352,7 @@ func contains(values []string, want string) bool {
 func requestWithCSRF(t *testing.T, c *http.Client, method, path, csrf string) *http.Response {
 	t.Helper()
 
-	req, err := http.NewRequest(method, "http://"+hostCardinal+path, nil) //nolint:noctx // bounded by client timeout
+	req, err := http.NewRequest(method, origin(hostCardinal)+path, nil) //nolint:noctx // bounded by client timeout
 	if err != nil {
 		t.Fatal(err)
 	}

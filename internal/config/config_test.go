@@ -246,3 +246,52 @@ func TestDurationsAreWrittenTheWayPeopleWriteThem(t *testing.T) {
 		}
 	}
 }
+
+// TestSingleLabelCookieDomainIsRefused.
+//
+// Browsers discard a cookie whose Domain attribute is a public suffix, and
+// every single-label name either is one or is treated as one. The failure is
+// total and silent: the response carries a perfectly good Set-Cookie, the
+// browser keeps nothing, sign-in loops and every mutation fails CSRF, with
+// nothing wrong in any log.
+//
+// Cardinal's own example shipped `cookie_domain = "localhost"` for months.
+// net/http/cookiejar accepts it, so the entire end-to-end suite passed —
+// including a test whose only purpose was asserting that cookie was right —
+// against a console no browser could sign in to. Refusing it at startup is the
+// only place this can be caught without a browser.
+func TestSingleLabelCookieDomainIsRefused(t *testing.T) {
+	for _, tc := range []struct {
+		domain string
+		ok     bool
+	}{
+		{"localhost", false},
+		{".localhost", false},
+		{"test", false},
+		{"local", false},
+		{"", true}, // host-only, which is a valid choice
+		{"example.com", true},
+		{".example.com", true},
+		{"cardinal.test", true},
+	} {
+		t.Run(tc.domain, func(t *testing.T) {
+			c := valid()
+			c.Server.CookieDomain = tc.domain
+			// rp_id has to stay covered, or a different rule fires and the
+			// subtest passes for the wrong reason.
+			if tc.domain != "" {
+				c.WebAuthn.RPID = strings.TrimPrefix(tc.domain, ".")
+			}
+
+			err := c.Validate()
+			mentions := err != nil && strings.Contains(err.Error(), "cookie_domain")
+			if tc.ok && mentions {
+				t.Fatalf("%q was refused: %v", tc.domain, err)
+			}
+			if !tc.ok && !mentions {
+				t.Fatalf("%q was accepted — a browser would discard every cookie "+
+					"and nothing would say so", tc.domain)
+			}
+		})
+	}
+}

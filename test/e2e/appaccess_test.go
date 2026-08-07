@@ -255,7 +255,7 @@ func waitForCardinal(t *testing.T) {
 	c := client(t)
 	for range 60 {
 		//nolint:noctx // bounded by the client timeout
-		resp, err := c.Get("http://" + hostCardinal + "/api/health")
+		resp, err := c.Get(origin(hostCardinal) + "/api/health")
 		if err == nil {
 			drain(resp)
 			if resp.StatusCode == http.StatusOK {
@@ -279,7 +279,7 @@ func authorizationID(t *testing.T, c *http.Client, clientID, scope string) strin
 		"client_id":             {clientID},
 		"response_type":         {"code"},
 		"scope":                 {scope},
-		"redirect_uri":          {"http://client.localhost:8100/callback"},
+		"redirect_uri":          {"https://client.cardinal.test:8443/callback"},
 		"state":                 {"access-test"},
 		"nonce":                 {"access-test-nonce"},
 		"code_challenge":        {s256(pkceVerifier)},

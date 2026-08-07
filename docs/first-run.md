@@ -82,6 +82,18 @@ origins = ["http://localhost:8099"]
 context, so WebAuthn works there without TLS — which is true of no other
 hostname.
 
+That works here because everything is on one host, and it stops working the
+moment anything is not. Note there is no `cookie_domain` above: the session
+cookie is host-only, which is all a single host needs. Scoping it to a parent
+domain — what forwardAuth single sign-on across `id.` and `app.` requires —
+cannot be done from `localhost`, because browsers discard a cookie whose
+`Domain` is a public suffix and `localhost` is one.
+
+So the two arrangements really are different, and the example stack in
+`examples/` is over HTTPS on `*.cardinal.test` for that reason rather than out
+of caution. Passkeys need a secure context; SSO needs a parent-domain cookie;
+no plain-http origin gives both.
+
 There is no emergency key to generate. Cardinal used to ship an offline
 break-glass keypair; [ADR 0014](adr/0014-break-glass-removed.md) removed it,
 because the CLI already performed the same recovery and doing it twice meant two
@@ -294,7 +306,7 @@ nothing about authentication.
 make e2e-up                    # PostgreSQL, Cardinal, Traefik, a protected app
 ```
 
-Open <http://app.localhost:8100>. You are sent to Cardinal, and after signing in
+Open <https://app.cardinal.test:8443>. You are sent to Cardinal, and after signing in
 you land on a page showing the identity headers that arrived.
 
 Then look at **Access** in the admin UI. Every request you just made is there,

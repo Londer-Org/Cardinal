@@ -359,6 +359,34 @@ func (c *Config) Validate() error {
 		}
 	}
 
+	// A single-label cookie domain is discarded outright.
+	//
+	// Browsers refuse a Domain attribute that is a public suffix, and every
+	// single-label name either is one (`localhost`, `test`, `local`) or is an
+	// intranet name treated the same way. The cookie is dropped without a
+	// warning anywhere: the response carries a perfectly good Set-Cookie, the
+	// browser keeps nothing, and the next request arrives unauthenticated. Every
+	// sign-in then loops and every mutation fails CSRF, with the server
+	// reporting exactly what it should and no clue at either end.
+	//
+	// This shipped in Cardinal's own example for months. Nothing caught it
+	// because net/http/cookiejar accepts what browsers reject, so an entire
+	// end-to-end suite — including a test whose sole purpose was asserting this
+	// cookie was right — passed against a console no browser could sign in to.
+	// It was found by driving a real Chrome, which is the only thing that can
+	// find it.
+	if domain := strings.TrimPrefix(strings.TrimSpace(c.Server.CookieDomain), "."); domain != "" &&
+		!strings.Contains(domain, ".") {
+		problems = append(problems, fmt.Errorf(
+			"%w: server.cookie_domain %q is a single label. Browsers discard "+
+				"cookies whose Domain is a public suffix, so no session would ever "+
+				"be stored and sign-in would fail with nothing logged anywhere. Use "+
+				"a domain with a dot (id.example.com under example.com), or leave "+
+				"it empty for host-only cookies — which works for the console but "+
+				"not for forwardAuth across sibling hosts",
+			ErrInvalid, c.Server.CookieDomain))
+	}
+
 	// A cookie domain that does not cover the relying party would produce a
 	// session the browser never sends back — a silent, baffling login loop.
 	if c.Server.CookieDomain != "" && c.WebAuthn.RPID != "" {

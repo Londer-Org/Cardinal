@@ -80,7 +80,7 @@ func createToken(t *testing.T, c *http.Client, csrf string, body any) (createdTo
 	}
 
 	req, err := http.NewRequest(http.MethodPost, //nolint:noctx // bounded by client timeout
-		"http://"+hostCardinal+"/api/tokens", bytes.NewReader(encoded))
+		origin(hostCardinal)+"/api/tokens", bytes.NewReader(encoded))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -133,7 +133,7 @@ func deleteToken(t *testing.T, c *http.Client, csrf, id string) int {
 	t.Helper()
 
 	req, err := http.NewRequest(http.MethodDelete, //nolint:noctx // bounded by client timeout
-		"http://"+hostCardinal+"/api/tokens/"+id, nil)
+		origin(hostCardinal)+"/api/tokens/"+id, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
