@@ -131,6 +131,53 @@ func (s *Store) DisableEntity(ctx context.Context, id uuid.UUID, actorID *uuid.U
 	})
 }
 
+// EnableEntity undoes a disable.
+//
+// The other half of a door that was one-way for far too long. Disabling is the
+// reversible way to cut somebody off — that is the whole reason it exists rather
+// than a delete — and a "reversible" action with no way back is just a delete
+// that keeps a row.
+//
+// What it deliberately does not restore: sessions and access tokens, which
+// disabling revoked. Those are gone and should be. Somebody coming back signs
+// in again, and a token that was live during the period an account was cut off
+// is exactly what should not resume working.
+func (s *Store) EnableEntity(ctx context.Context, id uuid.UUID, actorID *uuid.UUID) error {
+	return s.InTx(ctx, func(tx pgx.Tx) error {
+		tag, err := tx.Exec(ctx,
+			`UPDATE entities SET disabled_at = NULL, updated_at = now()
+			  WHERE id = $1 AND disabled_at IS NOT NULL`, id)
+		if err != nil {
+			return fmt.Errorf("store: enabling entity: %w", err)
+		}
+		if tag.RowsAffected() == 0 {
+			return fmt.Errorf("%w: %s (or already enabled)", directory.ErrNotFound, id)
+		}
+
+		// Refused after erasure, and this is the one case worth being firm
+		// about. A redacted entity's name is a tombstone and its personal data
+		// is gone; bringing it back would produce an account nobody can identify
+		// and whose owner cannot be told it exists. If that person returns, they
+		// get a new account.
+		var redacted bool
+		if err := tx.QueryRow(ctx,
+			`SELECT redacted_at IS NOT NULL FROM entities WHERE id = $1`, id,
+		).Scan(&redacted); err != nil {
+			return fmt.Errorf("store: checking redaction: %w", err)
+		}
+		if redacted {
+			return fmt.Errorf("store: %s was erased under the right to be "+
+				"forgotten and cannot be re-enabled — create a new account", id)
+		}
+
+		ev, err := event.New(event.ActionEntityEnabled, &id, actorID, nil)
+		if err != nil {
+			return err
+		}
+		return s.AppendEvent(ctx, tx, ev)
+	})
+}
+
 // scanner abstracts over pgx.Row and pgx.Rows so scanEntity serves both the
 // single-row and iteration paths.
 type scanner interface {

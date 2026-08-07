@@ -25,6 +25,9 @@ const (
 	ActionEntityCreated  = "entity.created"
 	ActionEntityUpdated  = "entity.updated"
 	ActionEntityDisabled = "entity.disabled"
+	// Re-enabling. Its own action rather than a second "disabled" with a
+	// different meaning: an auditor reading the chain has to be able to tell
+	// which direction an account moved.
 	ActionEntityEnabled  = "entity.enabled"
 	ActionEntityRedacted = "entity.redacted"
 

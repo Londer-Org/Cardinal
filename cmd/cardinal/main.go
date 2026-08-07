@@ -123,6 +123,10 @@ ENTITIES
   user create <name> [-display <text>]     Create a user
   group create <name> [-display <text>]    Create a group
   host create <name> [-display <text>]     Create a host
+  <type> disable <name>                    Cut an account off. Sessions and
+                                           access tokens are revoked with it.
+  <type> enable <name>                     Undo that. History is kept either
+                                           way — nothing here is a delete.
   list [type] [-all]                       List entities (-all includes disabled)
   show <type> <name>                       Show one entity and its memberships
 

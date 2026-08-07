@@ -1,10 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { api, queryKeys, type GroupKind, type PageQuery } from '@/lib/api'
+import { api, queryKeys, type GroupKind, type PageQuery, type UserStatus } from '@/lib/api'
 
-export function useUsers(page: PageQuery) {
+export function useUsers(page: PageQuery, status: UserStatus = '') {
   return useQuery({
-    queryKey: queryKeys.users(page),
-    queryFn: () => api.directory.users(page),
+    queryKey: queryKeys.users(page, status),
+    queryFn: () => api.directory.users(page, status),
     // Keeps the previous page on screen while the next loads, so paging does
     // not flash an empty table on every click.
     placeholderData: (previous) => previous,
@@ -68,6 +68,17 @@ export function useDisableUser() {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: api.directory.disableUser,
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['directory', 'users'] })
+    },
+  })
+}
+
+/** Undoing a disable. */
+export function useEnableUser() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: api.directory.enableUser,
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['directory', 'users'] })
     },

@@ -39,6 +39,9 @@ type userResponse struct {
 	// someone on the way.
 	InvitationPending bool      `json:"invitationPending"`
 	CreatedAt         time.Time `json:"createdAt"`
+
+	// Disabled, so a listing that includes them can say which is which.
+	Disabled bool `json:"disabled"`
 }
 
 // pageFrom reads paging and search from the query string.
@@ -69,7 +72,11 @@ func (s *Server) handleListUsers(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	page := pageFrom(r)
 
-	users, total, err := s.store.ListUsers(ctx, page)
+	// Active by default. An account that vanished the moment it was disabled
+	// could never be found again, which is how disabling became a door with no
+	// way back — so `status=disabled` and `status=all` exist.
+	users, total, err := s.store.ListUsers(ctx, page,
+		store.UserFilter(r.URL.Query().Get("status")))
 	if err != nil {
 		s.log.ErrorContext(ctx, "listing users failed", "error", err)
 		writeError(w, http.StatusInternalServerError, "could not list users")
@@ -87,6 +94,7 @@ func (s *Server) handleListUsers(w http.ResponseWriter, r *http.Request) {
 			Groups:            u.Groups,
 			InvitationPending: u.InvitationPending,
 			CreatedAt:         u.CreatedAt,
+			Disabled:          u.DisabledAt != nil,
 		})
 	}
 
@@ -181,6 +189,7 @@ func (s *Server) handleGetUser(w http.ResponseWriter, r *http.Request) {
 			Groups:            len(memberships),
 			InvitationPending: invitationExpiry != nil,
 			CreatedAt:         entity.CreatedAt,
+			Disabled:          entity.DisabledAt != nil,
 		},
 		Memberships:         describeGrants(memberships),
 		InvitationExpiresAt: invitationExpiry,
@@ -250,6 +259,45 @@ func (s *Server) handleCreateUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusCreated, out)
+}
+
+// handleEnableUser undoes a disable.
+//
+// The other half of a control that had none. Sessions and access tokens are
+// deliberately not restored — disabling revoked them, and a token that was live
+// while an account was cut off is exactly what should not resume working.
+func (s *Server) handleEnableUser(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	session, _ := SessionFrom(ctx)
+
+	// LookupEntity does not filter on disabled — names resolve either way,
+	// which is what makes finding a disabled account possible at all.
+	entity, err := s.store.LookupEntity(ctx, directory.TypeUser, r.PathValue("login"))
+	if err != nil {
+		writeError(w, http.StatusNotFound, "no such user")
+		return
+	}
+
+	actorID := session.SubjectID
+	if err := s.store.EnableEntity(ctx, entity.ID, &actorID); err != nil {
+		if errors.Is(err, directory.ErrNotFound) {
+			writeError(w, http.StatusConflict, "that account is not disabled")
+			return
+		}
+		s.log.ErrorContext(ctx, "enabling user failed", "error", err)
+		writeError(w, http.StatusInternalServerError, "could not enable the account")
+		return
+	}
+
+	s.log.InfoContext(ctx, "user enabled", "login", entity.Name, "by", session.SubjectID)
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"login": entity.Name,
+		// Said explicitly, because somebody re-enabling an account expects it to
+		// be as it was and it is not quite.
+		"note": "sessions and access tokens were revoked when this account was " +
+			"disabled and have not been restored; they will need to sign in again",
+	})
 }
 
 func (s *Server) handleDisableUser(w http.ResponseWriter, r *http.Request) {

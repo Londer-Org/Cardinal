@@ -1,5 +1,7 @@
-import { useNavigate, useParams } from '@tanstack/react-router'
+import { useParams } from '@tanstack/react-router'
 import { useState } from 'react'
+import { CircleSlashIcon } from 'lucide-react'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -16,6 +18,7 @@ import { GrantPeriod } from '@/features/directory/GrantPeriod'
 import { InvitationPanel } from '@/features/directory/InvitationPanel'
 import {
   useDisableUser,
+  useEnableUser,
   useRevokeMembership,
   useUser,
 } from '@/features/directory/useDirectory'
@@ -26,8 +29,8 @@ function UserDetailViewBody() {
   const { login } = useParams({ from: '/directory/people/$login' })
   const { data: user, isPending, error } = useUser(login)
   const disable = useDisableUser()
+  const enable = useEnableUser()
   const revoke = useRevokeMembership()
-  const navigate = useNavigate()
   const [confirming, setConfirming] = useState(false)
 
   if (error) {
@@ -43,6 +46,25 @@ function UserDetailViewBody() {
         title={user.displayName || user.login}
         description={user.email === '' ? user.login : `${user.login} · ${user.email}`}
       />
+
+      {/* Said at the top, not only in the card that offers the reverse. Every
+          control below — granting a group, issuing an enrollment link — still
+          works on a disabled account and none of it takes effect while they
+          cannot sign in, which is confusing to discover afterwards.
+
+          The border and the icon carry the colour and the text does not: in
+          dark mode --destructive as text is 4.20:1 against the card, below AA,
+          and an alert whose every word is red is shouting anyway. */}
+      {user.disabled && (
+        <Alert className="border-destructive/50 [&>svg]:text-destructive">
+          <CircleSlashIcon />
+          <AlertTitle>This account is disabled</AlertTitle>
+          <AlertDescription>
+            Nobody can sign in to it, and nothing granted below applies until it
+            is enabled again.
+          </AlertDescription>
+        </Alert>
+      )}
 
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>
@@ -109,19 +131,44 @@ function UserDetailViewBody() {
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className={user.disabled ? 'border-destructive/50' : undefined}>
             <CardHeader>
-              <CardTitle>Danger zone</CardTitle>
+              <CardTitle>{user.disabled ? 'Account status' : 'Danger zone'}</CardTitle>
             </CardHeader>
             <CardContent>
               <ErrorMessage error={disable.error} />
-              {confirming ? (
+              <ErrorMessage error={enable.error} />
+              {user.disabled ? (
+                // Not a danger zone any more: this account is already cut off,
+                // and the only thing left to do here is the reverse. Offering
+                // "Disable" against a disabled account was the shape this had
+                // before there was a way back at all.
+                <div className="space-y-3">
+                  <p className="text-sm text-muted-foreground">
+                    Disabled. They cannot sign in, and nothing they hold applies.
+                    History and past grants are kept.
+                  </p>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={enable.isPending}
+                    onClick={() => { enable.mutate(login) }}
+                  >
+                    {enable.isPending ? 'Enabling…' : 'Enable account'}
+                  </Button>
+                  <p className="text-xs text-muted-foreground">
+                    Sessions and access tokens were revoked when this was
+                    disabled and do not come back — they will sign in again.
+                  </p>
+                </div>
+              ) : confirming ? (
                 <div className="rounded-md border border-destructive/50 p-3">
                   <p className="text-sm font-medium">Disable {user.login}?</p>
                   <p className="mt-1 text-xs text-muted-foreground">
-                    They can no longer sign in, and their sessions end
-                    immediately. The account is kept so past grants and audit
-                    records still resolve.
+                    They can no longer sign in, and their sessions and access
+                    tokens end immediately. The account is kept so past grants
+                    and audit records still resolve, and this can be undone —
+                    though those credentials do not come back.
                   </p>
                   <div className="mt-3 flex gap-2">
                     <Button
@@ -137,9 +184,7 @@ function UserDetailViewBody() {
                       disabled={disable.isPending}
                       onClick={() => {
                         disable.mutate(login, {
-                          onSuccess: () => {
-                            void navigate({ to: '/directory/people' })
-                          },
+                          onSuccess: () => { setConfirming(false) },
                         })
                       }}
                     >

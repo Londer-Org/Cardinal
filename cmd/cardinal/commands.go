@@ -31,8 +31,21 @@ func cliType(word string) directory.Type {
 }
 
 func runEntityCommand(ctx context.Context, typeWord string, args []string) error {
-	if len(args) == 0 || args[0] != "create" {
-		return fmt.Errorf("%w: cardinal %s create <name> [-display <text>]", errUsage, typeWord)
+	if len(args) == 0 {
+		return fmt.Errorf("%w: cardinal %s <create|disable|enable> <name>", errUsage, typeWord)
+	}
+
+	// Disabling is the reversible way to cut somebody off — that is the whole
+	// reason it exists rather than a delete — so both directions live here.
+	switch args[0] {
+	case "disable":
+		return runEntityAvailability(ctx, typeWord, args[1:], false)
+	case "enable":
+		return runEntityAvailability(ctx, typeWord, args[1:], true)
+	}
+
+	if args[0] != "create" {
+		return fmt.Errorf("%w: cardinal %s <create|disable|enable> <name>", errUsage, typeWord)
 	}
 
 	fs := flag.NewFlagSet(typeWord+" create", flag.ContinueOnError)
@@ -553,4 +566,70 @@ func instantLabel(raw string, resolved time.Time) string {
 		return "now"
 	}
 	return resolved.Format(time.RFC3339)
+}
+
+// runEntityAvailability disables or re-enables an entity.
+//
+// One function for both because they are one decision made twice, and a pair of
+// near-identical commands is how they drift — the first version of Cardinal had
+// only the disabling half, which made "reversible" a claim rather than a fact.
+func runEntityAvailability(ctx context.Context, typeWord string, args []string, enable bool) error {
+	verb := "disable"
+	if enable {
+		verb = "enable"
+	}
+
+	fs := flag.NewFlagSet(typeWord+" "+verb, flag.ContinueOnError)
+	dsnFlag := fs.String("dsn", "", "PostgreSQL connection string")
+	pos, err := parse(fs, args)
+	if err != nil {
+		return errUsage
+	}
+	if len(pos) != 1 {
+		return fmt.Errorf("%w: cardinal %s %s <name>", errUsage, typeWord, verb)
+	}
+
+	s, err := open(ctx, *dsnFlag)
+	if err != nil {
+		return err
+	}
+	defer s.Close()
+
+	entity, err := s.LookupEntity(ctx, cliType(typeWord), pos[0])
+	if err != nil {
+		return fmt.Errorf("no such %s %q", typeWord, pos[0])
+	}
+
+	if enable {
+		if err := s.EnableEntity(ctx, entity.ID, nil); err != nil {
+			return err
+		}
+		fmt.Printf("enabled %s %s\n", typeWord, entity.Name)
+		fmt.Fprintln(os.Stderr,
+			"\n  Sessions and access tokens were revoked when this was disabled and\n"+
+				"  have not come back. Whoever this is signs in again.")
+		return nil
+	}
+
+	if err := s.DisableEntity(ctx, entity.ID, nil); err != nil {
+		return err
+	}
+
+	// Sessions and tokens, for the same reason the API does it: an account
+	// disabled while its holder stays signed in is not disabled.
+	sessions, err := s.RevokeAllSessions(ctx, entity.ID, nil)
+	if err != nil {
+		return err
+	}
+	tokens, err := s.RevokeAllAccessTokens(ctx, entity.ID)
+	if err != nil {
+		return err
+	}
+
+	fmt.Printf("disabled %s %s\n", typeWord, entity.Name)
+	fmt.Printf("  revoked %d session(s) and %d access token(s)\n", sessions, tokens)
+	fmt.Fprintf(os.Stderr,
+		"\n  Reversible: `cardinal %s enable %s`. History and past grants are kept\n"+
+			"  either way — nothing here is a delete.\n", typeWord, entity.Name)
+	return nil
 }

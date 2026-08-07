@@ -165,6 +165,8 @@ export const directoryUserSchema = z.object({
   fullyEnrolled: z.boolean(),
   groups: z.number(),
   invitationPending: z.boolean(),
+  // Listings can include disabled accounts, so a row has to say which it is.
+  disabled: z.boolean(),
   createdAt: z.string(),
 })
 export type DirectoryUser = z.infer<typeof directoryUserSchema>

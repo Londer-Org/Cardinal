@@ -33,7 +33,7 @@ func TestListUsersCountsWhatTheConsoleShows(t *testing.T) {
 	issued, err := s.IssueInvitation(ctx, alice.ID, &alice.ID, 0)
 	require.NoError(t, err)
 
-	users, total, err := s.ListUsers(ctx, store.Page{})
+	users, total, err := s.ListUsers(ctx, store.Page{}, store.UsersActive)
 	require.NoError(t, err)
 
 	byLogin := map[string]int{}
@@ -58,7 +58,7 @@ func TestListUsersCountsWhatTheConsoleShows(t *testing.T) {
 	_, err = s.RedeemInvitation(ctx, issued.Token, testIP)
 	require.NoError(t, err)
 
-	users, _, err = s.ListUsers(ctx, store.Page{})
+	users, _, err = s.ListUsers(ctx, store.Page{}, store.UsersActive)
 	require.NoError(t, err)
 	for _, u := range users {
 		if u.Login == "alice" {
@@ -172,28 +172,28 @@ func TestListUsersPagesAndSearches(t *testing.T) {
 		mustCreate(t, s, directory.TypeUser, name)
 	}
 
-	first, total, err := s.ListUsers(ctx, store.Page{Limit: 2})
+	first, total, err := s.ListUsers(ctx, store.Page{Limit: 2}, store.UsersActive)
 	require.NoError(t, err)
 	require.Len(t, first, 2)
 	assert.Equal(t, 5, total, "the total must count everything, not the page")
 	assert.Equal(t, "anna", first[0].Login, "ordering must be stable across pages")
 
-	second, _, err := s.ListUsers(ctx, store.Page{Limit: 2, Offset: 2})
+	second, _, err := s.ListUsers(ctx, store.Page{Limit: 2, Offset: 2}, store.UsersActive)
 	require.NoError(t, err)
 	require.Len(t, second, 2)
 	assert.Equal(t, "carol", second[0].Login)
 
-	last, _, err := s.ListUsers(ctx, store.Page{Limit: 2, Offset: 4})
+	last, _, err := s.ListUsers(ctx, store.Page{Limit: 2, Offset: 4}, store.UsersActive)
 	require.NoError(t, err)
 	assert.Len(t, last, 1, "the final page is short, not empty")
 
-	beyond, _, err := s.ListUsers(ctx, store.Page{Limit: 2, Offset: 99})
+	beyond, _, err := s.ListUsers(ctx, store.Page{Limit: 2, Offset: 99}, store.UsersActive)
 	require.NoError(t, err)
 	assert.Empty(t, beyond, "reading past the end is empty, not an error")
 
 	// Search narrows the total too, or the console would report a count that
 	// disagrees with what it is showing.
-	found, foundTotal, err := s.ListUsers(ctx, store.Page{Search: "ar"})
+	found, foundTotal, err := s.ListUsers(ctx, store.Page{Search: "ar"}, store.UsersActive)
 	require.NoError(t, err)
 	assert.Equal(t, foundTotal, len(found))
 	logins := make([]string, 0, len(found))
@@ -203,7 +203,7 @@ func TestListUsersPagesAndSearches(t *testing.T) {
 	assert.ElementsMatch(t, []string{"carol"}, logins)
 
 	// A prefix must match, because an administrator typing "ann" expects anna.
-	prefix, _, err := s.ListUsers(ctx, store.Page{Search: "ann"})
+	prefix, _, err := s.ListUsers(ctx, store.Page{Search: "ann"}, store.UsersActive)
 	require.NoError(t, err)
 	require.Len(t, prefix, 1)
 	assert.Equal(t, "anna", prefix[0].Login)
@@ -221,12 +221,12 @@ func TestUnboundedListingIsStillPaged(t *testing.T) {
 		mustCreate(t, s, directory.TypeUser, fmt.Sprintf("user-%02d", i))
 	}
 
-	users, total, err := s.ListUsers(ctx, store.Page{Limit: 0})
+	users, total, err := s.ListUsers(ctx, store.Page{Limit: 0}, store.UsersActive)
 	require.NoError(t, err)
 	assert.Equal(t, 40, total)
 	assert.LessOrEqual(t, len(users), 25, "a limit of zero must not mean no limit")
 
-	huge, _, err := s.ListUsers(ctx, store.Page{Limit: 100_000})
+	huge, _, err := s.ListUsers(ctx, store.Page{Limit: 100_000}, store.UsersActive)
 	require.NoError(t, err)
 	assert.LessOrEqual(t, len(huge), 25, "an absurd limit must be clamped")
 }
@@ -278,4 +278,97 @@ func TestGroupKindsAreDistinguishable(t *testing.T) {
 
 	// A typo in a query string should not look like an empty directory.
 	assert.ElementsMatch(t, all, names(store.GroupKind("nonsense")))
+}
+
+// TestDisablingIsReversible.
+//
+// The property that makes disabling the right thing to reach for rather than a
+// delete. It was not true for a long time: the store could disable and nothing
+// could undo it, which made "reversible" a claim in a comment.
+func TestDisablingIsReversible(t *testing.T) {
+	s := newStore(t)
+	ctx := t.Context()
+
+	alice := mustCreate(t, s, directory.TypeUser, "alice")
+
+	require.NoError(t, s.DisableEntity(ctx, alice.ID, nil))
+	after, err := s.GetEntity(ctx, alice.ID)
+	require.NoError(t, err)
+	require.NotNil(t, after.DisabledAt)
+
+	require.NoError(t, s.EnableEntity(ctx, alice.ID, nil))
+	back, err := s.GetEntity(ctx, alice.ID)
+	require.NoError(t, err)
+	assert.Nil(t, back.DisabledAt)
+}
+
+// TestEnablingSomethingAlreadyEnabledIsRefused.
+//
+// So an operator who runs it twice is told the second did nothing, rather than
+// getting a success that suggests it did.
+func TestEnablingSomethingAlreadyEnabledIsRefused(t *testing.T) {
+	s := newStore(t)
+	ctx := t.Context()
+
+	alice := mustCreate(t, s, directory.TypeUser, "alice")
+	require.ErrorIs(t, s.EnableEntity(ctx, alice.ID, nil), directory.ErrNotFound)
+}
+
+// TestAnErasedAccountCannotComeBack.
+//
+// The one case where the door stays shut. A redacted account's name is a
+// tombstone and its personal data is gone, so re-enabling it would produce a
+// login nobody can identify and whose owner cannot be told it exists.
+func TestAnErasedAccountCannotComeBack(t *testing.T) {
+	s := newStore(t)
+	ctx := t.Context()
+
+	alice := mustCreate(t, s, directory.TypeUser, "alice")
+	require.NoError(t, s.DisableEntity(ctx, alice.ID, nil))
+	require.NoError(t, s.RedactEntity(ctx, alice.ID, nil))
+
+	err := s.EnableEntity(ctx, alice.ID, nil)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "right to be")
+
+	// And it really did not come back — a refusal that left the row enabled
+	// would be the worst of both.
+	after, err := s.GetEntity(ctx, alice.ID)
+	require.NoError(t, err)
+	assert.NotNil(t, after.DisabledAt, "the account was enabled despite the refusal")
+}
+
+// TestListingCanFindDisabledAccounts.
+//
+// Without this there is no way back at all: an account that vanishes the moment
+// it is disabled cannot be re-enabled by anyone who does not already know its
+// exact name.
+func TestListingCanFindDisabledAccounts(t *testing.T) {
+	s := newStore(t)
+	ctx := t.Context()
+
+	active := mustCreate(t, s, directory.TypeUser, "still-here")
+	gone := mustCreate(t, s, directory.TypeUser, "cut-off")
+	require.NoError(t, s.DisableEntity(ctx, gone.ID, nil))
+	_ = active
+
+	logins := func(filter store.UserFilter) []string {
+		users, _, err := s.ListUsers(ctx, store.Page{}, filter)
+		require.NoError(t, err)
+		out := make([]string, 0, len(users))
+		for _, u := range users {
+			out = append(out, u.Login)
+		}
+		return out
+	}
+
+	assert.Contains(t, logins(store.UsersActive), "still-here")
+	assert.NotContains(t, logins(store.UsersActive), "cut-off")
+
+	assert.Contains(t, logins(store.UsersDisabled), "cut-off")
+	assert.NotContains(t, logins(store.UsersDisabled), "still-here")
+
+	all := logins(store.UsersAll)
+	assert.Contains(t, all, "still-here")
+	assert.Contains(t, all, "cut-off")
 }

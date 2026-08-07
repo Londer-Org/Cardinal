@@ -186,8 +186,11 @@ export const api = {
 
   /** People and groups. Admin-only, enforced server-side. */
   directory: {
-    users: (page: PageQuery) =>
-      request(`/api/directory/users?${pageParams(page)}`, directoryUsersSchema),
+    users: (page: PageQuery, status: UserStatus = '') =>
+      request(
+        `/api/directory/users?${pageParams(page)}${status === '' ? '' : `&status=${status}`}`,
+        directoryUsersSchema,
+      ),
 
     user: (login: string) =>
       request(`/api/directory/users/${encodeURIComponent(login)}`,
@@ -202,6 +205,10 @@ export const api = {
     disableUser: (login: string) =>
       request(`/api/directory/users/${encodeURIComponent(login)}`, z.undefined(),
         { method: 'DELETE' }),
+
+    enableUser: (login: string) =>
+      request(`/api/directory/users/${encodeURIComponent(login)}/enable`,
+        z.object({ login: z.string(), note: z.string() }), { method: 'POST' }),
 
     groups: (page: PageQuery, kind: GroupKind = '') =>
       request(
@@ -308,6 +315,9 @@ export const api = {
 
 /** Paging and search, as the directory endpoints expect them. */
 /** Which category of group to list. Empty means all of them. */
+/** Which accounts a listing includes. Active by default. */
+export type UserStatus = '' | 'disabled' | 'all'
+
 export type GroupKind = '' | 'system' | 'application' | 'plain'
 
 export interface PageQuery {
@@ -372,7 +382,8 @@ export const queryKeys = {
   consents: ['consents'] as const,
   invitations: ['invitations'] as const,
   recoveries: ['recoveries'] as const,
-  users: (page: PageQuery) => ['directory', 'users', page] as const,
+  users: (page: PageQuery, status: UserStatus) =>
+    ['directory', 'users', status, page] as const,
   user: (login: string) => ['directory', 'users', login] as const,
   groups: (page: PageQuery, kind: GroupKind) =>
     ['directory', 'groups', kind, page] as const,

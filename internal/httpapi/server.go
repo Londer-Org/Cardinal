@@ -276,6 +276,7 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("POST /api/directory/users", people(s.handleCreateUser))
 	mux.Handle("GET /api/directory/users/{login}", people(s.handleGetUser))
 	mux.Handle("DELETE /api/directory/users/{login}", people(s.handleDisableUser))
+	mux.Handle("POST /api/directory/users/{login}/enable", people(s.handleEnableUser))
 
 	mux.Handle("GET /api/directory/groups", people(s.handleListGroups))
 	// The same tier as people and groups: a host is a directory entity, and

@@ -1,11 +1,20 @@
+import { useState } from 'react'
 import { useNavigate } from '@tanstack/react-router'
-import { MailIcon } from 'lucide-react'
+import { CircleSlashIcon, MailIcon } from 'lucide-react'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
 import { ErrorMessage } from '@/components/ErrorMessage'
 import { DataTable, type Column } from '@/components/DataTable'
 import { CreateUser } from '@/features/directory/CreateUser'
 import { useUsers } from '@/features/directory/useDirectory'
 import { usePageState } from '@/features/directory/usePageState'
+import type { UserStatus } from '@/lib/api'
 import type { DirectoryUser } from '@/lib/api'
 import { RequiresFreshAuth } from '@/features/auth/RequiresFreshAuth'
 import { ViewHeader } from '@/views/ViewHeader'
@@ -36,9 +45,16 @@ function EnrollmentBadge({ user }: { user: DirectoryUser }) {
   return <span className="text-muted-foreground">—</span>
 }
 
+const STATUSES: { value: UserStatus; label: string }[] = [
+  { value: '', label: 'Active' },
+  { value: 'disabled', label: 'Disabled' },
+  { value: 'all', label: 'Everyone' },
+]
+
 function UsersViewBody() {
   const { page, setSearch, setOffset, setLimit } = usePageState()
-  const { data, isPending, error } = useUsers(page)
+  const [status, setStatus] = useState<UserStatus>('')
+  const { data, isPending, error } = useUsers(page, status)
   const navigate = useNavigate()
 
   const columns: Column<DirectoryUser>[] = [
@@ -47,7 +63,17 @@ function UsersViewBody() {
       header: 'Name',
       cell: (u) => (
         <div className="min-w-0">
-          <p className="truncate font-medium">{u.displayName || u.login}</p>
+          <p className="flex items-center gap-2 truncate font-medium">
+            <span className={u.disabled ? 'line-through' : undefined}>
+              {u.displayName || u.login}
+            </span>
+            {u.disabled && (
+              <Badge variant="secondary" className="font-normal">
+                <CircleSlashIcon className="size-3" />
+                Disabled
+              </Badge>
+            )}
+          </p>
           <p className="truncate text-xs text-muted-foreground">{u.login}</p>
         </div>
       ),
@@ -101,7 +127,33 @@ function UsersViewBody() {
         onSearch={setSearch}
         searchPlaceholder="Search name, username or email"
         isPending={isPending}
-        empty="Nobody yet."
+        empty={
+          status === 'disabled'
+            ? 'Nobody is disabled.'
+            : 'Nobody yet.'
+        }
+        filters={
+          <Select
+            value={status === '' ? 'active' : status}
+            onValueChange={(value) => {
+              setStatus(value === 'active' ? '' : (value as UserStatus))
+              // Back to the first page: filtering while on page four shows an
+              // empty table and reads as "nothing matches".
+              setOffset(0)
+            }}
+          >
+            <SelectTrigger className="w-[150px]" aria-label="Filter by status">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {STATUSES.map((s) => (
+                <SelectItem key={s.label} value={s.value === '' ? 'active' : s.value}>
+                  {s.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        }
         onRowClick={(u) => {
           void navigate({ to: '/directory/people/$login', params: { login: u.login } })
         }}

@@ -32,6 +32,9 @@ type UserSummary struct {
 	// number in a list.
 	Groups int
 
+	// DisabledAt is nil for an account that can still sign in.
+	DisabledAt *time.Time
+
 	InvitationPending bool
 	CreatedAt         time.Time
 }
@@ -69,11 +72,43 @@ func (p Page) normalise() Page {
 	return p
 }
 
-// ListUsers returns a page of active users with the counts the console shows.
+// UserFilter narrows a listing to active accounts, disabled ones, or both.
+//
+// Its own type rather than a bool, because the default matters and a bare
+// `includeDisabled bool` reads the same at every call site whichever way it is
+// passed. Active is the default because it is what somebody looking for a
+// colleague wants; the other two exist because an account that vanished the
+// moment it was disabled could never be found again — which is how disabling
+// became a one-way door.
+type UserFilter string
+
+const (
+	// UsersActive is everyone who can sign in.
+	UsersActive UserFilter = ""
+	// UsersDisabled is everyone who has been cut off.
+	UsersDisabled UserFilter = "disabled"
+	// UsersAll is both.
+	UsersAll UserFilter = "all"
+)
+
+func (f UserFilter) condition() string {
+	switch f {
+	case UsersDisabled:
+		return "e.disabled_at IS NOT NULL"
+	case UsersAll:
+		return "true"
+	default:
+		return "e.disabled_at IS NULL"
+	}
+}
+
+// ListUsers returns a page of accounts with the counts the console shows.
 //
 // Returns the total as well, so the caller can say how many there are rather
-// than only how many it was given.
-func (s *Store) ListUsers(ctx context.Context, page Page) ([]*UserSummary, int, error) {
+// than only how many it was given. The filter decides whether disabled accounts
+// are among them — active by default, because that is what somebody looking for
+// a colleague wants.
+func (s *Store) ListUsers(ctx context.Context, page Page, filter UserFilter) ([]*UserSummary, int, error) {
 	page = page.normalise()
 
 	// One pattern, applied to login, display name and email. Deliberately not
@@ -85,7 +120,7 @@ func (s *Store) ListUsers(ctx context.Context, page Page) ([]*UserSummary, int, 
 	var total int
 	if err := s.pool.QueryRow(ctx, `
 		SELECT count(*) FROM entities e
-		 WHERE e.type = 'user' AND e.disabled_at IS NULL
+		 WHERE e.type = 'user' AND (`+filter.condition()+`)
 		   AND ($1 = '' OR lower(e.name) LIKE $2
 		        OR lower(coalesce(e.display_name, '')) LIKE $2
 		        OR lower(coalesce(e.attrs->>'email', '')) LIKE $2)`,
@@ -104,9 +139,9 @@ func (s *Store) ListUsers(ctx context.Context, page Page) ([]*UserSummary, int, 
 		                WHERE i.subject_id = e.id
 		                  AND i.redeemed_at IS NULL AND i.revoked_at IS NULL
 		                  AND i.expires_at > now()),
-		       e.created_at
+		       e.created_at, e.disabled_at
 		  FROM entities e
-		 WHERE e.type = 'user' AND e.disabled_at IS NULL
+		 WHERE e.type = 'user' AND (`+filter.condition()+`)
 		   AND ($1 = '' OR lower(e.name) LIKE $2
 		        OR lower(coalesce(e.display_name, '')) LIKE $2
 		        OR lower(coalesce(e.attrs->>'email', '')) LIKE $2)
@@ -121,7 +156,8 @@ func (s *Store) ListUsers(ctx context.Context, page Page) ([]*UserSummary, int, 
 	for rows.Next() {
 		var u UserSummary
 		if err := rows.Scan(&u.ID, &u.Login, &u.DisplayName, &u.Email,
-			&u.Credentials, &u.Groups, &u.InvitationPending, &u.CreatedAt); err != nil {
+			&u.Credentials, &u.Groups, &u.InvitationPending, &u.CreatedAt,
+			&u.DisabledAt); err != nil {
 			return nil, 0, fmt.Errorf("store: scanning user: %w", err)
 		}
 		out = append(out, &u)
