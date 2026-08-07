@@ -51,6 +51,8 @@ import {
   recoveryRequestsSchema,
   recoveryRequestSchema,
   policySchema,
+  policyVersionsSchema,
+  policyDocumentSchema,
   recoveryCodesSchema,
   registeredApplicationSchema,
 } from './schemas'
@@ -401,6 +403,26 @@ export const api = {
     /** The live policy set, including its text, so the explorer can show the
      *  rule that fired rather than only its name. */
     active: () => request('/api/policy', policySchema),
+
+    /** Published versions, newest first. Admin-only. */
+    versions: () => request('/api/policy/versions', policyVersionsSchema),
+
+    /** One version's text, for reading before activating it. */
+    version: (version: number) =>
+      request(`/api/policy/versions/${String(version)}`, policyDocumentSchema),
+
+    /**
+     * Rolls the live set to a published version.
+     *
+     * There is deliberately no publish here. A policy set belongs in git,
+     * reviewed and tested before it governs anything; one typed into a browser
+     * is one nobody read. Rollback is the exception because it happens during
+     * an incident.
+     */
+    activate: (version: number) =>
+      request(`/api/policy/versions/${String(version)}/activate`,
+        z.object({ live: z.number(), policyCount: z.number() }),
+        { method: 'POST' }),
   },
 
   recovery: {
@@ -464,6 +486,8 @@ export type {
   Me,
   PendingAuthorization,
   Policy,
+  PolicyVersion,
+  PolicyDocument,
   RecoveryCodes,
   RecoveryRequest,
   RegisteredApplication,
@@ -493,4 +517,6 @@ export const queryKeys = {
   tokens: ['tokens'] as const,
   decisions: (deniedOnly: boolean) => ['decisions', deniedOnly] as const,
   policy: ['policy'] as const,
+  policyVersions: ['policy', 'versions'] as const,
+  policyDocument: (version: number) => ['policy', 'versions', version] as const,
 }

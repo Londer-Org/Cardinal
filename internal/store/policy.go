@@ -11,7 +11,10 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-var ErrNoActivePolicy = errors.New("store: no policy version is active")
+var (
+	ErrNoActivePolicy      = errors.New("store: no policy version is active")
+	ErrNoSuchPolicyVersion = errors.New("store: no such policy version")
+)
 
 // PolicyVersion is an immutable snapshot of the policy set.
 type PolicyVersion struct {
@@ -196,4 +199,46 @@ func (s *Store) RecentDecisions(ctx context.Context, principalID *uuid.UUID, den
 		out = append(out, &d)
 	}
 	return out, rows.Err()
+}
+
+// ActivePolicyVersion returns just the live version number.
+//
+// Separate from ActivePolicy because it is asked repeatedly and the document is
+// the large part of that row. A watcher comparing watermarks should not pull a
+// policy set across the wire every few seconds to discover it has not changed.
+func (s *Store) ActivePolicyVersion(ctx context.Context) (int64, error) {
+	var version int64
+	err := s.pool.QueryRow(ctx, `
+		SELECT version
+		  FROM policy_versions
+		 WHERE activated_at IS NOT NULL
+		 ORDER BY activated_at DESC
+		 LIMIT 1`).Scan(&version)
+
+	if errors.Is(err, pgx.ErrNoRows) {
+		return 0, ErrNoActivePolicy
+	}
+	if err != nil {
+		return 0, fmt.Errorf("store: reading active policy version: %w", err)
+	}
+	return version, nil
+}
+
+// PolicyVersionByNumber returns one published version, active or not.
+func (s *Store) PolicyVersionByNumber(ctx context.Context, version int64) (*PolicyVersion, error) {
+	var v PolicyVersion
+	err := s.pool.QueryRow(ctx, `
+		SELECT id, version, document, digest, description, created_at, activated_at
+		  FROM policy_versions
+		 WHERE version = $1`, version,
+	).Scan(&v.ID, &v.Version, &v.Document, &v.Digest, &v.Description,
+		&v.CreatedAt, &v.ActivatedAt)
+
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrNoSuchPolicyVersion
+	}
+	if err != nil {
+		return nil, fmt.Errorf("store: reading policy version: %w", err)
+	}
+	return &v, nil
 }

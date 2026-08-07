@@ -65,6 +65,13 @@ func runPolicyTest(args []string) error {
 	return nil
 }
 
+// policyReloadNotice matches watchPolicy's interval in serve.go.
+//
+// Duplicated as a string rather than imported, because the two live in the same
+// package and the number is only ever shown to a person — but if that interval
+// changes, this is the line that starts lying.
+const policyReloadNotice = "ten seconds"
+
 func runPolicyPublish(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("policy publish", flag.ContinueOnError)
 	description := fs.String("description", "", "what changed and why")
@@ -115,7 +122,13 @@ func runPolicyPublish(ctx context.Context, args []string) error {
 	if err := s.ActivatePolicy(ctx, version.Version, nil); err != nil {
 		return err
 	}
-	fmt.Printf("  activated — restart the server, or it keeps serving the previous set\n")
+	// This used to say "restart the server, or it keeps serving the previous
+	// set", which was true and is no longer: every node checks the activated
+	// version on a short interval and swaps its engine. The old wording made
+	// rolling back a two-step operation whose second step needed a shell, which
+	// is the wrong shape for the one policy action people take in a hurry.
+	fmt.Printf("  activated — every server picks this up within %s\n",
+		policyReloadNotice)
 	return nil
 }
 
@@ -141,10 +154,27 @@ func runPolicyActivate(ctx context.Context, args []string) error {
 	}
 	defer s.Close()
 
+	// Compiled before anything is written, which the API path also does.
+	//
+	// A version that no longer compiles cannot be loaded by any node, and each
+	// one keeps serving whatever it already had — so activating one leaves the
+	// fleet split across policy sets with nothing on screen to say so, and the
+	// only symptom is that a change did not take effect. Refusing here turns
+	// that into a failed command.
+	stored, err := s.PolicyVersionByNumber(ctx, version)
+	if err != nil {
+		return err
+	}
+	if _, err := policy.NewEngine([]byte(stored.Document), stored.Version); err != nil {
+		return fmt.Errorf("version %d no longer compiles, so no server could "+
+			"enforce it: %w", version, err)
+	}
+
 	if err := s.ActivatePolicy(ctx, version, nil); err != nil {
 		return err
 	}
 	fmt.Printf("version %d is now live\n", version)
+	fmt.Printf("  every server picks this up within %s\n", policyReloadNotice)
 	fmt.Printf("  rollback is the same command with an earlier version\n")
 	return nil
 }

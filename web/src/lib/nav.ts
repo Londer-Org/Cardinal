@@ -4,6 +4,7 @@ import {
   KeyRoundIcon,
   LayersIcon,
   LifeBuoyIcon,
+  ScaleIcon,
   ScrollTextIcon,
   ServerIcon,
   TerminalIcon,
@@ -68,6 +69,15 @@ export const NAV: NavSection[] = [
       { label: 'Hosts', to: '/directory/hosts', icon: ServerIcon },
       { label: 'Recovery', to: '/directory/recovery', icon: LifeBuoyIcon },
     ],
+  },
+  {
+    // Its own section, and gated on the broad tier rather than the directory
+    // one. Activating a policy set decides every question Cardinal answers,
+    // including who may activate the next one, so it does not belong beside
+    // the pages somebody gets for managing accounts.
+    label: 'Authorization',
+    visible: (session) => session.canAdministerDirectory,
+    items: [{ label: 'Policy', to: '/policy', icon: ScaleIcon }],
   },
   {
     label: 'Integrations',

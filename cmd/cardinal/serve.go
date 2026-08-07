@@ -146,6 +146,7 @@ func runServe(ctx context.Context, args []string) error {
 	}
 
 	go backgroundMaintenance(ctx, st, log)
+	go watchPolicy(ctx, st, apiServer, log)
 
 	errCh := make(chan error, 1)
 	go func() {
@@ -193,6 +194,73 @@ func backgroundMaintenance(ctx context.Context, st *store.Store, log *slog.Logge
 			if _, err := st.PurgeRateLimits(ctx, time.Hour); err != nil {
 				log.WarnContext(ctx, "purging rate limits failed", "error", err)
 			}
+		}
+	}
+}
+
+// policyReloadInterval is how stale a policy change may be on a node that did
+// not serve the activation.
+//
+// Ten seconds. Short enough that a rollback during an incident takes effect
+// while somebody is still looking at the screen, long enough that the query —
+// one integer, on an index — is nothing.
+//
+// PostgreSQL 19's targeted LISTEN/NOTIFY would make this near-instant and is
+// the obvious next step, but it would not replace this loop: a notification is
+// a hint that can be missed, never a guarantee (ADR 0004), so the table stays
+// the source of truth and a node still has to reconcile on its own. Polling
+// first means the correctness argument does not depend on delivery.
+const policyReloadInterval = 10 * time.Second
+
+// watchPolicy keeps the live engine in step with what is activated.
+//
+// Without this, `cardinal policy activate` and the console's rollback button
+// both changed a row and nothing else: the running server kept evaluating the
+// set it loaded at startup until somebody restarted it. The CLI said so — "
+// activated — restart the server, or it keeps serving the previous set" — which
+// made it a documented limitation rather than a surprise, but it also made
+// rolling back a bad policy a two-step operation whose second step needs a
+// shell on the server.
+//
+// That is the wrong shape for the one action most likely to be taken in a
+// hurry. A rollback button that changed a row and left the old rules enforced
+// would be worse than no button, because it reports success.
+func watchPolicy(ctx context.Context, st *store.Store, server *httpapi.Server, log *slog.Logger) {
+	ticker := time.NewTicker(policyReloadInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			version, err := st.ActivePolicyVersion(ctx)
+			if err != nil {
+				if !errors.Is(err, store.ErrNoActivePolicy) {
+					log.WarnContext(ctx, "checking the active policy failed", "error", err)
+				}
+				continue
+			}
+			if server.PolicyVersion() == version {
+				continue
+			}
+
+			active, err := st.ActivePolicy(ctx)
+			if err != nil {
+				log.WarnContext(ctx, "reading the active policy failed", "error", err)
+				continue
+			}
+			engine, err := policy.NewEngine([]byte(active.Document), active.Version)
+			if err != nil {
+				// Keep serving the set we have. A version that does not compile
+				// cannot be enforced, and swapping in nothing would deny
+				// everything — turning a bad publish into a total outage.
+				log.ErrorContext(ctx, "the activated policy does not compile — "+
+					"continuing with the previous set",
+					"version", active.Version, "error", err)
+				continue
+			}
+			server.ReloadPolicy(engine)
 		}
 	}
 }

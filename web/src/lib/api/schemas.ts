@@ -415,3 +415,33 @@ export const hostEnrollmentSchema = z.object({
   expiresAt: z.string(),
 })
 export type HostEnrollment = z.infer<typeof hostEnrollmentSchema>
+
+/** One published policy set. */
+export const policyVersionSchema = z.object({
+  version: z.number(),
+  description: z.string(),
+  digest: z.string(),
+  publishedAt: z.string(),
+  // What the database says is activated.
+  active: z.boolean(),
+  activatedAt: z.string().nullable(),
+  // Whether the server that answered is actually evaluating it. Differs from
+  // `active` for the seconds between an activation and each node picking it
+  // up — and indefinitely if an uncompilable version were ever activated.
+  live: z.boolean(),
+  policyCount: z.number(),
+  // The one version nobody must roll back to, and it looks like the others.
+  invalid: z.boolean(),
+})
+export type PolicyVersion = z.infer<typeof policyVersionSchema>
+
+export const policyVersionsSchema = z.object({
+  versions: z.array(policyVersionSchema),
+  live: z.number(),
+})
+
+export const policyDocumentSchema = z.object({
+  version: policyVersionSchema,
+  document: z.string(),
+})
+export type PolicyDocument = z.infer<typeof policyDocumentSchema>

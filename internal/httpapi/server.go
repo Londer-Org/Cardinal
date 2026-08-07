@@ -345,6 +345,26 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("DELETE /api/applications/{clientID}", apps(s.handleDisableApplication))
 	mux.Handle("GET /api/policy", s.requireAuth(http.HandlerFunc(s.handlePolicy)))
 
+	// Policy versions and rollback.
+	//
+	// Behind requireAdmin — the broad tier — rather than the people or
+	// applications one. Activating a set decides every question Cardinal
+	// answers, including who may activate the next one, so it is not something
+	// to hold by virtue of managing accounts.
+	//
+	// There is deliberately no publish endpoint. A policy set belongs in git,
+	// reviewed and tested before it is live; one typed into a browser is one
+	// nobody read. Rollback is the exception because it happens during an
+	// incident, and requiring a shell on the server first is the wrong shape
+	// for that moment.
+	admin := func(h http.HandlerFunc) http.Handler {
+		return s.requireAuth(s.requirePermission(policy.ActionAdministerData, h))
+	}
+	mux.Handle("GET /api/policy/versions", admin(s.handleListPolicyVersions))
+	mux.Handle("GET /api/policy/versions/{version}", admin(s.handleGetPolicyVersion))
+	mux.Handle("POST /api/policy/versions/{version}/activate",
+		admin(s.handleActivatePolicyVersion))
+
 	// ── OpenID Connect ─────────────────────────────────────────────────────
 	if s.oidc != nil {
 		// The library serves discovery, /authorize, /token, /userinfo and JWKS
@@ -489,4 +509,12 @@ func decodeJSON(r *http.Request, dst any) error {
 		return errors.New("malformed request body")
 	}
 	return nil
+}
+
+// PolicyVersion reports which set is live, or 0 when none is.
+func (s *Server) PolicyVersion() int64 {
+	if engine := s.policy.Load(); engine != nil {
+		return engine.Version()
+	}
+	return 0
 }

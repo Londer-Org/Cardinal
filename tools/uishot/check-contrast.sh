@@ -97,6 +97,11 @@ PAGES=(
   /directory/hosts
   /directory/hosts/uishot-web.prod
   /directory/recovery
+  /policy
+  # The confirmation before making a version live: a destructive button and the
+  # alert explaining that this decides everything, neither of which is on the
+  # page as it loads.
+  "/policy|button[data-action=\"activate\"]"
   /integrations/applications
 )
 
