@@ -65,3 +65,53 @@ surface must resolve names to IDs for humans while storing only IDs.
 **Soft delete, always.** Entities are disabled, never hard-deleted. A deleted
 user's past grants still have to be explicable, and foreign keys from the audit
 trail must keep resolving.
+
+## Revisited, 2026-08-07
+
+The alternatives section above said a read-only LDAP gateway was "worth
+revisiting if Cardinal is ever adopted somewhere with genuine legacy LDAP
+consumers", and rejected it on the assumption that host login was the only
+FreeIPA dependency. Evidence from a real deployment arrived, and the assumption
+was wrong: eight applications bind LDAP there — Redmine, Request Tracker, MISP,
+TheHive, GitLab, FreePBX, Jenkins and OpenStack.
+
+So the condition was met. The decision does not change, but the reasoning does,
+and the original reason should not be left standing.
+
+**There are two different things called "LDAP", and only one of them matters.**
+
+*An application binding LDAP to authenticate its users.* This is what those
+eight do, and it is being retired rather than extended — that site's own plan
+moves each of them to native OIDC or to `forwardAuth`, describing the LDAP
+arrangement in its own words as "a shared password but a separate login per
+app… centralized authentication, not SSO". `forwardAuth` is strictly better
+here and Cardinal already has it: the proxy authenticates, the application
+needs no support at all, and the result is real single sign-on rather than one
+password reused eight times. Building an LDAP server to serve this case would
+be building toward the thing being abandoned.
+
+*An identity provider binding LDAP to read the directory.* This is the case
+that looked like it mattered, because every product in this space works this
+way — Authelia takes a File or LDAP backend and nothing else, Keycloak is
+deployed against FreeIPA, Univention pairs Keycloak with its own LDAP. Without
+speaking LDAP, Cardinal cannot slot in as the directory behind any of them, and
+must replace the whole stack at once rather than one layer at a time. That is a
+real adoption cost and the strongest argument for a gateway.
+
+**It fails anyway, for a reason that is not about principles.** Authelia's LDAP
+backend expects the directory to hold the user's password: a service account
+searches, then the password is validated against the directory. Cardinal has no
+password column and will not have one. A passwordless directory cannot serve a
+password-based portal, so the gateway would produce a stack that still could not
+authenticate anybody. The incremental adoption path it appears to open is not
+actually open.
+
+**What would reopen this.** A consumer that (a) cannot be put behind a reverse
+proxy, so `forwardAuth` does not reach it, and (b) can send an access token
+where it thinks it is sending a password. The second half is now plausible in a
+way it was not when this was first written: [ADR
+0018](0018-access-tokens-are-a-weaker-credential.md) added a bearer credential
+Cardinal *can* verify, so a simple bind could be checked without introducing a
+password. Non-web infrastructure is where such a consumer would be found —
+OpenStack's API, a PBX, anything doing service-account binds. Worth enumerating
+before ruling it out permanently; not worth building on speculation.
