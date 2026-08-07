@@ -34,6 +34,7 @@ isn't finished.
 | [0022](0022-cardinal-issues-short-lived-credentials.md) | Cardinal decides, then issues a short-lived credential | Accepted |
 | [0023](0023-x509-certificates-via-acme.md) | Cardinal issues X.509 certificates, over ACME | Accepted |
 | [0024](0024-hosts-prove-possession-not-a-secret.md) | A host proves possession of a key, not knowledge of a secret | Accepted |
+| [0025](0025-a-host-learns-only-its-own-people.md) | A host learns only the people who may log into it | Accepted |
 
 ## Conventions
 

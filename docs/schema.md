@@ -665,6 +665,34 @@ erDiagram
 
 ```mermaid
 erDiagram
+    host_credentials {
+        uuid id PK
+        uuid host_id FK
+        text public_key
+        text fingerprint
+        tstzrange valid_period
+        timestamp_with_time_zone enrolled_at
+        inet enrolled_ip
+        timestamp_with_time_zone last_seen_at
+    }
+    host_enrollment_tokens {
+        uuid id PK
+        uuid host_id FK
+        bytea token_hash
+        uuid issued_by FK
+        timestamp_with_time_zone issued_at
+        timestamp_with_time_zone expires_at
+        timestamp_with_time_zone redeemed_at
+        inet redeemed_ip
+        timestamp_with_time_zone revoked_at
+    }
+    posix_identities {
+        uuid entity_id PK
+        integer id_number
+        text home_directory
+        text login_shell
+        timestamp_with_time_zone assigned_at
+    }
     ssh_ca_keys {
         uuid id PK
         text algorithm
@@ -687,10 +715,57 @@ erDiagram
         timestamp_with_time_zone issued_at
         timestamp_with_time_zone expires_at
     }
+    entities ||--o{ host_credentials : host_id
+    entities ||--o{ host_enrollment_tokens : host_id
+    entities ||--o{ host_enrollment_tokens : issued_by
+    entities ||--o{ posix_identities : entity_id
     ssh_ca_keys ||--o{ ssh_certificates : ca_key_id
     entities ||--o{ ssh_certificates : host_id
     entities ||--o{ ssh_certificates : subject_id
 ```
+
+### `host_credentials`
+
+Public keys hosts authenticate with. Cardinal never holds the private half.
+
+| Column | Type | Null | Default | Notes |
+|---|---|---|---|---|
+| `id` | `uuid` | no | `uuidv7()` |  |
+| `host_id` | `uuid` | no |  | → `entities.id` |
+| `public_key` | `text` | no |  |  |
+| `fingerprint` | `text` | no |  |  |
+| `valid_period` | `tstzrange` | no |  |  |
+| `enrolled_at` | `timestamp with time zone` | no | `now()` |  |
+| `enrolled_ip` | `inet` | yes |  |  |
+| `last_seen_at` | `timestamp with time zone` | yes |  |  |
+
+### `host_enrollment_tokens`
+
+Single-use tokens that let a machine register its key once. Hashed at rest.
+
+| Column | Type | Null | Default | Notes |
+|---|---|---|---|---|
+| `id` | `uuid` | no | `uuidv7()` |  |
+| `host_id` | `uuid` | no |  | → `entities.id` |
+| `token_hash` | `bytea` | no |  |  |
+| `issued_by` | `uuid` | yes |  | → `entities.id` |
+| `issued_at` | `timestamp with time zone` | no | `now()` |  |
+| `expires_at` | `timestamp with time zone` | no |  |  |
+| `redeemed_at` | `timestamp with time zone` | yes |  |  |
+| `redeemed_ip` | `inet` | yes |  |  |
+| `revoked_at` | `timestamp with time zone` | yes |  |  |
+
+### `posix_identities`
+
+uid and gid numbers. One allocator for both, never reused, never changed.
+
+| Column | Type | Null | Default | Notes |
+|---|---|---|---|---|
+| `entity_id` | `uuid` | no |  | → `entities.id` |
+| `id_number` | `integer` | no |  | uid for a user, gid for a group. Unique across both so the two cannot collide. |
+| `home_directory` | `text` | yes |  |  |
+| `login_shell` | `text` | yes |  |  |
+| `assigned_at` | `timestamp with time zone` | no | `now()` |  |
 
 ### `ssh_ca_keys`
 

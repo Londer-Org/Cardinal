@@ -202,6 +202,27 @@ key the host used before, so a rebuilt machine simply enrols again and the old
 disk stops working. `cardinal host credentials web-01.prod` shows both, because
 "which key made that request last month" stays worth answering.
 
+Once enrolled, a host asks what it should serve:
+
+```bash
+GET /api/hosts/assignment
+```
+
+and gets back the POSIX records — uid, gid, home, shell, group membership — for
+the people Cedar permits to log into *that machine* under their own name. Not
+the directory. A host is never able to enumerate Cardinal, which is the one
+thing an LDAP-bound host can always do
+([ADR 0025](adr/0025-a-host-learns-only-its-own-people.md)).
+
+Numbers come from one range shared by users and groups, so a uid can never equal
+an unrelated gid, and they are never reused:
+
+```bash
+cardinal posix assign user alice     # → alice uid = 100000
+cardinal posix assign group sre      # → sre gid = 100001
+cardinal posix show user alice       # → alice:x:100000:100000::/home/alice:/bin/bash
+```
+
 Requests afterwards carry:
 
 ```

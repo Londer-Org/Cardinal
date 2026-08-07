@@ -85,6 +85,8 @@ func run(ctx context.Context, args []string) error {
 		return runToken(ctx, rest)
 	case "ssh":
 		return runSSH(ctx, rest)
+	case "posix":
+		return runPOSIX(ctx, rest)
 	case "policy":
 		return runPolicy(ctx, rest)
 	case "serve":
@@ -162,6 +164,15 @@ HOST ACCESS (SSH certificates)
   ssh ca trust                             The full TrustedUserCAKeys contents
   ssh ca rotate <key-id> [-grace <dur>]    Make a key sign; the previous one
                                            stays trusted for the grace period
+
+POSIX IDENTITY (uid and gid numbers)
+  posix assign <user|group> <name>         Hand out the next number. Permanent:
+                                           every file on disk records it, so
+                                           there is no way to change or release
+                                           one afterwards.
+  posix show <user|group> <name>           The passwd or group line
+  posix set <user> [-home] [-shell]        Change where a login lands
+  posix list                               Every number handed out
 
 HOSTS (a machine proving which host it is)
   host enroll <name>                       Print the join command for a machine.

@@ -54,6 +54,13 @@ var allowedPayloadKeys = []string{
 	"device_bound",
 	"depth",
 
+	// A uid or gid. Identifies a person only through the entity it was
+	// assigned to, exactly like entity_id — and once that entity is redacted
+	// the number resolves to nobody. Recording it matters because the number
+	// outlives the account: files on disk carry it, and an auditor asking
+	// "who was uid 100003" needs the journal to have an answer.
+	"id_number",
+
 	// Which fields a profile update touched, never their values. Booleans
 	// rather than a list of names because slices are rejected outright, and
 	// because a boolean cannot smuggle anything: "the display name changed" is

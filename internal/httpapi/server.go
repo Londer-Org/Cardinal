@@ -212,6 +212,8 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("POST /api/hosts/enroll",
 		s.rateLimit(store.LimitHostEnroll)(http.HandlerFunc(s.handleHostEnroll)))
 	mux.Handle("GET /api/hosts/me", s.requireHost(http.HandlerFunc(s.handleHostSelf)))
+	mux.Handle("GET /api/hosts/assignment",
+		s.requireHost(http.HandlerFunc(s.handleHostAssignment)))
 
 	// ── Host access ────────────────────────────────────────────────────────
 	//

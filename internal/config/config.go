@@ -24,6 +24,11 @@ import (
 	"time"
 
 	"github.com/BurntSushi/toml"
+
+	// For the POSIX range constants only. They live in store because that is
+	// where the SQL constraint enforcing the floor lives, and two statements of
+	// the same number are how they come to disagree.
+	"github.com/arthur-lonfils/cardinal/internal/store"
 )
 
 type Config struct {
@@ -34,6 +39,7 @@ type Config struct {
 	Recovery Recovery `toml:"recovery"`
 	OIDC     OIDC     `toml:"oidc"`
 	SSH      SSH      `toml:"ssh"`
+	POSIX    POSIX    `toml:"posix"`
 }
 
 // SSH configures the certificate authority for host access.
@@ -53,6 +59,40 @@ type SSH struct {
 	//
 	// Generate with `openssl rand -base64 32`.
 	CAEncryptionKey string `toml:"ca_encryption_key"`
+}
+
+// POSIX configures the uid and gid numbers Cardinal hands out.
+//
+// One range for both, so a uid can never equal an unrelated gid. The numbers
+// are permanent — every file on every disk records them — so this is one of the
+// few settings that is genuinely hard to change after the fact. Pick it before
+// the first user gets one, and write down why.
+type POSIX struct {
+	// RangeLow is the first number allocated. Must be at least 65536: below
+	// 1000 belongs to the distribution, and systemd claims 61184–65519 for
+	// DynamicUser.
+	RangeLow int `toml:"range_low"`
+
+	// RangeHigh is the last. Exhausting it stops new users being given a uid,
+	// which is a configuration change and not an incident — but one that will
+	// happen at the worst moment if the range is set tight.
+	RangeHigh int `toml:"range_high"`
+}
+
+// Effective resolves the range, applying defaults to whichever end is unset.
+//
+// Same shape as Sessions.Effective, and for the same reason: a Config built in
+// code rather than parsed from a file must behave identically, or validation
+// rejects a configuration the server would have accepted.
+func (p POSIX) Effective() store.POSIXRange {
+	r := store.POSIXRange{Low: p.RangeLow, High: p.RangeHigh}
+	if r.Low == 0 {
+		r.Low = store.DefaultPOSIXRange.Low
+	}
+	if r.High == 0 {
+		r.High = store.DefaultPOSIXRange.High
+	}
+	return r
 }
 
 // OIDC configures the OpenID Connect provider.
@@ -249,6 +289,7 @@ func (c *Config) Validate() error {
 	}
 
 	problems = append(problems, c.validateWebAuthn()...)
+	problems = append(problems, c.validatePOSIX()...)
 
 	// An absolute cap inside the idle window means every session ends at its
 	// cap, so the idle setting silently does nothing — a configuration that
@@ -337,6 +378,34 @@ func (c *Config) Validate() error {
 	}
 
 	return errors.Join(problems...)
+}
+
+// validatePOSIX checks the range before any number is handed out.
+//
+// Worth failing to start over, rather than warning about. A uid is permanent —
+// every file on every disk records it — so a range that overlaps the system's
+// own accounts does not produce a validation error later, it produces a machine
+// where Cardinal's idea of a user and the kernel's disagree.
+func (c *Config) validatePOSIX() []error {
+	var problems []error
+
+	// Compared after defaults, because unset means "use the default" here as
+	// everywhere else, and writing only one end of the range is the common case.
+	r := c.POSIX.Effective()
+
+	if r.Low < store.POSIXFloor {
+		problems = append(problems, fmt.Errorf(
+			"%w: posix.range_low is %d — below %d belongs to the distribution's "+
+				"own accounts and to systemd's DynamicUser reservation",
+			ErrInvalid, r.Low, store.POSIXFloor))
+	}
+	if r.High <= r.Low {
+		problems = append(problems, fmt.Errorf(
+			"%w: posix.range_high (%d) must be above posix.range_low (%d)",
+			ErrInvalid, r.High, r.Low))
+	}
+
+	return problems
 }
 
 func (c *Config) validateWebAuthn() []error {

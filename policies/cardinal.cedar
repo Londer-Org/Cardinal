@@ -203,6 +203,28 @@ when {
     context.localAccount == "deploy" || context.localAccount == "www-data"
 };
 
+// The other half, and the more common one: logging in under your own name.
+//
+// Worth stating separately because it is the rule that decides which people a
+// host is allowed to *know about*. `cardinal-agent` serves POSIX identity only
+// for those this rule reaches, so a host resolves the names of people who may
+// log into it and nobody else — which is the whole difference from an
+// LDAP-bound host, where compromising the least important machine in the fleet
+// yields every name and uid in the company.
+//
+// The account is the principal's own login and nothing else. A rule permitting
+// an arbitrary `context.localAccount` would let somebody request a certificate
+// naming a service account, and the machine would honour it.
+@id("engineers-may-log-into-development")
+permit (
+    principal in Cardinal::Group::"00000000-0000-7000-8000-0000000e5be3",
+    action == Cardinal::Action::"SSHLogin",
+    resource in Cardinal::Group::"00000000-0000-7000-8000-0000000e5be4"
+)
+when {
+    context.localAccount == principal.login
+};
+
 // Running as root additionally requires a recent authentication.
 //
 // Replaces FreeIPA sudo rules. Fifteen minutes rather than five: sudo happens

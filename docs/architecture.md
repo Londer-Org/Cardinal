@@ -103,6 +103,14 @@ is the scope: in-app permissions are deliberately not on it
 | May they change this directory object? | LDAP ACLs | admin API |
 | May they log into this host, as whom? | FreeIPA HBAC | SSH CA |
 
+The last row is asked twice, of two different things. Certificate issuance asks
+it of a person holding a credential, and the answer is logged. The host
+assignment endpoint asks the same question of every user, so a machine learns
+the POSIX records of the people who may log into it and nobody else
+([ADR 0025](adr/0025-a-host-learns-only-its-own-people.md)) — which is what
+stops a compromised build agent from yielding the whole staff list, the way an
+LDAP-bound host does.
+
 Policy lives in [`policies/cardinal.cedar`](../policies/cardinal.cedar), is
 versioned in the database, and is activated with one command — so changing who
 may do what is not a deployment.

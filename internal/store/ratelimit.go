@@ -21,11 +21,18 @@ var (
 	LimitLoginFinish = RateLimit{Scope: "login:finish", Limit: 20, Window: time.Minute}
 	LimitRecovery    = RateLimit{Scope: "recovery", Limit: 5, Window: 15 * time.Minute}
 
-	// Enrolling a host is unauthenticated, so the token is guessable in
-	// principle. It is 256 bits and lives an hour, which makes guessing
-	// hopeless — but an unauthenticated endpoint with no limit is a way to
-	// make Cardinal do work on demand regardless of whether the guess lands.
-	LimitHostEnroll = RateLimit{Scope: "host:enroll", Limit: 10, Window: time.Minute}
+	// Enrolling a host is unauthenticated, so this exists — but it is bounding
+	// the wrong thing to think of it as anti-guessing. The token is 256 bits and
+	// lives an hour; no rate limit is what makes guessing hopeless. What this
+	// bounds is unauthenticated work on demand, which does not need to be tight.
+	//
+	// Deliberately loose, because a tight limit here breaks a real and ordinary
+	// case: provisioning a rack of machines behind one NAT means dozens of
+	// enrollments from a single address in the same minute, and refusing them
+	// looks like Cardinal being broken during exactly the operation somebody is
+	// doing for the first time. Found by the end-to-end suite tripping its own
+	// limiter at ten per minute.
+	LimitHostEnroll = RateLimit{Scope: "host:enroll", Limit: 60, Window: time.Minute}
 )
 
 // Deliberately absent: a break-glass limit. The feature was removed in ADR 0014

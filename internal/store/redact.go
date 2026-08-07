@@ -71,6 +71,20 @@ func (s *Store) RedactEntity(ctx context.Context, id uuid.UUID, actorID *uuid.UU
 			return fmt.Errorf("store: deleting sessions: %w", err)
 		}
 
+		// A home directory is /home/<login>, so it carries the name the
+		// tombstone above just erased. The uid stays: it is on every file this
+		// person ever created, and forgetting which erased account owned it
+		// makes those files unattributable rather than private. The path is
+		// rewritten rather than nulled because the column is NOT NULL in
+		// spirit — a POSIX user without a home is a login that lands in /.
+		if _, err := tx.Exec(ctx, `
+			UPDATE posix_identities
+			   SET home_directory = '/home/' || $2
+			 WHERE entity_id = $1 AND home_directory IS NOT NULL`,
+			id, tombstone); err != nil {
+			return fmt.Errorf("store: redacting home directory: %w", err)
+		}
+
 		// The redaction itself is auditable: the payload records that an entity
 		// was erased and when, which identifies nobody.
 		ev, err := event.New(event.ActionEntityRedacted, &id, actorID, nil)

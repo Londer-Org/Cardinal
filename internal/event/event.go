@@ -66,6 +66,12 @@ const (
 	ActionHostEnrollmentIssued = "host.enrollment_issued"
 	ActionHostEnrolled         = "host.enrolled"
 
+	// POSIX identity. A uid is permanent by design — every file on every disk
+	// records it — so the moment one is handed out is worth a line in a journal
+	// nobody can edit afterwards.
+	ActionPOSIXIdentityAssigned  = "posix.identity_assigned"
+	ActionPOSIXAttributesChanged = "posix.attributes_changed"
+
 	ActionRecoveryCodesIssued = "recovery.codes_issued"
 	ActionRecoveryCodeUsed    = "recovery.code_used"
 
