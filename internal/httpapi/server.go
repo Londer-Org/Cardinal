@@ -203,6 +203,16 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("GET /api/recovery/codes/remaining",
 		s.requireAuth(http.HandlerFunc(s.handleRemainingRecoveryCodes)))
 
+	// ── Host enrollment ────────────────────────────────────────────────────
+	//
+	// Enrolling is unauthenticated by necessity — a machine with no credential
+	// is exactly what this exists to fix — so the token carries the whole
+	// authorization, and it is rate limited like every other unauthenticated
+	// credential path.
+	mux.Handle("POST /api/hosts/enroll",
+		s.rateLimit(store.LimitHostEnroll)(http.HandlerFunc(s.handleHostEnroll)))
+	mux.Handle("GET /api/hosts/me", s.requireHost(http.HandlerFunc(s.handleHostSelf)))
+
 	// ── Host access ────────────────────────────────────────────────────────
 	//
 	// The only place SSH access is decided. sshd does no thinking at login, so

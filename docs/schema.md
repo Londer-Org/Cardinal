@@ -659,3 +659,68 @@ erDiagram
 | `digest` | `text` | no |  |  |
 | `applied_at` | `timestamp with time zone` | no | `now()` |  |
 
+## Other
+
+**Not yet grouped.** These tables exist in the database but are not assigned to a domain in `tools/schemadoc/main.go`. Assign them there so this document stays a map rather than a list.
+
+```mermaid
+erDiagram
+    ssh_ca_keys {
+        uuid id PK
+        text algorithm
+        bytea private_key_sealed
+        text public_key
+        text fingerprint
+        timestamp_with_time_zone created_at
+        timestamp_with_time_zone active_at
+        timestamp_with_time_zone retired_at
+        timestamp_with_time_zone valid_until
+    }
+    ssh_certificates {
+        uuid id PK
+        bigint serial
+        uuid subject_id FK
+        uuid host_id FK
+        text_array principals
+        uuid ca_key_id FK
+        text key_id
+        timestamp_with_time_zone issued_at
+        timestamp_with_time_zone expires_at
+    }
+    ssh_ca_keys ||--o{ ssh_certificates : ca_key_id
+    entities ||--o{ ssh_certificates : host_id
+    entities ||--o{ ssh_certificates : subject_id
+```
+
+### `ssh_ca_keys`
+
+SSH certificate authority keys. Several may be trusted at once; exactly one signs.
+
+| Column | Type | Null | Default | Notes |
+|---|---|---|---|---|
+| `id` | `uuid` | no | `uuidv7()` |  |
+| `algorithm` | `text` | no | `'ssh-ed25519'::text` |  |
+| `private_key_sealed` | `bytea` | no |  |  |
+| `public_key` | `text` | no |  | authorized_keys format. Goes into TrustedUserCAKeys on every host. |
+| `fingerprint` | `text` | no |  |  |
+| `created_at` | `timestamp with time zone` | no | `now()` |  |
+| `active_at` | `timestamp with time zone` | yes |  |  |
+| `retired_at` | `timestamp with time zone` | yes |  |  |
+| `valid_until` | `timestamp with time zone` | yes |  |  |
+
+### `ssh_certificates`
+
+A record that a certificate was issued. The certificate itself is not stored: it is short-lived, and a copy would be somewhere to steal one from.
+
+| Column | Type | Null | Default | Notes |
+|---|---|---|---|---|
+| `id` | `uuid` | no | `uuidv7()` |  |
+| `serial` | `bigint` | no |  |  |
+| `subject_id` | `uuid` | no |  | → `entities.id` |
+| `host_id` | `uuid` | yes |  | → `entities.id` |
+| `principals` | `text[]` | no |  |  |
+| `ca_key_id` | `uuid` | no |  | → `ssh_ca_keys.id` |
+| `key_id` | `text` | no |  |  |
+| `issued_at` | `timestamp with time zone` | no | `now()` |  |
+| `expires_at` | `timestamp with time zone` | no |  |  |
+

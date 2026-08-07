@@ -128,6 +128,23 @@ func cardinalCLI(t *testing.T, args ...string) string {
 	return string(out)
 }
 
+// tryCardinalCLI is cardinalCLI for commands that may legitimately fail.
+//
+// The stack outlives a single `go test` run, so seeding something that already
+// exists is normal rather than a problem. Distinguishing "already there" from a
+// real failure by parsing an error message would be worse than tolerating both:
+// whatever the command was meant to establish is asserted by the test itself a
+// few lines later.
+func tryCardinalCLI(t *testing.T, args ...string) {
+	t.Helper()
+
+	full := append([]string{
+		"compose", "-f", "../../examples/compose.yml",
+		"exec", "-T", "cardinal", "cardinal",
+	}, args...)
+	_, _ = exec.Command("docker", full...).CombinedOutput()
+}
+
 // TestUnauthenticatedBrowserIsRedirected.
 //
 // The first thing a real user experiences. Traefik must return Cardinal's 302

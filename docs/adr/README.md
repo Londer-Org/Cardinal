@@ -33,6 +33,7 @@ isn't finished.
 | [0021](0021-ssh-ca-key-custody.md) | Where the SSH CA private key lives | Accepted |
 | [0022](0022-cardinal-issues-short-lived-credentials.md) | Cardinal decides, then issues a short-lived credential | Accepted |
 | [0023](0023-x509-certificates-via-acme.md) | Cardinal issues X.509 certificates, over ACME | Accepted |
+| [0024](0024-hosts-prove-possession-not-a-secret.md) | A host proves possession of a key, not knowledge of a secret | Accepted |
 
 ## Conventions
 

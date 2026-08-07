@@ -219,6 +219,16 @@ func (s *Server) csrfProtect(next http.Handler) http.Handler {
 			return
 		}
 
+		// Machines, for the same reason. A host has no cookie jar: it either
+		// holds an enrollment token it was handed at a console, or it signs the
+		// request with a key it generated itself. Neither is ambient authority a
+		// browser could be tricked into replaying, and neither client can be
+		// made to read a cookie it never received.
+		if isHostProtocolPath(r.URL.Path) {
+			next.ServeHTTP(w, r)
+			return
+		}
+
 		// A request authenticated by a bearer token has no ambient authority to
 		// abuse: nothing attaches an Authorization header on a browser's behalf
 		// the way it attaches a cookie, which is the entire premise of CSRF.
@@ -283,6 +293,20 @@ func isOIDCProtocolPath(path string) bool {
 	switch path {
 	case "/oidc/token", "/oidc/revoke", "/oidc/introspect",
 		"/oidc/userinfo", "/oidc/keys", "/.well-known/openid-configuration":
+		return true
+	}
+	return false
+}
+
+// isHostProtocolPath reports whether a path is spoken by a machine.
+//
+// A closed list, like the OIDC one and for a sharper reason: /api/hosts/ will
+// also hold the administrator-facing endpoints for managing hosts, and those are
+// cookie-authenticated and must keep their CSRF protection. Adding a path here
+// is a decision to make, never something to inherit from a prefix.
+func isHostProtocolPath(path string) bool {
+	switch path {
+	case "/api/hosts/enroll", "/api/hosts/me":
 		return true
 	}
 	return false

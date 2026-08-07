@@ -55,7 +55,9 @@ func run(ctx context.Context, args []string) error {
 	cmd, rest := args[0], args[1:]
 
 	switch cmd {
-	case "user", "group", "host", "service-account", "application", "device", "role":
+	case "host":
+		return runHost(ctx, rest)
+	case "user", "group", "service-account", "application", "device", "role":
 		return runEntityCommand(ctx, cmd, rest)
 	case "list":
 		return runList(ctx, rest)
@@ -160,6 +162,17 @@ HOST ACCESS (SSH certificates)
   ssh ca trust                             The full TrustedUserCAKeys contents
   ssh ca rotate <key-id> [-grace <dur>]    Make a key sign; the previous one
                                            stays trusted for the grace period
+
+HOSTS (a machine proving which host it is)
+  host enroll <name>                       Print the join command for a machine.
+                                           Single use, expires in an hour.
+  host credentials <name>                  Keys this host has enrolled with
+  host join -server <url> -token <tok>     Run on the machine. Generates its key
+                                           and registers the public half.
+  host whoami -server <url>                Ask Cardinal who this machine is
+
+  join and whoami run on the host and never touch the database. Everything else
+  here is administration and does.
 
 AUTHORIZATION
   policy test <file.cedar>                 Compile a policy file (offline)

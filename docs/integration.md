@@ -172,6 +172,47 @@ device-bound, so existing policy refuses it every administrative action and
 every SSH certificate. A token belonging to a full directory administrator
 still cannot administer.
 
+## Machines that are not people
+
+A script authenticates as its owner. A *host* is not anybody's script — it asks
+Cardinal questions about itself, and the answers (which sudoers rules apply,
+which POSIX identities to serve, whether it may have a certificate for a name)
+are only sound if "which host is this?" has a trustworthy answer.
+
+So hosts do not get a bearer token. Each generates a keypair, keeps the private
+half, and signs every request
+([ADR 0024](adr/0024-hosts-prove-possession-not-a-secret.md)). Cardinal holds
+only the public key and has nothing to leak.
+
+Enrolling is two commands — one where the operator is, one on the machine:
+
+```bash
+# On any workstation that can reach the database:
+cardinal host create web-01.prod
+cardinal host enroll web-01.prod
+# → cardinal host join -server https://id.example -token …
+
+# On web-01.prod itself, once:
+cardinal host join -server https://id.example -token …
+cardinal host whoami -server https://id.example
+```
+
+The token is single-use and expires in an hour. Redeeming it retires whatever
+key the host used before, so a rebuilt machine simply enrols again and the old
+disk stops working. `cardinal host credentials web-01.prod` shows both, because
+"which key made that request last month" stays worth answering.
+
+Requests afterwards carry:
+
+```
+Authorization: Cardinal-Host <fingerprint>:<unix seconds>:<base64 signature>
+```
+
+signed over the method, path, timestamp and fingerprint together — so a captured
+header authorises nothing but the one request it was made for, for at most a
+minute. A proxy in front of Cardinal must pass the `Authorization` header
+through untouched and must not rewrite the path.
+
 ## Where authorization stops
 
 Cardinal answers *may you reach this* and *who are you*. It does not answer

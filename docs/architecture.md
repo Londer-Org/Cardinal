@@ -49,6 +49,8 @@ additional moving part is another way for nobody to be able to log in.
 | `internal/claims` | Turns a session into a *subject* — attributes plus transitive groups | **Imports no protocol package.** Enforced by a test |
 | `internal/policy` | Cedar: entity projection, evaluation, named decisions | Fails closed if no policy is loaded |
 | `internal/oidcprovider` | The OpenID Connect provider, over `zitadel/oidc` | Adapts Cardinal's storage to the library's interfaces |
+| `internal/sshca` | Signs SSH certificates | Holds no key; is handed one per call |
+| `internal/hostclient` | The *machine's* half of host authentication | The only package that runs somewhere other than the server |
 | `internal/httpapi` | Routing, middleware, handlers | The only package that knows what a request is |
 | `internal/event` | The hash-chained journal and its payload allowlist | Refuses anything that could carry personal data |
 | `web` | React admin UI, embedded at build time | Talks only to the same public API |
@@ -99,7 +101,7 @@ is the scope: in-app permissions are deliberately not on it
 | May they reach this URL? | oauth2-proxy + Keycloak mappers | `forwardAuth` |
 | May they use this application? | — | OIDC authorize |
 | May they change this directory object? | LDAP ACLs | admin API |
-| May they log into this host, as whom? | FreeIPA HBAC | SSH CA *(Phase 4)* |
+| May they log into this host, as whom? | FreeIPA HBAC | SSH CA |
 
 Policy lives in [`policies/cardinal.cedar`](../policies/cardinal.cedar), is
 versioned in the database, and is activated with one command — so changing who
@@ -129,12 +131,20 @@ Nothing is stored in a form that can be presented back to Cardinal.
 | Access token | SHA-256 of the token | `tstzrange`, revocable |
 | Recovery code | Argon2id | Single use |
 | Enrollment invitation | SHA-256 | Single use, 24h |
+| Host enrollment token | SHA-256 | Single use, 1h |
+| Host key | Public key | `tstzrange`, retired on re-enrollment |
 | OIDC client secret | Argon2id | — |
 
 Session and access tokens use SHA-256 rather than Argon2id deliberately: both
 are 256 bits of machine randomness, so there is nothing to brute-force and a
 slow hash would only add latency to every request. Recovery codes are shorter
 and human-handled, which is the case Argon2id exists for.
+
+Two rows have no hash at all, and they are the interesting ones. A passkey and a
+host key are *public* keys: the holder proves possession by signing, so a
+database read yields the ability to recognise a principal and never to be one.
+That is the same reason there is no password column, applied to machines
+([ADR 0024](adr/0024-hosts-prove-possession-not-a-secret.md)).
 
 ## Two things that constrain every change
 

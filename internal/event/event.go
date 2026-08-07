@@ -60,6 +60,12 @@ const (
 	ActionSSHCAKeyActivated    = "ssh_ca.key_activated"
 	ActionSSHCertificateIssued = "ssh_ca.certificate_issued"
 
+	// Host enrollment. A machine registering a key is how it becomes able to
+	// ask Cardinal for anything on its own behalf, so it is as auditable as a
+	// person registering a credential.
+	ActionHostEnrollmentIssued = "host.enrollment_issued"
+	ActionHostEnrolled         = "host.enrolled"
+
 	ActionRecoveryCodesIssued = "recovery.codes_issued"
 	ActionRecoveryCodeUsed    = "recovery.code_used"
 

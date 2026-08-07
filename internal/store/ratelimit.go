@@ -20,6 +20,12 @@ var (
 	LimitLoginBegin  = RateLimit{Scope: "login:begin", Limit: 20, Window: time.Minute}
 	LimitLoginFinish = RateLimit{Scope: "login:finish", Limit: 20, Window: time.Minute}
 	LimitRecovery    = RateLimit{Scope: "recovery", Limit: 5, Window: 15 * time.Minute}
+
+	// Enrolling a host is unauthenticated, so the token is guessable in
+	// principle. It is 256 bits and lives an hour, which makes guessing
+	// hopeless — but an unauthenticated endpoint with no limit is a way to
+	// make Cardinal do work on demand regardless of whether the guess lands.
+	LimitHostEnroll = RateLimit{Scope: "host:enroll", Limit: 10, Window: time.Minute}
 )
 
 // Deliberately absent: a break-glass limit. The feature was removed in ADR 0014
