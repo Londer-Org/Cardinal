@@ -2,16 +2,19 @@ import { z } from 'zod'
 import { request } from './client'
 import {
   createGroupRequest,
+  createHostRequest,
   createTokenRequest,
   createUserRequest,
   enrollRequest,
   grantRequest,
+  hostAliasRequest,
   issueInvitationRequest,
   nameCredentialRequest,
   openRecoveryRequest,
   registerApplicationRequest,
   updateProfileRequest,
   type CreateGroupRequest,
+  type CreateHostRequest,
   type CreateTokenRequest,
   type CreateUserRequest,
   type GrantRequest,
@@ -33,6 +36,8 @@ import {
   createdTokenSchema,
   sessionsSchema,
   directoryHostsSchema,
+  hostDetailSchema,
+  hostEnrollmentSchema,
   directoryUserDetailSchema,
   directoryUsersSchema,
   invitationSchema,
@@ -281,6 +286,36 @@ export const api = {
     hosts: (page: PageQuery) =>
       request(`/api/directory/hosts?${pageParams(page)}`, directoryHostsSchema),
 
+    host: (name: string) =>
+      request(`/api/directory/hosts/${encodeURIComponent(name)}`, hostDetailSchema),
+
+    createHost: (input: CreateHostRequest) =>
+      request('/api/directory/hosts', z.looseObject({}), {
+        method: 'POST',
+        body: createHostRequest.parse(input),
+      }),
+
+    /**
+     * Hands a machine a way in.
+     *
+     * Returns the command rather than the bare token, following
+     * `cardinal host enroll`: somebody holding a secret still has to know what
+     * to do with it, and the step people get wrong is generating the keypair
+     * anywhere other than on the machine itself.
+     */
+    enrollHost: (name: string) =>
+      request(`/api/directory/hosts/${encodeURIComponent(name)}/enrollment`,
+        hostEnrollmentSchema, { method: 'POST' }),
+
+    addHostAlias: (name: string, alias: string) =>
+      request(`/api/directory/hosts/${encodeURIComponent(name)}/aliases`,
+        z.undefined(), { method: 'POST', body: hostAliasRequest.parse({ alias }) }),
+
+    removeHostAlias: (name: string, alias: string) =>
+      request(
+        `/api/directory/hosts/${encodeURIComponent(name)}/aliases/${encodeURIComponent(alias)}`,
+        z.undefined(), { method: 'DELETE' }),
+
     /** Applications by name, readable by whoever manages groups. */
     applications: (page: PageQuery) =>
       request(`/api/directory/applications?${pageParams(page)}`, applicationRefsSchema),
@@ -415,6 +450,9 @@ export type {
   CreatedToken,
   Session,
   DirectoryHost,
+  HostDetail,
+  HostAccess,
+  HostCredential,
   DirectoryGroupDetail,
   DirectoryUser,
   DirectoryUserDetail,
@@ -446,6 +484,7 @@ export const queryKeys = {
   groups: (page: PageQuery, kind: GroupKind) =>
     ['directory', 'groups', kind, page] as const,
   hosts: (page: PageQuery) => ['directory', 'hosts', page] as const,
+  host: (name: string) => ['directory', 'hosts', name] as const,
   refApplications: (page: PageQuery) =>
     ['directory', 'ref-applications', page] as const,
   group: (name: string) => ['directory', 'groups', name] as const,

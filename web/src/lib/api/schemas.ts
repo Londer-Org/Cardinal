@@ -374,3 +374,44 @@ export const sessionSchema = z.object({
 export type Session = z.infer<typeof sessionSchema>
 
 export const sessionsSchema = z.object({ sessions: z.array(sessionSchema) })
+
+/** A host's own keys. Retired ones are listed too — see the `live` flag. */
+export const hostCredentialSchema = z.object({
+  fingerprint: z.string(),
+  enrolledAt: z.string(),
+  lastSeenAt: z.string().nullable(),
+  // The key it authenticates with now, as against ones it used before.
+  // "Which key made that request last month" is a question only the retired
+  // rows can answer, so they are shown rather than hidden.
+  live: z.boolean(),
+})
+export type HostCredential = z.infer<typeof hostCredentialSchema>
+
+/** Who may log into a machine, as whom. The question the page exists for. */
+export const hostAccessSchema = z.object({
+  login: z.string(),
+  displayName: z.string(),
+  // Not always the same as the login, and it is what somebody auditing the
+  // machine actually reads out of /etc/passwd.
+  localAccount: z.string(),
+  uid: z.number(),
+  sudo: z.boolean(),
+})
+export type HostAccess = z.infer<typeof hostAccessSchema>
+
+export const hostDetailSchema = directoryHostSchema.extend({
+  aliasNames: z.array(z.string()),
+  memberships: z.array(grantSchema),
+  credentials: z.array(hostCredentialSchema),
+  access: z.array(hostAccessSchema),
+  // "Nobody may log in" and "policy could not be consulted" look identical on
+  // screen and mean opposite things, so they are separate fields.
+  accessUnavailable: z.boolean(),
+})
+export type HostDetail = z.infer<typeof hostDetailSchema>
+
+export const hostEnrollmentSchema = z.object({
+  command: z.string(),
+  expiresAt: z.string(),
+})
+export type HostEnrollment = z.infer<typeof hostEnrollmentSchema>

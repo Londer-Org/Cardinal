@@ -180,3 +180,52 @@ async function invalidateMembership(
     queryClient.invalidateQueries({ queryKey: queryKeys.me }),
   ])
 }
+
+/** One host, with its keys, aliases and who may log into it. */
+export function useHost(name: string) {
+  return useQuery({
+    queryKey: queryKeys.host(name),
+    queryFn: () => api.directory.host(name),
+  })
+}
+
+export function useCreateHost() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: api.directory.createHost,
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['directory', 'hosts'] })
+    },
+  })
+}
+
+/**
+ * Issues an enrollment token.
+ *
+ * Deliberately does not invalidate anything. The host is not enrolled until the
+ * machine runs the command, so refreshing here would show no change and imply
+ * the token did nothing.
+ */
+export function useEnrollHost(name: string) {
+  return useMutation({ mutationFn: () => api.directory.enrollHost(name) })
+}
+
+export function useAddHostAlias(name: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (alias: string) => api.directory.addHostAlias(name, alias),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: queryKeys.host(name) })
+    },
+  })
+}
+
+export function useRemoveHostAlias(name: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (alias: string) => api.directory.removeHostAlias(name, alias),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: queryKeys.host(name) })
+    },
+  })
+}

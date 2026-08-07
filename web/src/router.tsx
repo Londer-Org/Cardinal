@@ -83,6 +83,12 @@ const hostsRoute = createRoute({
   component: lazyRouteComponent(() => import('@/views/hosts'), 'HostsView'),
 })
 
+const hostDetailRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/directory/hosts/$name',
+  component: lazyRouteComponent(() => import('@/views/host-detail'), 'HostDetailView'),
+})
+
 const applicationsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/integrations/applications',
@@ -107,6 +113,7 @@ const routeTree = rootRoute.addChildren([
   groupsRoute,
   groupDetailRoute,
   hostsRoute,
+  hostDetailRoute,
   applicationsRoute,
   recoveryRoute,
 ])

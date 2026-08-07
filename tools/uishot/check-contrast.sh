@@ -40,6 +40,16 @@ $PSQL -q -c "INSERT INTO sessions (subject_id, token_hash, valid_period, auth_me
 # A token, so /access/tokens has a row to interact with rather than an empty
 # state. The hash is of a value nothing knows, which is the point: this exists
 # to be listed and clicked, never to authenticate.
+# A host with an alias and a group, so the detail page has something on every
+# panel rather than four empty states.
+$PSQL -q -c "INSERT INTO entities (type, name, display_name)
+             VALUES ('host','uishot-web.prod','Contrast host')
+             ON CONFLICT (type,name) DO NOTHING" >/dev/null
+$PSQL -q -c "INSERT INTO host_aliases (host_id, name)
+             SELECT e.id, 'uishot-web.example.com' FROM entities e
+              WHERE e.name='uishot-web.prod'
+             ON CONFLICT DO NOTHING" >/dev/null
+
 $PSQL -q -c "INSERT INTO access_tokens (subject_id, name, token_hash, prefix,
                                         valid_period, created_by)
              SELECT e.id, 'nightly export', sha256('uishot-fixture'::bytea),
@@ -85,6 +95,7 @@ PAGES=(
   /directory/people
   /directory/groups
   /directory/hosts
+  /directory/hosts/uishot-web.prod
   /directory/recovery
   /integrations/applications
 )

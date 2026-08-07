@@ -319,7 +319,20 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("GET /api/directory/groups", people(s.handleListGroups))
 	// The same tier as people and groups: a host is a directory entity, and
 	// whoever manages who may reach a machine needs to see which machines exist.
+	//
+	// Creating one, handing it a way in, and granting it another name it may
+	// prove all sit here too. That last one is the sharpest: an alias is the
+	// power to *be* that name to anything trusting the CA, so it belongs behind
+	// the same door as group membership rather than somewhere more convenient.
 	mux.Handle("GET /api/directory/hosts", people(s.handleListHosts))
+	mux.Handle("POST /api/directory/hosts", people(s.handleCreateHost))
+	mux.Handle("GET /api/directory/hosts/{name}", people(s.handleGetHost))
+	mux.Handle("POST /api/directory/hosts/{name}/enrollment",
+		people(s.handleIssueHostEnrollment))
+	mux.Handle("POST /api/directory/hosts/{name}/aliases",
+		people(s.handleAddHostAlias))
+	mux.Handle("DELETE /api/directory/hosts/{name}/aliases/{alias}",
+		people(s.handleRemoveHostAlias))
 	mux.Handle("GET /api/directory/applications", people(s.handleListApplicationNames))
 	mux.Handle("POST /api/directory/groups", people(s.handleCreateGroup))
 	mux.Handle("GET /api/directory/groups/{name}", people(s.handleGetGroup))
@@ -407,8 +420,24 @@ func (s *Server) spaHandler() http.Handler {
 			files.ServeHTTP(w, r)
 			return
 		}
-		if strings.Contains(path, ".") {
-			// Looks like an asset that genuinely is not there.
+
+		// A missing asset must 404 rather than quietly render the app: a stale
+		// bundle asking for a chunk that no longer exists would otherwise
+		// receive index.html, fail to parse it as JavaScript, and produce a
+		// blank page with a syntax error instead of a clear 404.
+		//
+		// The test for "asset" is the path's prefix, not whether it contains a
+		// dot. It was the dot, and that 404'd every deep link to an entity whose
+		// name has one — which is every host with a fully-qualified name, and
+		// logins and group names too, since a dot is legal in all of them
+		// (`namePattern` in internal/directory). /directory/hosts/web-01.prod
+		// was a server 404 while /directory/hosts worked, so the bug only
+		// appeared on a hard refresh or a pasted link.
+		//
+		// Vite emits everything hashed under assets/, and the only other files
+		// are index.html and the favicon, both of which exist — so anything
+		// missing under assets/ is genuinely gone and anything else is a route.
+		if strings.HasPrefix(path, "assets/") {
 			http.NotFound(w, r)
 			return
 		}

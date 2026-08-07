@@ -272,10 +272,21 @@ permit (
     resource
 );
 
+// Every action the shipped rule of this name covers, not just the first.
+//
+// It listed AdministerDirectory alone, which quietly made this fixture a
+// stricter world than the real policy set: anything behind ManageUsers — the
+// tier people, groups and hosts sit on — was denied to an administrator while
+// the fixture was active. No test noticed until one wanted to read a host page
+// with an admin session, because none of them had reason to.
 @id("directory-admins-may-administer")
 permit (
     principal in Cardinal::Group::"00000000-0000-7000-8000-00000000ad11",
-    action == Cardinal::Action::"AdministerDirectory",
+    action in [
+        Cardinal::Action::"AdministerDirectory",
+        Cardinal::Action::"ManageUsers",
+        Cardinal::Action::"ManageApplications"
+    ],
     resource
 );
 

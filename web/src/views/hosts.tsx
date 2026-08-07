@@ -1,3 +1,4 @@
+import { Link } from '@tanstack/react-router'
 import { CircleSlashIcon, TagIcon } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { ErrorMessage } from '@/components/ErrorMessage'
@@ -5,6 +6,7 @@ import { DataTable, type Column } from '@/components/DataTable'
 import { useHosts } from '@/features/directory/useDirectory'
 import { usePageState } from '@/features/directory/usePageState'
 import type { DirectoryHost } from '@/lib/api'
+import { CreateHost } from '@/features/directory/CreateHost'
 import { RequiresFreshAuth } from '@/features/auth/RequiresFreshAuth'
 import { ViewHeader } from '@/views/ViewHeader'
 
@@ -66,9 +68,17 @@ function HostsViewBody() {
       header: 'Name',
       cell: (h) => (
         <span className="flex items-center gap-2">
-          <span className={h.disabled ? 'font-medium line-through' : 'font-medium'}>
+          <Link
+            to="/directory/hosts/$name"
+            params={{ name: h.name }}
+            className={
+              h.disabled
+                ? 'font-medium line-through underline-offset-4 hover:underline'
+                : 'font-medium underline-offset-4 hover:underline'
+            }
+          >
             {h.name}
-          </span>
+          </Link>
           {h.disabled && (
             <Badge variant="secondary" className="font-normal">
               <CircleSlashIcon className="size-3" />
@@ -132,6 +142,7 @@ function HostsViewBody() {
       <ViewHeader
         title="Hosts"
         description="Machines that run cardinal-agent. Last seen is when each one last asked what it should serve."
+        action={<CreateHost />}
       />
 
       <ErrorMessage error={error} />
@@ -149,7 +160,7 @@ function HostsViewBody() {
         onSearch={setSearch}
         searchPlaceholder="Search hosts and their names"
         isPending={isPending}
-        empty="No hosts yet. Create one with `cardinal host create`, then enrol it."
+        empty="No hosts yet. Add one, then enrol the machine from its page."
       />
     </div>
   )

@@ -282,3 +282,25 @@ export const enrollRequest = z.object({
   email: optionalEmail,
 })
 export type EnrollRequest = z.infer<typeof enrollRequest>
+
+export const createHostRequest = z.object({
+  name: entityName,
+  displayName,
+})
+export type CreateHostRequest = z.infer<typeof createHostRequest>
+
+/**
+ * Another name a machine may prove it is.
+ *
+ * MIRRORS the store, which requires a valid entity name and refuses one another
+ * host already holds — that refusal names the holder and arrives from the
+ * server, because the browser cannot know who has what.
+ *
+ * Worth reading twice before adding one: an alias is the power to *be* that
+ * name to anything trusting the certificate authority. `cardinal host alias`
+ * has the same weight and no dialog around it.
+ */
+export const hostAliasRequest = z.object({
+  alias: entityName,
+})
+export type HostAliasRequest = z.infer<typeof hostAliasRequest>
