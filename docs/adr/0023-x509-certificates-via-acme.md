@@ -95,6 +95,13 @@ short-lived certificates for enrolled hosts and services over ACME. Revocation
 for a certificate measured in hours is renewal refusal, not a CRL, and that
 should stay true rather than drifting into building a general-purpose PKI.
 
+**Whether an existing root can be imported is open.** The SSH side generates its
+own key because there is rarely an existing SSH CA to adopt. X.509 is the
+opposite: most organisations already have a root they intend to keep, and
+"Cardinal generates it or nothing" would be a poor reason to run a second CA
+alongside. Importing a root — or, better, an intermediate signed by one that
+stays offline — should be supported, and the shape of that is not yet decided.
+
 **It does not make Cardinal a FreeIPA replacement.** DNS remains out of scope,
 Windows remains out of scope, and a site needing those still needs them. This
 closes one of the three reasons FreeIPA survives a migration, not all three.
