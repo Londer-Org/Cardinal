@@ -309,16 +309,18 @@ USER   WHAT  NOW   CARDINAL  VERDICT
 alice  uid   1234  100003    blocking
 ```
 
-If FreeIPA says alice is 1234 and Cardinal says 100003, then the moment Cardinal
-wins every file she owns belongs to a stranger. The filesystem recorded a number
+If the machine already says alice is 1234 and Cardinal says 100003, then the
+moment Cardinal wins every file she owns belongs to a stranger. The filesystem
+recorded a number
 ([ADR 0028](adr/0028-shadow-mode-reports-and-does-not-act.md)). Everything else
 — a moved home directory, sudo appearing or disappearing, groups gained — is
 recoverable and is reported for review rather than as a stop sign.
 
-A non-zero exit means blocking, so this can be the gate in whatever runs it
-across a fleet. People SSSD serves that Cardinal has never heard of are
-invisible — enumeration is off by default on both — so name them with
-`-users alice,bob`.
+It asks through `getent` and `sudo`, so it does not care what is behind NSS
+today — `sssd`, `nss_ldap`, plain files. A non-zero exit means blocking, so this
+can be the gate in whatever runs it across a fleet. Accounts the machine already
+resolves and Cardinal has never heard of are invisible — enumeration is usually
+off on both sides — so name them with `-users alice,bob`.
 
 **The cache answers lookups; the network only updates it.** A host that cannot
 reach Cardinal keeps resolving the people it last knew about, across a reboot,

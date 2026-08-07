@@ -234,9 +234,10 @@ echo "  correctly refused — so the acceptance above was the certificate, not l
 # Shadow mode
 #
 # The comparison a migration turns on, run against real getent and real sudo.
-# The interesting case is a uid that disagrees: a local account with the same
-# name and a different number is exactly the FreeIPA-to-Cardinal situation, and
-# exactly the one that cannot be undone.
+# The interesting case is a uid that disagrees: an existing account with the same
+# name and a different number. Here it is a plain /etc/passwd entry, because the
+# comparison does not care where the machine's answer comes from — it asks
+# getent, which is whatever NSS is configured with.
 # ---------------------------------------------------------------------------
 
 echo

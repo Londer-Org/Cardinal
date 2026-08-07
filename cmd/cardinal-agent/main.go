@@ -492,8 +492,9 @@ func runShadow(ctx context.Context, args []string) error {
 	}
 
 	// Names Cardinal has never heard of, which is the one thing this cannot
-	// discover on its own: SSSD disables enumeration by default, so there is no
-	// asking the machine who else it knows. Passed separately from the
+	// discover on its own: directory-backed NSS providers disable enumeration by
+	// default, so there is usually no asking the machine who else it knows
+	// about. Passed separately from the
 	// assignment because the question is different — "does Cardinal know this
 	// person at all", not "do the two agree about them".
 	var alsoCheck []string
@@ -567,6 +568,7 @@ func printReport(report *shadow.Report) {
 	}
 
 	fmt.Fprintln(os.Stderr,
-		"\n  Note: people SSSD serves that Cardinal has never heard of are invisible\n"+
-			"  here — enumeration is disabled by default on both. Name them with -users.")
+		"\n  Note: accounts this machine can already resolve and Cardinal has never\n"+
+			"  heard of are invisible here — enumeration is usually off on both\n"+
+			"  sides. Name them with -users.")
 }

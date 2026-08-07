@@ -7,7 +7,7 @@ import (
 	"github.com/arthur-lonfils/cardinal/internal/shadow"
 )
 
-// fakeSystem is a machine with whatever SSSD is currently telling it.
+// fakeSystem is a machine with whatever NSS is currently telling it.
 type fakeSystem struct {
 	users map[string]shadow.PosixRecord
 	sudo  map[string]bool
@@ -35,8 +35,8 @@ func findingFor(t *testing.T, report *shadow.Report, user, what string) shadow.F
 
 // TestAUIDMismatchIsBlocking.
 //
-// The one finding the whole package exists for. If FreeIPA says alice is 1234
-// and Cardinal says 100003, cutting over hands every file she owns to a
+// The one finding the whole package exists for. If the machine says alice is
+// 1234 and Cardinal says 100003, cutting over hands every file she owns to a
 // stranger — the filesystem recorded a number, and nothing afterwards undoes it.
 func TestAUIDMismatchIsBlocking(t *testing.T) {
 	system := fakeSystem{
@@ -240,7 +240,7 @@ func TestAGIDMismatchIsAlsoBlocking(t *testing.T) {
 
 // TestSomebodyCardinalHasNeverHeardOf.
 //
-// Named with -users, because enumeration is off on both sides. The question is
+// Named with -users, because enumeration is usually off on both sides. The question is
 // "does Cardinal know them at all", and answering it by comparing against an
 // empty record would say Cardinal wants uid 0 — which is what a live run
 // actually produced for root before this existed.

@@ -2,17 +2,24 @@
 // currently does, and changes nothing.
 //
 // It is the most important migration feature and the least glamorous. Cutting a
-// host over from SSSD is only safe if the two agree about the things a mistake
-// cannot be undone in — and there is exactly one of those. If FreeIPA says alice
-// is uid 1234 and Cardinal says 100003, then the moment Cardinal wins, every
-// file alice owns belongs to a stranger and every file the stranger owns belongs
-// to alice. No amount of care afterwards fixes it, because the filesystem
-// recorded a number and the number is what changed.
+// host over is only safe if Cardinal and the machine agree about the things a
+// mistake cannot be undone in — and there is exactly one of those. If the
+// machine says alice is uid 1234 and Cardinal says 100003, then the moment
+// Cardinal wins, every file alice owns belongs to a stranger and every file the
+// stranger owns belongs to alice. No amount of care afterwards fixes it, because
+// the filesystem recorded a number and the number is what changed.
+//
+// Deliberately incurious about where the machine's answer comes from. It asks
+// through getent, which is the whole NSS chain — sssd against LDAP or Active
+// Directory, nss_ldap, plain /etc/passwd, or something nobody here has heard of.
+// Nothing in this package knows or needs to know which, and a version that
+// queried a particular directory would work for one kind of deployment and be
+// useless for the rest.
 //
 // So this reports and does not act. Strictly: no varlink socket, no sudoers
 // file, no certificate. ADR 0020 already noted why that has to be absolute —
-// comparing the agent's answers against SSSD's is meaningless if the agent is
-// already the thing answering.
+// comparing the agent's answers against the machine's is meaningless if the
+// agent is already the thing answering.
 package shadow
 
 import (
@@ -68,11 +75,11 @@ type Report struct {
 
 	// Unchecked names people the comparison could not reach a verdict on.
 	//
-	// Not an oversight — a limitation worth printing. SSSD disables enumeration
-	// by default, exactly as Cardinal does and for the same reason, so there is
-	// no way to ask the machine "who else do you know about". Somebody SSSD
-	// serves and Cardinal has never heard of is invisible here, and the only
-	// remedy is to name them.
+	// Not an oversight — a limitation worth printing. Directory-backed NSS
+	// providers disable enumeration by default, exactly as Cardinal does and for
+	// the same reason, so there is usually no way to ask the machine "who else
+	// do you know about". Somebody it can resolve and Cardinal has never heard
+	// of is invisible here, and the only remedy is to name them.
 	Unchecked []string `json:"unchecked,omitempty"`
 }
 
@@ -107,9 +114,9 @@ type PosixRecord struct {
 
 // System is the machine being compared against.
 //
-// An interface so the comparison can be tested without a machine that has SSSD,
-// FreeIPA and a directory of people on it — and so that what is being asked of
-// the system is written down in one place rather than spread across shell-outs.
+// An interface so the comparison can be tested without a machine wired up to a
+// real directory — and so that what is being asked of the system is written down
+// in one place rather than spread across shell-outs.
 type System interface {
 	// LookupUser returns what NSS currently answers. The second result
 	// distinguishes "no such user" from a lookup that failed, because they mean
@@ -321,8 +328,8 @@ func groupDifference(local, cardinal []string) (lost, gained []string) {
 //
 // Through getent and sudo rather than through Go's os/user, which reads
 // /etc/passwd directly when cgo is disabled — and would therefore report that
-// nobody SSSD serves exists at all, turning every comparison into a false
-// "additive" and making the whole exercise say the migration is safe.
+// nobody served by a directory exists at all, turning every comparison into a
+// false "additive" and making the whole exercise say the migration is safe.
 type Local struct{}
 
 // LookupUser runs getent, which is the whole NSS chain and not a file.
