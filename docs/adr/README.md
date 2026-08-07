@@ -36,6 +36,7 @@ isn't finished.
 | [0024](0024-hosts-prove-possession-not-a-secret.md) | A host proves possession of a key, not knowledge of a secret | Accepted |
 | [0025](0025-a-host-learns-only-its-own-people.md) | A host learns only the people who may log into it | Accepted |
 | [0026](0026-sudo-is-as-strong-as-the-shell.md) | Sudo is exactly as strong as the shell that reaches it | Accepted |
+| [0027](0027-a-machine-proves-its-own-name.md) | A machine proves its own name | Accepted |
 
 ## Conventions
 

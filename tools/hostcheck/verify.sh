@@ -155,5 +155,81 @@ timeout 10 sudo -l -U cardinaltest >/dev/null 2>&1 \
     || fail "sudo did not recover after the broken file was removed" "still failing"
 echo "  recovers once removed"
 
+# ---------------------------------------------------------------------------
+# Host certificates
+#
+# The claim the feature rests on: a client that trusts the authority verifies
+# the machine's name and is never asked to accept a fingerprint. No Go test can
+# make it, because the only opinion that counts is a real ssh client's.
+# ---------------------------------------------------------------------------
+
 echo
-echo "PASS: nss-systemd agrees with the provider, and sudo honours the rendered file"
+echo "== the certificate Cardinal signed for this machine"
+ssh-keygen -L -f /etc/ssh/ssh_host_ed25519_key-cert.pub | sed 's/^/  /'
+
+got=$(ssh-keygen -L -f /etc/ssh/ssh_host_ed25519_key-cert.pub)
+case "$got" in
+    *"Type: ssh-ed25519-cert-v01@openssh.com host certificate"*) ;;
+    *) fail "ssh-keygen does not read this as a host certificate" "$got" ;;
+esac
+case "$got" in
+    *"Principals:"*"cardinal-verify"*) ;;
+    *) fail "the principal is missing" "$got" ;;
+esac
+echo "  ssh-keygen reads it as a host certificate for cardinal-verify"
+
+cat > /etc/ssh/sshd_config.d/50-cardinal.conf <<'CONF'
+HostCertificate /etc/ssh/ssh_host_ed25519_key-cert.pub
+CONF
+timeout 10 sshd -t || fail "sshd rejected the drop-in" "sshd -t failed"
+echo "  sshd -t accepts the drop-in that presents it"
+
+/usr/sbin/sshd -o "ListenAddress=127.0.0.1:2222" -o "PidFile=/tmp/sshd.pid"
+i=0
+while [ ! -f /tmp/sshd.pid ]; do
+    i=$((i + 1))
+    [ "$i" -gt 50 ] && { echo "FAIL: sshd did not start"; exit 1; }
+    sleep 0.1
+done
+
+# One line, for the whole fleet. This is what replaces every fingerprint anybody
+# would otherwise have been asked to accept.
+mkdir -p /root/.ssh
+printf '@cert-authority cardinal-verify %s' "$(cat /tmp/cardinal-ca.pub)" > /root/.ssh/known_hosts
+chmod 600 /root/.ssh/known_hosts
+echo "  known_hosts: $(cut -c1-60 /root/.ssh/known_hosts)…"
+
+echo "== ssh with StrictHostKeyChecking=yes and no fingerprint on file"
+# Host verification happens before user authentication, so "Permission denied"
+# means the host was verified and only the login failed — which is exactly what
+# is being tested. "Host key verification failed" would mean the opposite.
+got=$(timeout 20 ssh -p 2222 -o StrictHostKeyChecking=yes -o BatchMode=yes \
+        -o UserKnownHostsFile=/root/.ssh/known_hosts \
+        -o HostKeyAlias=cardinal-verify \
+        nobody@127.0.0.1 true 2>&1 || true)
+echo "$got" | sed 's/^/  /'
+case "$got" in
+    *"Host key verification failed"*)
+        fail "the client did not accept the certificate" "$got" ;;
+    *"Permission denied"*) ;;
+    *) fail "unexpected ssh outcome" "$got" ;;
+esac
+echo "  the host was verified by certificate; only the login was refused"
+
+echo "== the same connection with the authority not trusted"
+# The control. Without it the check above would pass just as happily against a
+# client that verifies nothing.
+printf '' > /root/.ssh/known_hosts
+got=$(timeout 20 ssh -p 2222 -o StrictHostKeyChecking=yes -o BatchMode=yes \
+        -o UserKnownHostsFile=/root/.ssh/known_hosts \
+        -o HostKeyAlias=cardinal-verify \
+        nobody@127.0.0.1 true 2>&1 || true)
+case "$got" in
+    *"Host key verification failed"*) ;;
+    *) fail "ssh accepted an unknown host, so the check above proved nothing" "$got" ;;
+esac
+echo "  correctly refused — so the acceptance above was the certificate, not luck"
+
+echo
+echo "PASS: nss-systemd agrees with the provider, sudo honours the rendered file,"
+echo "      and a real ssh client verifies this machine by certificate"

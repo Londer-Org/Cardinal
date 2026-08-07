@@ -12,6 +12,8 @@ package main
 
 import (
 	"context"
+	"crypto/ed25519"
+	"crypto/rand"
 	"fmt"
 	"net"
 	"os"
@@ -20,8 +22,11 @@ import (
 	"time"
 
 	"github.com/arthur-lonfils/cardinal/internal/agent"
+	"github.com/arthur-lonfils/cardinal/internal/sshca"
 	"github.com/arthur-lonfils/cardinal/internal/sudoers"
 	"github.com/arthur-lonfils/cardinal/internal/userdb"
+	"github.com/google/uuid"
+	"golang.org/x/crypto/ssh"
 )
 
 func main() { os.Exit(main1()) }
@@ -68,6 +73,11 @@ func main1() int {
 		return 1
 	}
 
+	if err := writeHostCertificate(); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
+
 	if err := os.MkdirAll(userdb.DefaultRunDir, 0o755); err != nil { //nolint:gosec // matches systemd's own mode
 		fmt.Fprintln(os.Stderr, err)
 		return 1
@@ -97,4 +107,54 @@ func main1() int {
 		return 1
 	}
 	return 0
+}
+
+// writeHostCertificate signs this container's SSH host key with a throwaway
+// authority, using the same code path the server uses.
+//
+// The point is to hand a real OpenSSH client a certificate built by Cardinal
+// rather than by ssh-keygen. A certificate that verifies against our own
+// verifier proves nothing — that is exactly how CertChecker caught this project
+// out once already.
+func writeHostCertificate() error {
+	_, caPrivate, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		return err
+	}
+	caSigner, err := ssh.NewSignerFromKey(caPrivate)
+	if err != nil {
+		return err
+	}
+
+	hostKey, err := os.ReadFile("/etc/ssh/ssh_host_ed25519_key.pub")
+	if err != nil {
+		return fmt.Errorf("reading the host key: %w", err)
+	}
+	publicKey, _, _, _, err := ssh.ParseAuthorizedKey(hostKey)
+	if err != nil {
+		return err
+	}
+
+	cert, err := sshca.SignHostCertificate(caSigner, sshca.HostRequest{
+		HostID:     uuid.Nil,
+		Name:       "cardinal-verify",
+		PublicKey:  publicKey,
+		Principals: []string{"cardinal-verify"},
+	})
+	if err != nil {
+		return err
+	}
+
+	//nolint:gosec // sshd reads this as any user; it is a certificate, not a key
+	if err := os.WriteFile("/etc/ssh/ssh_host_ed25519_key-cert.pub",
+		ssh.MarshalAuthorizedKey(cert), 0o644); err != nil {
+		return err
+	}
+
+	// The authority's public half, for the client's known_hosts. This is the one
+	// line that replaces every fingerprint anybody would otherwise have accepted.
+	//
+	//nolint:gosec // a public key, in a container that exists for one command
+	return os.WriteFile("/tmp/cardinal-ca.pub",
+		ssh.MarshalAuthorizedKey(caSigner.PublicKey()), 0o644)
 }

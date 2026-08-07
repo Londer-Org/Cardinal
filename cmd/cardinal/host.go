@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"net/http"
@@ -22,7 +23,7 @@ import (
 // which key it came in with.
 func runHost(ctx context.Context, args []string) error {
 	if len(args) == 0 {
-		return fmt.Errorf("%w: cardinal host <create|enroll|join|whoami|credentials>", errUsage)
+		return fmt.Errorf("%w: cardinal host <create|enroll|join|whoami|credentials|alias>", errUsage)
 	}
 	switch args[0] {
 	case "enroll":
@@ -33,6 +34,8 @@ func runHost(ctx context.Context, args []string) error {
 		return runHostWhoami(ctx, args[1:])
 	case "credentials":
 		return runHostCredentials(ctx, args[1:])
+	case "alias":
+		return runHostAlias(ctx, args[1:])
 	default:
 		return runEntityCommand(ctx, "host", args)
 	}
@@ -277,4 +280,86 @@ func runHostWhoami(ctx context.Context, args []string) error {
 		fmt.Printf("  groups       %s\n", strings.Join(out.Groups, ", "))
 	}
 	return nil
+}
+
+// runHostAlias manages the extra names a machine may prove.
+//
+// Its own verb rather than a flag on `host create`, because granting a name is a
+// separate decision from creating a machine and is made later, by somebody
+// thinking about DNS rather than about inventory.
+func runHostAlias(ctx context.Context, args []string) error {
+	if len(args) == 0 {
+		return fmt.Errorf("%w: cardinal host alias <list|add|remove> <host> [name]", errUsage)
+	}
+
+	fs := flag.NewFlagSet("host alias", flag.ContinueOnError)
+	dsnFlag := fs.String("dsn", "", "PostgreSQL connection string")
+	pos, err := parse(fs, args[1:])
+	if err != nil {
+		return errUsage
+	}
+
+	verb := args[0]
+	if verb != "list" && verb != "add" && verb != "remove" {
+		return fmt.Errorf("%w: cardinal host alias <list|add|remove>", errUsage)
+	}
+	want := 2
+	if verb == "list" {
+		want = 1
+	}
+	if len(pos) != want {
+		return fmt.Errorf("%w: cardinal host alias %s <host>%s", errUsage, verb,
+			map[bool]string{true: "", false: " <name>"}[verb == "list"])
+	}
+
+	s, err := open(ctx, *dsnFlag)
+	if err != nil {
+		return err
+	}
+	defer s.Close()
+
+	host, err := s.LookupEntity(ctx, directory.TypeHost, pos[0])
+	if err != nil {
+		return fmt.Errorf("no such host %q", pos[0])
+	}
+
+	switch verb {
+	case "list":
+		principals, err := s.HostPrincipals(ctx, host.ID)
+		if err != nil {
+			return err
+		}
+		for i, name := range principals {
+			if i == 0 {
+				fmt.Printf("%s\t(directory name)\n", name)
+				continue
+			}
+			fmt.Println(name)
+		}
+		return nil
+
+	case "add":
+		if err := s.AddHostAlias(ctx, host.ID, pos[1], nil); err != nil {
+			if errors.Is(err, store.ErrNameTaken) {
+				return fmt.Errorf("%w\n\n  Two machines answering to one name is the "+
+					"ambiguity host certificates exist to remove.", err)
+			}
+			return err
+		}
+		fmt.Printf("%s may now prove it is %s\n", host.Name, pos[1])
+		fmt.Fprintln(os.Stderr,
+			"\n  Takes effect when the agent next renews its certificate, which is\n"+
+				"  within a third of the certificate's life rather than immediately.")
+		return nil
+
+	default:
+		if err := s.RemoveHostAlias(ctx, host.ID, pos[1], nil); err != nil {
+			return err
+		}
+		fmt.Printf("%s no longer holds %s\n", host.Name, pos[1])
+		fmt.Fprintln(os.Stderr,
+			"\n  The certificate already issued keeps working until it expires —\n"+
+				"  there is no revocation list, which is why they are measured in days.")
+		return nil
+	}
 }

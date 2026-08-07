@@ -214,6 +214,8 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("GET /api/hosts/me", s.requireHost(http.HandlerFunc(s.handleHostSelf)))
 	mux.Handle("GET /api/hosts/assignment",
 		s.requireHost(http.HandlerFunc(s.handleHostAssignment)))
+	mux.Handle("POST /api/hosts/certificate",
+		s.requireHost(http.HandlerFunc(s.handleIssueHostCertificate)))
 
 	// ── Host access ────────────────────────────────────────────────────────
 	//

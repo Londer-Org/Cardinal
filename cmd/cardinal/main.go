@@ -181,6 +181,12 @@ HOSTS (a machine proving which host it is)
   host join -server <url> -token <tok>     Run on the machine. Generates its key
                                            and registers the public half.
   host whoami -server <url>                Ask Cardinal who this machine is
+  host alias list <host>                   Names this machine may prove
+  host alias add <host> <name>             Grant another name. Unique across
+                                           the fleet: two machines answering to
+                                           one name is the ambiguity host
+                                           certificates exist to remove.
+  host alias remove <host> <name>          Withdraw one
 
   join and whoami run on the host and never touch the database. Everything else
   here is administration and does.

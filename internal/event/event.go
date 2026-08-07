@@ -69,6 +69,11 @@ const (
 	// POSIX identity. A uid is permanent by design — every file on every disk
 	// records it — so the moment one is handed out is worth a line in a journal
 	// nobody can edit afterwards.
+	// Host aliases. Granting a machine another name is granting it the power to
+	// be that name, so it is as auditable as any other grant.
+	ActionHostAliasAdded   = "host.alias_added"
+	ActionHostAliasRemoved = "host.alias_removed"
+
 	ActionPOSIXIdentityAssigned  = "posix.identity_assigned"
 	ActionPOSIXAttributesChanged = "posix.attributes_changed"
 

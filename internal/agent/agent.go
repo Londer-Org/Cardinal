@@ -42,6 +42,15 @@ type Agent struct {
 	// real /etc is never in reach of one.
 	SudoersPath string
 
+	// HostKeyPath is the machine's own SSH host key. Empty disables host
+	// certificate renewal, which is what a host that is not reached over SSH
+	// wants — and what every test not about certificates wants, so that a
+	// machine's real /etc/ssh is never in reach of one.
+	HostKeyPath      string
+	HostCertPath     string
+	SSHDDropInPath   string
+	HostCertValidity time.Duration
+
 	Log *slog.Logger
 
 	// snapshot is swapped wholesale on each successful refresh, so a lookup
@@ -130,6 +139,15 @@ func (a *Agent) Refresh(ctx context.Context) (*Assignment, error) {
 	// not land would make the machine less current, not safer.
 	if err := a.writeSudoers(ctx, &fetched); err != nil {
 		a.log().Error("sudoers were not updated; the previous file is still in place",
+			"error", err)
+	}
+
+	// Likewise independent of the refresh succeeding. A certificate that could
+	// not be renewed is a machine whose name will eventually stop being provable
+	// — days away, and no reason to discard identity records that are correct
+	// now.
+	if _, err := a.RefreshHostCertificate(ctx); err != nil {
+		a.log().Error("the host certificate was not renewed; the previous one is still installed",
 			"error", err)
 	}
 

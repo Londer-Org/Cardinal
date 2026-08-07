@@ -665,6 +665,12 @@ erDiagram
 
 ```mermaid
 erDiagram
+    host_aliases {
+        uuid host_id PK
+        text name PK
+        timestamp_with_time_zone added_at
+        uuid added_by FK
+    }
     host_credentials {
         uuid id PK
         uuid host_id FK
@@ -715,6 +721,8 @@ erDiagram
         timestamp_with_time_zone issued_at
         timestamp_with_time_zone expires_at
     }
+    entities ||--o{ host_aliases : added_by
+    entities ||--o{ host_aliases : host_id
     entities ||--o{ host_credentials : host_id
     entities ||--o{ host_enrollment_tokens : host_id
     entities ||--o{ host_enrollment_tokens : issued_by
@@ -723,6 +731,17 @@ erDiagram
     entities ||--o{ ssh_certificates : host_id
     entities ||--o{ ssh_certificates : subject_id
 ```
+
+### `host_aliases`
+
+Additional names a host may hold a certificate for. Unique across all hosts.
+
+| Column | Type | Null | Default | Notes |
+|---|---|---|---|---|
+| `host_id` | `uuid` | no |  | → `entities.id` |
+| `name` | `text` | no |  |  |
+| `added_at` | `timestamp with time zone` | no | `now()` |  |
+| `added_by` | `uuid` | yes |  | → `entities.id` |
 
 ### `host_credentials`
 

@@ -23,6 +23,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
@@ -69,6 +70,8 @@ func run(ctx context.Context, args []string) error {
 		return runStatus(args[1:])
 	case "sudoers":
 		return runSudoers(ctx, args[1:])
+	case "hostcert":
+		return runHostCert(args[1:])
 	case "help", "-h", "--help":
 		usage()
 		return nil
@@ -91,6 +94,7 @@ USAGE
   status                                What is cached, and how old it is.
   sudoers                               Print the drop-in that would be
                                         installed, without installing it.
+  hostcert                              Show the installed host certificate.
 
 FLAGS
   -key <path>        this host's private key (default `+hostclient.DefaultKeyPath+`)
@@ -99,6 +103,11 @@ FLAGS
   -socket-dir <path> where nss-systemd looks (default `+userdb.DefaultRunDir+`)
   -sudoers <path>    drop-in to render (default `+sudoers.DefaultPath+`;
                      empty disables sudoers rendering entirely)
+  -host-key <path>   this machine's SSH host key (default
+                     `+agent.DefaultHostKeyPath+`; empty disables
+                     host certificate renewal)
+  -host-cert <path>  where to install the signed certificate
+  -sshd-config <p>   sshd drop-in pointing at it
 
 The cache is what answers lookups; the network is only how it is updated. A host
 that cannot reach Cardinal keeps resolving the people it last knew about, which
@@ -146,6 +155,12 @@ func runAgent(ctx context.Context, args []string) error {
 	socketDir := fs.String("socket-dir", userdb.DefaultRunDir, "where nss-systemd looks")
 	sudoersPath := fs.String("sudoers", sudoers.DefaultPath,
 		"drop-in to render; empty disables sudoers rendering")
+	hostKeyPath := fs.String("host-key", agent.DefaultHostKeyPath,
+		"this machine's SSH host key; empty disables host certificate renewal")
+	hostCertPath := fs.String("host-cert", agent.DefaultHostCertPath,
+		"where to install the signed host certificate")
+	sshdDropIn := fs.String("sshd-config", agent.DefaultSSHDDropIn,
+		"sshd drop-in pointing at the certificate; empty disables writing it")
 	if err := fs.Parse(args); err != nil {
 		return errUsage
 	}
@@ -167,6 +182,10 @@ func runAgent(ctx context.Context, args []string) error {
 		Interval:    *interval,
 		SudoersPath: *sudoersPath,
 		Log:         log,
+
+		HostKeyPath:    *hostKeyPath,
+		HostCertPath:   *hostCertPath,
+		SSHDDropInPath: *sshdDropIn,
 	}
 
 	// Checked once at startup, and reported rather than repaired. A drop-in
@@ -361,5 +380,48 @@ func runSudoers(ctx context.Context, args []string) error {
 		return err
 	}
 	fmt.Fprintln(os.Stderr, "\n  visudo accepts this file.")
+	return nil
+}
+
+// runHostCert shows what this machine currently proves about itself.
+//
+// The question it answers is "why is ssh still asking me to accept a
+// fingerprint", and the answers are usually one of three: no certificate, a
+// certificate for names nobody types, or sshd not being told to present it.
+func runHostCert(args []string) error {
+	fs := flag.NewFlagSet("hostcert", flag.ContinueOnError)
+	certPath := fs.String("host-cert", agent.DefaultHostCertPath, "installed certificate")
+	dropIn := fs.String("sshd-config", agent.DefaultSSHDDropIn, "sshd drop-in")
+	if err := fs.Parse(args); err != nil {
+		return errUsage
+	}
+
+	cert, err := agent.ReadHostCertificate(*certPath)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return fmt.Errorf("no host certificate at %s — this machine still relies "+
+				"on users accepting its fingerprint", *certPath)
+		}
+		return err
+	}
+
+	fmt.Printf("%s\n\n", *certPath)
+	fmt.Printf("  serial      %d\n", cert.Serial)
+	fmt.Printf("  principals  %s\n", strings.Join(cert.Principals, ", "))
+	fmt.Printf("  expires     %s (in %s)\n",
+		cert.ValidUntil.Local().Format(time.RFC3339),
+		time.Until(cert.ValidUntil).Round(time.Minute))
+
+	// Having a certificate and not presenting it is the failure that looks like
+	// success, so it is checked rather than assumed.
+	if _, err := os.Stat(*dropIn); err != nil {
+		fmt.Fprintf(os.Stderr,
+			"\n  WARNING: %s does not exist, so sshd is probably not presenting\n"+
+				"  this certificate and clients still see a bare host key.\n", *dropIn)
+	}
+
+	fmt.Fprintln(os.Stderr,
+		"\n  For clients, in known_hosts — one line, for the whole fleet:\n"+
+			"    @cert-authority <pattern> $(cardinal ssh ca trust)")
 	return nil
 }

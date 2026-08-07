@@ -136,6 +136,16 @@ e2e-seed: ## Create the end-to-end user and activate the policy set
 	@$(COMPOSE_E2E) exec -T cardinal \
 		cardinal policy publish /tmp/cardinal.cedar -description 'e2e stack' -activate \
 		| sed 's/^/  /'
+	@# An authority key, so host certificates can be issued. -activate because
+	@# nothing in the stack trusts an older key: the careful two-step ordering
+	@# exists for a fleet that already has one, and there is no fleet here.
+	@# Guarded from out here: the image is distroless, so there is no shell in
+	@# the container to put the conditional in.
+	@if ! $(COMPOSE_E2E) exec -T cardinal cardinal ssh ca list 2>/dev/null | grep -q signing; then \
+		$(COMPOSE_E2E) exec -T cardinal cardinal ssh ca init -activate \
+			-config /etc/cardinal/cardinal.toml >/dev/null; \
+		echo "  SSH certificate authority created"; \
+	fi
 	@# The server loads policy at startup, so it has to be restarted to pick up
 	@# the version just activated.
 	@$(COMPOSE_E2E) restart cardinal >/dev/null

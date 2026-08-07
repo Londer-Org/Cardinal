@@ -177,6 +177,14 @@ The same property, twice over:
 | Who is uid 100003? | the agent's cache | yes |
 | May they log in? | a certificate issued minutes ago | yes, until it expires |
 | May they run as root? | `/etc/sudoers.d/50-cardinal` on disk | yes |
+| Is this really web-01? | a host certificate valid for days | yes |
+
+That last row is the most visible thing in the project. One line of
+`known_hosts` — `@cert-authority *.prod <key>` — replaces every fingerprint
+anybody would otherwise have been asked to accept, and clients can then run
+`StrictHostKeyChecking=yes` and get a hard failure instead of a prompt
+([ADR 0027](adr/0027-a-machine-proves-its-own-name.md)). The names a machine may
+prove come from the directory; nothing in its request is consulted.
 
 The sudoers file is rendered from the same assignment and validated with
 `visudo -c` before it is moved into place, so a bad render leaves the previous

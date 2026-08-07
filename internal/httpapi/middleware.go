@@ -306,7 +306,8 @@ func isOIDCProtocolPath(path string) bool {
 // is a decision to make, never something to inherit from a prefix.
 func isHostProtocolPath(path string) bool {
 	switch path {
-	case "/api/hosts/enroll", "/api/hosts/me", "/api/hosts/assignment":
+	case "/api/hosts/enroll", "/api/hosts/me", "/api/hosts/assignment",
+		"/api/hosts/certificate":
 		return true
 	}
 	return false

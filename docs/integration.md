@@ -266,6 +266,35 @@ that produced the shell. Read
 consequence is that an SSH session outlives its certificate and carries root the
 whole time.
 
+And it obtains a **host certificate**, which is the end of this:
+
+```
+The authenticity of host 'web-01.prod' can't be established.
+Are you sure you want to continue connecting (yes/no)?
+```
+
+Nobody compares that fingerprint against anything. With one line in
+`known_hosts` — for the whole fleet, forever — clients verify the machine
+instead:
+
+```
+@cert-authority *.prod  ssh-ed25519 AAAAC3Nz…    # cardinal ssh ca trust
+```
+
+Names come from the directory and never from the machine asking
+([ADR 0027](adr/0027-a-machine-proves-its-own-name.md)). A host called
+`web-01.prod` proves exactly that; anything else it should answer to is granted
+deliberately and is unique across the fleet:
+
+```bash
+cardinal host alias add web-01.prod git.example.com
+cardinal-agent hostcert            # what this machine currently proves
+```
+
+The agent writes the certificate and an `sshd_config.d` drop-in and stops — it
+will not restart sshd, because reloading the daemon carrying your session as a
+side effect of a periodic refresh is not a thing to do automatically.
+
 **The cache answers lookups; the network only updates it.** A host that cannot
 reach Cardinal keeps resolving the people it last knew about, across a reboot,
 indefinitely. That is not a degraded mode — combined with SSH certificates being

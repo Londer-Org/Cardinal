@@ -24,6 +24,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"math"
 	"time"
@@ -72,6 +73,144 @@ type Request struct {
 
 	// Validity overrides DefaultValidity when non-zero.
 	Validity time.Duration
+}
+
+// HostRequest is a machine asking Cardinal to vouch for its name.
+type HostRequest struct {
+	// HostID is the directory entity. Recorded so that "which machine held a
+	// certificate for git.example.com in March" is answerable.
+	HostID uuid.UUID
+
+	// Name is the host's directory name, for the certificate's key id.
+	Name string
+
+	// PublicKey is the machine's existing SSH host key. Deliberately not the
+	// key it authenticates to Cardinal with: that one is Cardinal's business and
+	// this one is already presented to every stranger who connects to port 22,
+	// so keeping them separate means a compromise of either is not both.
+	PublicKey ssh.PublicKey
+
+	// Principals are the names this certificate is good for, from the
+	// directory. Never from the request — a machine asking for a certificate
+	// naming git.example.com is asking to be git.example.com.
+	Principals []string
+
+	// Validity overrides DefaultHostValidity when non-zero.
+	Validity time.Duration
+}
+
+// DefaultHostValidity is how long a host certificate lasts.
+//
+// Days rather than the minutes a user certificate gets, and the asymmetry is
+// deliberate. A user certificate expiring costs one person one `cardinal ssh`;
+// a host certificate expiring costs every user of that machine a TOFU prompt at
+// once, during whatever is already going wrong. Seven days means Cardinal can be
+// unreachable for a week before anybody notices, and the agent renews at a third
+// of that.
+//
+// Not longer, because there is no revocation. A decommissioned machine keeps
+// being able to prove its name until the certificate expires, and a week of that
+// is a bounded problem where a year of it is not.
+const DefaultHostValidity = 7 * 24 * time.Hour
+
+// IssueHost signs a machine's host key.
+//
+// Separate from Issue rather than a flag on it, because almost every rule
+// differs: no extensions, principals that are names rather than accounts, a
+// validity measured in days, and a certificate type that OpenSSH will refuse to
+// use for the other purpose. Conflating them would make it possible to issue a
+// user certificate carrying a hostname, or a host certificate carrying
+// permit-pty, and neither would look wrong in a diff.
+func (c *CA) IssueHost(ctx context.Context, req HostRequest) (*ssh.Certificate, error) {
+	if req.PublicKey == nil {
+		return nil, errors.New("sshca: no host key to sign")
+	}
+	if len(req.Principals) == 0 {
+		// Same trap as a user certificate, and worse here: OpenSSH reads an
+		// empty principal list on a host certificate as "valid for every
+		// hostname", so this would mint a certificate that authenticates as
+		// anything at all.
+		return nil, errors.New("sshca: refusing to issue a host certificate with no principals")
+	}
+
+	key, err := c.store.ActiveSSHCAKey(ctx, c.seal)
+	if err != nil {
+		return nil, err
+	}
+
+	signer, err := ssh.NewSignerFromSigner(key.Signer())
+	if err != nil {
+		return nil, fmt.Errorf("sshca: preparing the authority key: %w", err)
+	}
+
+	cert, err := SignHostCertificate(signer, req)
+	if err != nil {
+		return nil, err
+	}
+	serial := cert.Serial
+
+	if err := c.store.RecordSSHCertificate(ctx, &store.SSHCertificateRecord{
+		Serial: serial,
+		// The host is both the subject and the host here, which reads oddly and
+		// is correct: the certificate is about the machine itself rather than
+		// about somebody's access to it.
+		SubjectID:  req.HostID,
+		HostID:     &req.HostID,
+		Principals: req.Principals,
+		CAKeyID:    key.ID,
+		KeyID:      cert.KeyId,
+		ExpiresAt:  goTime(cert.ValidBefore),
+	}); err != nil {
+		return nil, err
+	}
+
+	return cert, nil
+}
+
+// SignHostCertificate builds and signs the certificate itself.
+//
+// Split out from IssueHost so the construction can be exercised without a
+// database — which is what `make verify-host` needs to hand a real OpenSSH
+// client a real certificate from this code rather than one built by ssh-keygen
+// to look like it. Testing our signer against our own verifier is the trap this
+// project has hit before.
+func SignHostCertificate(signer ssh.Signer, req HostRequest) (*ssh.Certificate, error) {
+	if req.PublicKey == nil {
+		return nil, errors.New("sshca: no host key to sign")
+	}
+	if len(req.Principals) == 0 {
+		return nil, errors.New("sshca: refusing to issue a host certificate with no principals")
+	}
+
+	serial, err := newSerial()
+	if err != nil {
+		return nil, err
+	}
+
+	validity := req.Validity
+	if validity <= 0 {
+		validity = DefaultHostValidity
+	}
+	now := time.Now()
+
+	cert := &ssh.Certificate{
+		Key:             req.PublicKey,
+		Serial:          serial,
+		CertType:        ssh.HostCert,
+		KeyId:           req.Name + "@cardinal",
+		ValidPrincipals: req.Principals,
+		ValidAfter:      sshTime(now.Add(-clockSkew)),
+		ValidBefore:     sshTime(now.Add(validity)),
+		// No extensions and no critical options. Everything OpenSSH defines for
+		// a host certificate — force-command, source-address — belongs to the
+		// user side of the connection, and a host certificate carrying them is
+		// at best ignored and at worst a surprise.
+	}
+
+	if err := cert.SignCert(rand.Reader, signer); err != nil {
+		return nil, fmt.Errorf("sshca: signing host certificate: %w", err)
+	}
+	return cert, nil
 }
 
 // CA signs certificates with the directory's active authority key.

@@ -51,3 +51,13 @@ enabled = true
 # A fixture. Generate your own with
 # `openssl rand -base64 32` and keep it wherever the deployment's secrets live.
 signing_key_encryption_key = "e2e-fixture-signing-key-encryption-not-for-real-use"
+
+[ssh]
+enabled = true
+
+# Another fixture, and deliberately a different value from the OIDC one above.
+# ADR 0021: whoever holds this key can mint a certificate for any user on any
+# host, so one leaked configuration file must not yield both the token signer
+# and the fleet. Reusing the value here would make the example teach the wrong
+# lesson — and the config validator refuses it outright.
+ca_encryption_key = "e2e-fixture-ssh-ca-encryption-key-not-for-real-use"
