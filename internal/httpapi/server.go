@@ -15,6 +15,7 @@ import (
 	"github.com/arthur-lonfils/cardinal/internal/config"
 	"github.com/arthur-lonfils/cardinal/internal/oidcprovider"
 	"github.com/arthur-lonfils/cardinal/internal/policy"
+	"github.com/arthur-lonfils/cardinal/internal/sshca"
 	"github.com/arthur-lonfils/cardinal/internal/store"
 )
 
@@ -37,6 +38,11 @@ type Server struct {
 
 	clientIP *clientIPResolver
 	claims   *claims.Resolver
+
+	// sshCA is nil unless host access is configured. A certificate authority
+	// nobody has enrolled hosts against is a signing key sitting in a database
+	// for no reason, so it stays off until asked for.
+	sshCA *sshca.CA
 
 	// oidc is nil when the provider is disabled, which is the default: an
 	// identity provider nobody has registered clients for is attack surface
@@ -83,6 +89,11 @@ type Options struct {
 
 	// OIDC enables the OpenID Connect provider. Nil leaves it off.
 	OIDC *oidcprovider.Provider
+
+	// SSHCA enables host access by certificate. Nil leaves it off, which is
+	// the default: a certificate authority nobody has enrolled hosts against
+	// is a signing key in a database for no reason.
+	SSHCA *sshca.CA
 }
 
 func New(s *store.Store, a *auth.Service, cfg *config.Config, opts Options) (*Server, error) {
@@ -112,6 +123,7 @@ func New(s *store.Store, a *auth.Service, cfg *config.Config, opts Options) (*Se
 		clientIP:      resolver,
 		claims:        claims.NewResolver(s),
 		oidc:          opts.OIDC,
+		sshCA:         opts.SSHCA,
 	}
 	return srv, nil
 }
@@ -190,6 +202,16 @@ func (s *Server) Handler() http.Handler {
 		s.requireAuth(http.HandlerFunc(s.handleGenerateRecoveryCodes)))
 	mux.Handle("GET /api/recovery/codes/remaining",
 		s.requireAuth(http.HandlerFunc(s.handleRemainingRecoveryCodes)))
+
+	// ── Host access ────────────────────────────────────────────────────────
+	//
+	// The only place SSH access is decided. sshd does no thinking at login, so
+	// whatever this returns is what a host will believe for the certificate's
+	// lifetime.
+	if s.sshCA != nil {
+		mux.Handle("POST /api/ssh/certificate",
+			s.requireAuth(http.HandlerFunc(s.handleIssueSSHCertificate)))
+	}
 
 	// ── Traefik forwardAuth ────────────────────────────────────────────────
 	// Any method: Traefik mirrors the original request's method here, and a

@@ -16,6 +16,7 @@ import (
 	"github.com/arthur-lonfils/cardinal/internal/httpapi"
 	"github.com/arthur-lonfils/cardinal/internal/oidcprovider"
 	"github.com/arthur-lonfils/cardinal/internal/policy"
+	"github.com/arthur-lonfils/cardinal/internal/sshca"
 	"github.com/arthur-lonfils/cardinal/internal/store"
 	"github.com/arthur-lonfils/cardinal/web"
 )
@@ -77,11 +78,23 @@ func runServe(ctx context.Context, args []string) error {
 		log.Info("OpenID Connect provider enabled", "issuer", cfg.Server.PublicURL)
 	}
 
+	var hostCA *sshca.CA
+	if cfg.SSH.Enabled {
+		hostCA = sshca.New(st, cfg.SSH.CAEncryptionKey)
+		// Deliberately does not check that a key exists or is signing. A
+		// deployment enabling host access before publishing its authority is
+		// in a normal intermediate state, and refusing to start would make the
+		// safe order — publish, distribute, then activate — the one that
+		// prevents the server from running.
+		log.Info("host access enabled — SSH certificates may be issued")
+	}
+
 	apiServer, err := httpapi.New(st, authSvc, cfg, httpapi.Options{
 		DevMode: *dev,
 		UI:      ui,
 		Logger:  log,
 		OIDC:    oidcProvider,
+		SSHCA:   hostCA,
 	})
 	if err != nil {
 		return err

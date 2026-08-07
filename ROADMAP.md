@@ -223,7 +223,8 @@ Cardinal.
 | | Item |
 |---|---|
 | ✅ | **SSH certificate authority** — Ed25519 keys sealed under their own encryption key, published before they sign and rotated with a grace period, because `TrustedUserCAKeys` holds several at once ([ADR 0021](docs/adr/0021-ssh-ca-key-custody.md)). Issuance records who got what, for which host, under which key; the certificate itself is not stored, since it lasts minutes and a copy would be somewhere to steal one from. Verified against `ssh-keygen` rather than only against the Go library |
-| ⬜ | Host enrollment |
+| ✅ | **Host access is decided by policy** — a host is a directory entity, so "which machines" is group membership and the local account travels in the context. `POST /api/ssh/certificate` resolves the host, asks Cedar, logs the decision, and issues only what the rule permitted. Refusals carry the explanation, not just rule names: "no policy grants this" and "explicitly forbidden by X" need different actions and look identical otherwise |
+| ⬜ | Host enrollment — a machine proving *which* host it is, needed by the agent and by ACME |
 | ⬜ | `cardinal-agent` — serves POSIX identity over varlink (ADR 0020), renders sudoers, caches for offline |
 | ✅ | **systemd-userdbd validated** ([ADR 0020](docs/adr/0020-posix-identity-over-varlink.md)) — the interface is three varlink methods over NUL-terminated JSON, implementable in ~200 lines of Go with no dependency and no C. Proven end to end: `getent passwd`, lookup by uid, group lookup and `id` all resolve a user that exists only in a Go process. **The NSS module fallback is dropped** |
 | ⬜ | sudoers rendering (`visudo -c` before atomic install) |

@@ -183,11 +183,18 @@ unless {
 // written narrow — a specific group, a specific account — because a permissive
 // starting point is one nobody revisits.
 
+// Groups are named by their UUID here, as everywhere else in this file. A rule
+// matching on a name would silently change meaning the day someone renames the
+// group, which is the class of bug ADR 0002 exists to remove — and it fails
+// *open* in the worst direction, because a rule referring to a group that does
+// not exist simply never matches and looks like a working deny.
+//
+// Replace both identifiers below with real ones from `cardinal show group <name>`.
 @id("sre-may-log-into-production")
 permit (
-    principal in Cardinal::Group::"sre",
+    principal in Cardinal::Group::"00000000-0000-7000-8000-0000000e5be1",
     action == Cardinal::Action::"SSHLogin",
-    resource in Cardinal::Group::"env-prod"
+    resource in Cardinal::Group::"00000000-0000-7000-8000-0000000e5be2"
 )
 when {
     // Never `root`. Becoming root is a separate action with a stricter rule,
