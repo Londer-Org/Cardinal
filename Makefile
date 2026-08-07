@@ -5,7 +5,9 @@ DSN   ?= postgres://cardinal:cardinal@localhost:5433/cardinal?sslmode=disable
 
 .PHONY: help
 help:
-	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) \
+	@# Digits included, or every e2e-* target is invisible here — which they
+	@# were, silently, for as long as this target has existed.
+	@grep -E '^[a-zA-Z0-9_-]+:.*?## .*$$' $(MAKEFILE_LIST) \
 		| awk 'BEGIN{FS=":.*?## "}{printf "  \033[36m%-16s\033[0m %s\n",$$1,$$2}'
 
 .PHONY: up

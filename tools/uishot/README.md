@@ -41,19 +41,52 @@ the ancestor chain until something opaque is reached.
 
 Both were found by looking at a screenshot and disagreeing with the tool.
 
+## verify-passkey.py
+
+The same browser, used for the one thing no Go test can do: registering a
+passkey and signing in with it. Chrome's virtual authenticator makes the
+ceremony real in every respect but the hardware — the browser builds the client
+data, checks the origin against the relying party, and signs.
+
+```
+make verify-passkey
+```
+
+It could not run at all until the example stack moved to TLS. WebAuthn needs a
+secure context, and the stack's hostnames could not offer one alongside the
+parent-domain cookie single sign-on requires; `window.PublicKeyCredential` was
+undefined on the enrollment page, and nothing checked.
+
 ## Usage
 
 ```
 uishot.py --path /directory/hosts --out hosts.png
 uishot.py --path /directory/hosts --theme dark --contrast
 uishot.py --path /directory/hosts --search "web-01" --out filtered.png
+
+# Reach a state the page does not load in
+uishot.py --path /access/tokens --click 'button.text-destructive' --contrast
+uishot.py --path /access/tokens --fill 'input[name="name"]=nightly' \
+                                --click 'button[type="submit"]' --contrast
 ```
 
 `--search` types into the page's search box rather than putting a query in the
 URL, because paging and search live in React state — a filtered table cannot be
 reached by navigating to one.
 
+`--click` and `--fill` exist for the same reason, generalised. **A sweep that
+only navigates measures a page's opening state, and the colours most likely to
+be wrong are the ones used least — because nobody has looked at them.** The
+destructive button sat at 3.81:1 in dark for as long as dark mode existed: it
+only appears once somebody has clicked something, so no sweep had ever rendered
+one. Form validation errors are the same, one interaction further in.
+
+Both are repeatable and run in order. A selector that matches nothing is fatal
+rather than skipped — a sweep that quietly failed to reach the state it was
+asked for would report "all pass" about a button it never drew. `--fill` splits
+on the `=` outside any brackets, so `input[placeholder="a b"]=value` works.
+
 A session is needed for anything behind the sidebar; `check-contrast.sh` seeds
-one. Standard library plus `websocket-client`, deliberately: this is a
+one, along with a token so `/access/tokens` has a row to interact with. Standard library plus `websocket-client`, deliberately: this is a
 development tool, and pulling in a browser-automation framework to take a
 picture would be a larger dependency than the thing it checks.

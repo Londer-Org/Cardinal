@@ -45,6 +45,13 @@ trusted_proxies = []
 # registrable domain rather than a subdomain of this one.
 #
 # Empty means host-only — correct and safe for a single-application deployment.
+#
+# It must contain a dot if it is set at all. Browsers discard a cookie whose
+# Domain attribute is a public suffix, so "localhost", "test" and any other
+# single label produce a session no browser will store: sign-in loops, every
+# mutation fails CSRF, and nothing anywhere says why. Cardinal refuses to start
+# on one rather than let that happen quietly — it happened to this project's own
+# example stack, for months, with a full test suite passing.
 cookie_domain = ""
 
 [database]
