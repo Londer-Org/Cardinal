@@ -95,7 +95,7 @@ flattering than it first looks.
 | POSIX identity | ✅ | Phase 4, [via varlink](adr/0020-posix-identity-over-varlink.md) |
 | sudo / HBAC rules | ✅ | Phase 4, Cedar policy |
 | **Internal DNS** | ✅ | ❌ **not in scope, ever** |
-| **Internal CA** | ✅ | ❌ **not in scope** — integrate `step-ca` |
+| **Internal CA** | ✅ | 📐 decided, not built ([ADR 0023](adr/0023-x509-certificates-via-acme.md)) |
 | Kerberos KDC | ✅ | ❌ not in scope |
 | LDAP for legacy apps | ✅ | ❌ by design |
 | Temporal membership | ❌ | ✅ |
@@ -104,8 +104,11 @@ flattering than it first looks.
 | Passwordless | ❌ | ✅ no password column |
 
 **Cardinal cannot fully replace FreeIPA**, and it is worth being blunt about it.
-A site keeping FreeIPA for DNS and certificates keeps FreeIPA. Cardinal targets
-one of its three jobs — host login — and explicitly declines the other two.
+DNS is out of scope permanently, so a site keeping FreeIPA for DNS keeps
+FreeIPA. Host login and the internal CA are both intended — the CA only after
+being told, by someone running one, that it is a substantial part of why FreeIPA
+survives a migration — but "intended" is not "shipped", and Phase 4 is the
+largest phase in the project.
 
 Where Cardinal is genuinely better is not feature count. It is that access
 expires on its own, policy is one reviewable artefact instead of three
@@ -146,6 +149,78 @@ Windows device login, and a site with a Windows fleet will need Entra ID or
 something like UCS regardless of what it does about Linux and web SSO.
 
 Same structural shape as the rest: Keycloak in front, LDAP behind.
+
+## What a Cardinal deployment actually looks like
+
+The question everyone asks second, after "what is it": *what would I still be
+running?*
+
+Three planes, deliberately independent:
+
+```mermaid
+flowchart TB
+    hr["HR / source of truth"]
+    subgraph planes[" "]
+        direction LR
+        g["**Google Workspace**<br/>mail, Drive, calendar<br/>and its own sign-in"]
+        c["**Cardinal**<br/>internal web, Linux hosts,<br/>SSH, service credentials"]
+        e["**Entra ID**<br/>Windows device login<br/>(Hello)"]
+    end
+    hr -- provisions --> g
+    hr -- provisions --> c
+    hr -- provisions --> e
+```
+
+One identity, three systems, three credentials, and **no runtime dependency
+between them**. That last property is the point rather than a compromise: if
+Cardinal is unavailable, laptops still unlock and email still works; if the
+internet is down, internal tooling still authenticates. Bridging the planes
+would turn one outage into three, which matters most for exactly the
+organisations that care about this — the ones whose incident-response tooling
+has to work on a bad day.
+
+The count reduces from four systems to three, and the one that disappears is the
+hard one: **Cardinal absorbs both the directory and the portal**, which is why
+`FreeIPA + Authelia` becomes `Cardinal`.
+
+### What Cardinal takes over, and how ready each part is
+
+| | Status |
+|---|---|
+| On-prem web SSO — `forwardAuth`, OIDC, passkeys | ✅ **Built.** Replaces Authelia or Keycloak today |
+| Credentials for scripts and automation | ✅ **Built.** No proxy bypass needed |
+| SSH certificate authority | ✅ **Built.** Keys, rotation, issuance |
+| Linux host login, POSIX identity, sudo | 📐 **Designed, not built** — Phase 4, the largest phase |
+| Internal CA for services and Kubernetes | 📐 **Decided, not built** — [ADR 0023](adr/0023-x509-certificates-via-acme.md) |
+
+Read that table as the honest state: **today Cardinal replaces an authentication
+portal.** Replacing FreeIPA is a plan with two spikes answered and the work
+ahead of it.
+
+### What stays, whatever Cardinal does
+
+- **Google Workspace**, because mail and documents are not an identity problem.
+  Cardinal *could* become its sign-in via a custom OIDC profile — and probably
+  should not. Federating cloud login to an on-prem system makes company email
+  depend on your own datacentre being reachable, which is the wrong trade for
+  the one service you need during an incident.
+- **Entra ID**, wherever there are Windows endpoints. Windows Hello is bound to
+  Entra by design, and no bridge changes that: Entra workforce federation
+  accepts SAML or WS-Fed, and Cardinal implements neither
+  ([ADR 0007](adr/0007-no-saml.md)).
+- **DNS**, wherever it already runs.
+
+### Joining them up
+
+Not federation — **provisioning**. Entra is a first-class SCIM client, and SCIM
+is on Cardinal's roadmap, so a source of truth can drive all three from one
+record per person. That is how "one identity" is achieved without coupling
+anything at runtime, and it is what most mature plans in this space converge on
+independently.
+
+The practical cost to a person is two prompts at two moments: unlock the laptop,
+then present a passkey when an internal application asks. That reads like a
+missing integration and is not — it is the independence, showing.
 
 ## Where Cardinal is the wrong choice
 
