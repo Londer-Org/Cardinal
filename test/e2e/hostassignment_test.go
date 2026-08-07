@@ -5,9 +5,13 @@ import (
 	"fmt"
 	"net/http"
 	"slices"
+	"strings"
 	"testing"
+	"time"
 
+	"github.com/arthur-lonfils/cardinal/internal/agent"
 	"github.com/arthur-lonfils/cardinal/internal/hostclient"
+	"github.com/arthur-lonfils/cardinal/internal/sudoers"
 )
 
 // What a host is allowed to know.
@@ -25,6 +29,7 @@ type assignmentUser struct {
 	Home   string `json:"home"`
 	Shell  string `json:"shell"`
 	Groups []int  `json:"groups"`
+	Sudo   bool   `json:"sudo"`
 }
 
 type assignmentGroup struct {
@@ -67,14 +72,22 @@ func hostAccessFixture(t *testing.T) (restore func()) {
 
 	tryCardinalCLI(t, "group", "create", "e2e-linux-users")
 	tryCardinalCLI(t, "group", "create", "e2e-linux-hosts")
+	tryCardinalCLI(t, "group", "create", "e2e-linux-admins")
+	tryCardinalCLI(t, "grant", "e2e-linux-admins", "e2e-sysadmin")
 
 	// Permitted, and given a uid.
 	tryCardinalCLI(t, "user", "create", "e2e-sysadmin")
 	tryCardinalCLI(t, "posix", "assign", "user", "e2e-sysadmin")
 	tryCardinalCLI(t, "grant", "e2e-linux-users", "e2e-sysadmin")
 
-	// Has a uid and no grant. The one that proves the host is not simply being
-	// handed every numbered account in the directory.
+	// May log in and may not sudo. Without them, "everybody gets root" and
+	// "the right people get root" are the same passing test.
+	tryCardinalCLI(t, "user", "create", "e2e-nonroot")
+	tryCardinalCLI(t, "posix", "assign", "user", "e2e-nonroot")
+	tryCardinalCLI(t, "grant", "e2e-linux-users", "e2e-nonroot")
+
+	// Has a uid and no grant at all. The one that proves the host is not simply
+	// being handed every numbered account in the directory.
 	tryCardinalCLI(t, "user", "create", "e2e-outsider")
 	tryCardinalCLI(t, "posix", "assign", "user", "e2e-outsider")
 
@@ -85,19 +98,21 @@ func hostAccessFixture(t *testing.T) (restore func()) {
 		`SELECT id FROM entities WHERE type = 'group' AND name = 'e2e-linux-users'`)
 	hostsGroup := seedQuery(t,
 		`SELECT id FROM entities WHERE type = 'group' AND name = 'e2e-linux-hosts'`)
-	if usersGroup == "" || hostsGroup == "" {
+	adminsGroup := seedQuery(t,
+		`SELECT id FROM entities WHERE type = 'group' AND name = 'e2e-linux-admins'`)
+	if usersGroup == "" || hostsGroup == "" || adminsGroup == "" {
 		t.Fatal("fixture groups were not created")
 	}
 
-	return publishPolicy(t, hostAccessPolicy(usersGroup, hostsGroup))
+	return publishPolicy(t, hostAccessPolicy(usersGroup, hostsGroup, adminsGroup))
 }
 
 // enrolledHostInGroup enrols a machine and puts it in the group the policy names.
-func enrolledHostInGroup(t *testing.T, name, group string) *hostclient.Identity {
+func enrolledHostInGroup(t *testing.T, name string) *hostclient.Identity {
 	t.Helper()
 
 	tryCardinalCLI(t, "host", "create", name)
-	tryCardinalCLI(t, "grant", group, name)
+	tryCardinalCLI(t, "grant", "e2e-linux-hosts", name)
 
 	return enrolledHost(t, name)
 }
@@ -128,7 +143,7 @@ func fetchAssignment(t *testing.T, identity *hostclient.Identity) assignmentBody
 func TestHostLearnsOnlyThePeopleWhoMayLogIntoIt(t *testing.T) {
 	defer hostAccessFixture(t)()
 
-	host := enrolledHostInGroup(t, "e2e-linux-01", "e2e-linux-hosts")
+	host := enrolledHostInGroup(t, "e2e-linux-01")
 
 	assignment := fetchAssignment(t, host)
 
@@ -186,7 +201,7 @@ func TestAHostNotInTheGroupLearnsNobody(t *testing.T) {
 func TestGroupsCarryTheirGidAndMembers(t *testing.T) {
 	defer hostAccessFixture(t)()
 
-	host := enrolledHostInGroup(t, "e2e-linux-02", "e2e-linux-hosts")
+	host := enrolledHostInGroup(t, "e2e-linux-02")
 	assignment := fetchAssignment(t, host)
 
 	var found *assignmentGroup
@@ -221,7 +236,7 @@ func TestPermittedUsersWithoutNumbersAreReported(t *testing.T) {
 	tryCardinalCLI(t, "user", "create", "e2e-nouid")
 	tryCardinalCLI(t, "grant", "e2e-linux-users", "e2e-nouid")
 
-	host := enrolledHostInGroup(t, "e2e-linux-03", "e2e-linux-hosts")
+	host := enrolledHostInGroup(t, "e2e-linux-03")
 	assignment := fetchAssignment(t, host)
 
 	if !slices.Contains(assignment.Unnumbered, "e2e-nouid") {
@@ -238,7 +253,7 @@ func TestPermittedUsersWithoutNumbersAreReported(t *testing.T) {
 // Written out rather than patched, because the shipped file's identifiers are
 // placeholders that match nothing — a test that inherited them would pass
 // against a rule that can never fire.
-func hostAccessPolicy(usersGroup, hostsGroup string) string {
+func hostAccessPolicy(usersGroup, hostsGroup, adminsGroup string) string {
 	return fmt.Sprintf(`
 @id("staff-web-access")
 permit (
@@ -299,5 +314,85 @@ forbid (
 unless {
     principal.deviceBound
 };
-`, usersGroup, hostsGroup)
+
+@id("platform-admins-may-run-as-root")
+permit (
+    principal in Cardinal::Group::%q,
+    action == Cardinal::Action::"RunAsRoot",
+    resource in Cardinal::Group::%q
+);
+
+// Kept alongside, for the same reason as the SSH one: the renderer has no
+// session to evaluate, so without the deliberate as-if-authenticated
+// substitution this forbid empties every sudoers file and the test below fails
+// rather than quietly passing.
+@id("root-requires-recent-auth")
+forbid (
+    principal,
+    action == Cardinal::Action::"RunAsRoot",
+    resource
+)
+unless {
+    principal.authAgeSeconds <= 900
+};
+`, usersGroup, hostsGroup, adminsGroup, hostsGroup)
+}
+
+// TestSudoIsDecidedSeparatelyFromLoggingIn.
+//
+// Two grants, two answers. A host that marked everyone who may log in as a
+// sudoer would pass any test that only checked the admin, so the person who may
+// log in and may not sudo is what makes this mean anything.
+func TestSudoIsDecidedSeparatelyFromLoggingIn(t *testing.T) {
+	defer hostAccessFixture(t)()
+
+	host := enrolledHostInGroup(t, "e2e-linux-04")
+	assignment := fetchAssignment(t, host)
+
+	admin, ok := assignment.user("e2e-sysadmin")
+	if !ok {
+		t.Fatalf("e2e-sysadmin is missing; the host was told about %v", assignment.names())
+	}
+	if !admin.Sudo {
+		t.Fatal("a member of the admin group was not marked as a sudoer")
+	}
+
+	plain, ok := assignment.user("e2e-nonroot")
+	if !ok {
+		t.Fatalf("e2e-nonroot is missing; the host was told about %v", assignment.names())
+	}
+	if plain.Sudo {
+		t.Fatal("somebody with no RunAsRoot grant was marked as a sudoer")
+	}
+}
+
+// TestTheRenderedSudoersFileNamesOnlyTheSudoers.
+//
+// The assignment and the file are separate steps, and a renderer that ignored
+// the flag would still produce something visudo accepts.
+func TestTheRenderedSudoersFileNamesOnlyTheSudoers(t *testing.T) {
+	defer hostAccessFixture(t)()
+
+	host := enrolledHostInGroup(t, "e2e-linux-05")
+	assignment := fetchAssignment(t, host)
+
+	cached := &agent.Assignment{Host: "e2e-linux-05"}
+	for _, u := range assignment.Users {
+		cached.Users = append(cached.Users, agent.AssignedUser{Name: u.Name, Sudo: u.Sudo})
+	}
+
+	rendered, err := sudoers.Render(cached.Sudoers(), cached.Host, time.Time{})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !strings.Contains(string(rendered), "e2e-sysadmin ALL=") {
+		t.Fatalf("the admin is not in the file:\n%s", rendered)
+	}
+	if strings.Contains(string(rendered), "e2e-nonroot ALL=") {
+		t.Fatalf("a non-sudoer was written into the file:\n%s", rendered)
+	}
+	if strings.Contains(string(rendered), "e2e-outsider") {
+		t.Fatalf("somebody with no access to this host at all is in the file:\n%s", rendered)
+	}
 }

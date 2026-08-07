@@ -254,6 +254,18 @@ $ id alice
 uid=100000(alice) gid=100000(alice) groups=100000(alice),100004(sre)
 ```
 
+It also renders `/etc/sudoers.d/50-cardinal` from the same assignment —
+`visudo -c` validated before it is moved into place, so a bad render leaves the
+previous file alone. `cardinal-agent sudoers` prints what would be installed
+without installing it.
+
+The rule is `NOPASSWD`, necessarily: Cardinal has no passwords, so demanding one
+prompts for a credential that cannot exist. What gates sudo is the certificate
+that produced the shell. Read
+[ADR 0026](adr/0026-sudo-is-as-strong-as-the-shell.md) before deploying it — the
+consequence is that an SSH session outlives its certificate and carries root the
+whole time.
+
 **The cache answers lookups; the network only updates it.** A host that cannot
 reach Cardinal keeps resolving the people it last knew about, across a reboot,
 indefinitely. That is not a degraded mode — combined with SSH certificates being

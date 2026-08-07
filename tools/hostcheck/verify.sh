@@ -6,7 +6,7 @@
 # system expects.
 set -eu
 
-userdbcheck &
+hostcheck &
 server=$!
 trap 'kill $server 2>/dev/null || true' EXIT
 
@@ -90,5 +90,70 @@ fi
 echo "  correctly absent from enumeration, and root is still listed:"
 getent passwd root | sed 's/^/    /'
 
+# ---------------------------------------------------------------------------
+# sudo
+#
+# The integration that matters. A sudoers rule naming `cardinaltest` is inert if
+# sudo cannot resolve the name, and it resolves it through the NSS path above —
+# so this is the only check that proves the two halves work together.
+# ---------------------------------------------------------------------------
+
 echo
-echo "PASS: nss-systemd agrees with the provider"
+echo "== the drop-in the agent rendered"
+sed 's/^/  /' /etc/sudoers.d/50-cardinal
+
+echo "== sudo -l -U cardinaltest"
+got=$(timeout 10 sudo -l -U cardinaltest 2>&1 || true)
+echo "$got" | sed 's/^/  /'
+case "$got" in
+    *"NOPASSWD: ALL"*) ;;
+    *) fail "sudo does not grant the rendered privilege" "$got" ;;
+esac
+
+echo "== sudo -l -U cardinalplain (resolvable, no grant)"
+got=$(timeout 10 sudo -l -U cardinalplain 2>&1 || true)
+echo "$got" | sed 's/^/  /'
+case "$got" in
+    *"NOPASSWD: ALL"*) fail "sudo granted root to somebody with no rule" "$got" ;;
+esac
+echo "  correctly ungranted"
+
+echo "== actually running something as root"
+# `sudo -u` needs a real uid to switch to and the whole point is that this one
+# comes from Cardinal, not /etc/passwd.
+got=$(timeout 10 sudo -n -u cardinaltest id -u 2>&1 || true)
+echo "  sudo -u cardinaltest id -u → $got"
+[ "$got" = "100000" ] || fail "sudo could not switch to a Cardinal-only user" "$got"
+
+echo "== what a broken drop-in actually costs"
+# Measured, not assumed. The received wisdom is that an unparseable file in
+# sudoers.d bricks sudo for everybody; sudo 1.9 skips it and carries on. This
+# records the real behaviour, so the justification for validating before
+# installing rests on something that was checked.
+printf 'this is not sudoers syntax\n' > /etc/sudoers.d/99-broken
+chmod 0440 /etc/sudoers.d/99-broken
+
+if ! timeout 10 sudo -l -U root >/dev/null 2>&1; then
+    fail "sudo stopped working for root — the machine really is bricked" "worse than expected"
+fi
+echo "  root still works: sudo skips the broken file rather than refusing"
+
+noise=$(timeout 10 sudo -l -U root 2>&1 >/dev/null || true)
+case "$noise" in
+    *"syntax error"*) ;;
+    *) fail "sudo did not report the broken file at all" "$noise" ;;
+esac
+echo "  but every invocation prints: $(echo "$noise" | head -1)"
+
+if timeout 10 visudo -c >/dev/null 2>&1; then
+    fail "visudo -c accepted a configuration containing a broken file" "exit 0"
+fi
+echo "  and visudo -c now fails for the whole configuration"
+
+rm -f /etc/sudoers.d/99-broken
+timeout 10 sudo -l -U cardinaltest >/dev/null 2>&1 \
+    || fail "sudo did not recover after the broken file was removed" "still failing"
+echo "  recovers once removed"
+
+echo
+echo "PASS: nss-systemd agrees with the provider, and sudo honours the rendered file"

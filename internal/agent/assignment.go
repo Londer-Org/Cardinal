@@ -55,6 +55,9 @@ type AssignedUser struct {
 	Home   string `json:"home"`
 	Shell  string `json:"shell"`
 	Groups []int  `json:"groups"`
+
+	// Sudo means Cedar permits RunAsRoot on this host.
+	Sudo bool `json:"sudo"`
 }
 
 // AssignedGroup is one directory group with a gid.
@@ -66,6 +69,17 @@ type AssignedGroup struct {
 
 // Age is how long since this was fetched.
 func (a *Assignment) Age() time.Duration { return time.Since(a.FetchedAt) }
+
+// Sudoers returns the logins that may run as root here.
+func (a *Assignment) Sudoers() []string {
+	out := []string{}
+	for _, u := range a.Users {
+		if u.Sudo {
+			out = append(out, u.Name)
+		}
+	}
+	return out
+}
 
 // Snapshot is an Assignment indexed for lookup, and is what the varlink
 // provider reads.

@@ -33,6 +33,13 @@ type assignedUser struct {
 	Home   string `json:"home"`
 	Shell  string `json:"shell"`
 	Groups []int  `json:"groups"`
+
+	// Sudo means Cedar permits RunAsRoot here. It rides the same response as
+	// the identity record because it is answered by the same evaluation of the
+	// same directory against the same host, and because an agent that fetched
+	// them separately could install a sudoers file naming somebody its POSIX
+	// provider does not know.
+	Sudo bool `json:"sudo"`
 }
 
 type assignedGroup struct {
@@ -142,6 +149,7 @@ func (s *Server) handleHostAssignment(w http.ResponseWriter, r *http.Request) {
 
 		user := assignedUser{
 			Name: p.Name, UID: p.Number,
+			Sudo: s.mayRunAsRoot(engine, subject, cred, hostSubject),
 			// The user-private group: same name, same number, synthesised by
 			// the agent rather than stored. Nothing to look up.
 			GID:    p.Number,
@@ -231,6 +239,42 @@ func (s *Server) mayLogIn(
 		},
 	})
 	return decision.Allowed
+}
+
+// mayRunAsRoot decides whether this person's name belongs in the sudoers file.
+//
+// Same as-if-authenticated substitution as mayLogIn, and here the consequence
+// is sharper, so it is worth being explicit about. The policy forbids RunAsRoot
+// unless the principal authenticated recently; at render time nobody has
+// authenticated at all, so the rendered rule cannot carry that condition and
+// the file grants passwordless root to everyone this reaches.
+//
+// That is not a shortcut being taken quietly — it is the shape of the problem.
+// Cardinal has no passwords, so a sudoers rule demanding one would prompt for a
+// credential that does not exist. What actually gates sudo is the shell: the
+// only way to have one as this person is a Cardinal certificate issued minutes
+// ago after a device-bound passkey. ADR 0026 states the consequence, including
+// the part that does not work out neatly.
+func (s *Server) mayRunAsRoot(
+	engine *policy.Engine, subject *claims.Subject,
+	host *store.HostCredential, hostSubject *claims.Subject,
+) bool {
+	ideal := *subject
+	ideal.Auth = claims.AuthContext{
+		Method:      "passkey",
+		At:          time.Now(),
+		DeviceBound: true,
+	}
+
+	return engine.Evaluate(policy.Request{
+		Subject:        &ideal,
+		Action:         policy.ActionRunAsRoot,
+		Resource:       types.NewEntityUID(policy.TypeHost, types.String(host.HostID.String())),
+		ResourceGroups: hostSubject.Groups,
+		Context: map[string]types.Value{
+			"host": types.String(host.HostName),
+		},
+	}).Allowed
 }
 
 // permittedWithoutNumbers finds people policy allows onto this host who have no

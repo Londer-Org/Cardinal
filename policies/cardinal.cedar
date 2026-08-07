@@ -239,3 +239,22 @@ forbid (
 unless {
     principal.authAgeSeconds <= 900
 };
+
+// And who may, which nothing above says: the forbid narrows, it does not grant.
+//
+// `cardinal-agent` renders this into /etc/sudoers.d/50-cardinal, so whoever this
+// reaches gets `ALL=(ALL:ALL) NOPASSWD: ALL` on the matching machines. NOPASSWD
+// is not a convenience — Cardinal has no passwords, so a rule demanding one
+// prompts for a credential that cannot exist. What gates sudo is the shell: the
+// only way to have one as this person is a certificate issued minutes ago after
+// a device-bound passkey. [ADR 0026] states the consequence, including the part
+// that does not work out neatly.
+//
+// Narrow on purpose. Sudo is the grant people ask for casually and revisit
+// never, so an example that starts permissive is one that stays permissive.
+@id("platform-admins-may-run-as-root")
+permit (
+    principal in Cardinal::Group::"00000000-0000-7000-8000-0000000e5be5",
+    action == Cardinal::Action::"RunAsRoot",
+    resource in Cardinal::Group::"00000000-0000-7000-8000-0000000e5be4"
+);

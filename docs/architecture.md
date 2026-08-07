@@ -53,6 +53,7 @@ additional moving part is another way for nobody to be able to log in.
 | `internal/hostclient` | The *machine's* half of host authentication | Shared by the CLI and the agent, so the signing rules exist once |
 | `internal/userdb` | POSIX identity over systemd's varlink interface | Standard library only — no varlink dependency, no cgo |
 | `internal/agent` | The host's assignment, its cache, and the lookup index | Never blocks on Cardinal being reachable |
+| `internal/sudoers` | Renders and installs `/etc/sudoers.d/50-cardinal` | Writes one file, reads none — it cannot remove local root |
 | `internal/httpapi` | Routing, middleware, handlers | The only package that knows what a request is |
 | `internal/event` | The hash-chained journal and its payload allowlist | Refuses anything that could carry personal data |
 | `web` | React admin UI, embedded at build time | Talks only to the same public API |
@@ -175,6 +176,14 @@ The same property, twice over:
 |---|---|---|
 | Who is uid 100003? | the agent's cache | yes |
 | May they log in? | a certificate issued minutes ago | yes, until it expires |
+| May they run as root? | `/etc/sudoers.d/50-cardinal` on disk | yes |
+
+The sudoers file is rendered from the same assignment and validated with
+`visudo -c` before it is moved into place, so a bad render leaves the previous
+file untouched. It grants `NOPASSWD` because Cardinal has no passwords — what
+actually gates sudo is the certificate that produced the shell, which is a
+stronger check than a password prompt and has one consequence worth reading
+before deploying ([ADR 0026](adr/0026-sudo-is-as-strong-as-the-shell.md)).
 
 It is a separate binary from `cardinal` because the two have opposite
 requirements — the CLI talks to the database from a workstation, the agent talks

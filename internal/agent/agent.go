@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/arthur-lonfils/cardinal/internal/hostclient"
+	"github.com/arthur-lonfils/cardinal/internal/sudoers"
 	"github.com/arthur-lonfils/cardinal/internal/userdb"
 )
 
@@ -34,6 +35,12 @@ type Agent struct {
 
 	CachePath string
 	Interval  time.Duration
+
+	// SudoersPath is the drop-in to render. Empty disables rendering entirely,
+	// which is what a host running the agent purely for POSIX identity wants —
+	// and what every test that is not about sudo wants, so that a machine's
+	// real /etc is never in reach of one.
+	SudoersPath string
 
 	Log *slog.Logger
 
@@ -113,7 +120,33 @@ func (a *Agent) Refresh(ctx context.Context) (*Assignment, error) {
 	}
 	a.install(&fetched)
 
+	// After the identity is installed, and deliberately not before: a sudoers
+	// file naming somebody the POSIX provider cannot resolve is a rule sudo
+	// will refuse to apply, and the confusing kind of refusal.
+	//
+	// A failure here does not fail the refresh. The identity records are
+	// already installed and correct, and the previous sudoers file is still in
+	// place — throwing away a good refresh because one of its two outputs did
+	// not land would make the machine less current, not safer.
+	if err := a.writeSudoers(ctx, &fetched); err != nil {
+		a.log().Error("sudoers were not updated; the previous file is still in place",
+			"error", err)
+	}
+
 	return &fetched, nil
+}
+
+// writeSudoers renders and installs the drop-in.
+func (a *Agent) writeSudoers(ctx context.Context, assignment *Assignment) error {
+	if a.SudoersPath == "" {
+		return nil
+	}
+
+	content, err := sudoers.Render(assignment.Sudoers(), assignment.Host, assignment.FetchedAt)
+	if err != nil {
+		return err
+	}
+	return sudoers.Install(ctx, a.SudoersPath, content)
 }
 
 // Run refreshes on a schedule until the context is cancelled.

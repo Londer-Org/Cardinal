@@ -22,11 +22,13 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 
 	"github.com/arthur-lonfils/cardinal/internal/agent"
 	"github.com/arthur-lonfils/cardinal/internal/hostclient"
+	"github.com/arthur-lonfils/cardinal/internal/sudoers"
 	"github.com/arthur-lonfils/cardinal/internal/userdb"
 )
 
@@ -65,6 +67,8 @@ func run(ctx context.Context, args []string) error {
 		return runAgent(ctx, args[1:])
 	case "status":
 		return runStatus(args[1:])
+	case "sudoers":
+		return runSudoers(ctx, args[1:])
 	case "help", "-h", "--help":
 		usage()
 		return nil
@@ -85,12 +89,16 @@ USAGE
   run -server <url>                     Fetch this host's assignment and serve
                                         POSIX identity to nss-systemd.
   status                                What is cached, and how old it is.
+  sudoers                               Print the drop-in that would be
+                                        installed, without installing it.
 
 FLAGS
   -key <path>        this host's private key (default `+hostclient.DefaultKeyPath+`)
   -cache <path>      cached assignment (default `+agent.DefaultCachePath+`)
   -interval <dur>    how often to refresh (default 5m)
   -socket-dir <path> where nss-systemd looks (default `+userdb.DefaultRunDir+`)
+  -sudoers <path>    drop-in to render (default `+sudoers.DefaultPath+`;
+                     empty disables sudoers rendering entirely)
 
 The cache is what answers lookups; the network is only how it is updated. A host
 that cannot reach Cardinal keeps resolving the people it last knew about, which
@@ -136,6 +144,8 @@ func runAgent(ctx context.Context, args []string) error {
 	cachePath := fs.String("cache", agent.DefaultCachePath, "cached assignment")
 	interval := fs.Duration("interval", agent.DefaultInterval, "how often to refresh")
 	socketDir := fs.String("socket-dir", userdb.DefaultRunDir, "where nss-systemd looks")
+	sudoersPath := fs.String("sudoers", sudoers.DefaultPath,
+		"drop-in to render; empty disables sudoers rendering")
 	if err := fs.Parse(args); err != nil {
 		return errUsage
 	}
@@ -152,10 +162,26 @@ func runAgent(ctx context.Context, args []string) error {
 	}
 
 	a := &agent.Agent{
-		Identity:  &hostclient.Identity{Server: *server, Signer: signer},
-		CachePath: *cachePath,
-		Interval:  *interval,
-		Log:       log,
+		Identity:    &hostclient.Identity{Server: *server, Signer: signer},
+		CachePath:   *cachePath,
+		Interval:    *interval,
+		SudoersPath: *sudoersPath,
+		Log:         log,
+	}
+
+	// Checked once at startup, and reported rather than repaired. A drop-in
+	// that nothing includes is silently inert — the agent would report success
+	// while granting nobody anything — but editing /etc/sudoers to fix it would
+	// break the rule that makes this safe: Cardinal only ever adds, and can
+	// never take away an account's existing access.
+	if *sudoersPath != "" {
+		if ok, err := sudoers.IncludeDirConfigured("/etc/sudoers", filepath.Dir(*sudoersPath)); err != nil {
+			log.Warn("could not check whether sudo reads the drop-in directory", "error", err)
+		} else if !ok {
+			log.Warn("sudo does not read this directory, so the rendered rules will do nothing",
+				"directory", filepath.Dir(*sudoersPath),
+				"fix", "add '@includedir "+filepath.Dir(*sudoersPath)+"' to /etc/sudoers with visudo")
+		}
 	}
 
 	// Before the socket exists, so the first lookup is answered from the cache
@@ -281,5 +307,59 @@ func runStatus(args []string) error {
 		fmt.Println("\n  They will be issued certificates and then refused by sshd,")
 		fmt.Println("  which says nothing about why. Run `cardinal posix assign user <name>`.")
 	}
+	return nil
+}
+
+// runSudoers prints what would be installed.
+//
+// Because the alternative way to find out is to install it, and this is the one
+// file on the machine where being wrong stops sudo working for everybody
+// including root.
+func runSudoers(ctx context.Context, args []string) error {
+	fs := flag.NewFlagSet("sudoers", flag.ContinueOnError)
+	cachePath := fs.String("cache", agent.DefaultCachePath, "cached assignment")
+	check := fs.Bool("check", false, "also run visudo against the rendered file")
+	if err := fs.Parse(args); err != nil {
+		return errUsage
+	}
+
+	cached, err := agent.Load(*cachePath)
+	if err != nil {
+		if agent.CacheMissing(err) {
+			return errors.New("this host has no cached assignment — nothing to render")
+		}
+		return err
+	}
+
+	content, err := sudoers.Render(cached.Sudoers(), cached.Host, cached.FetchedAt)
+	if err != nil {
+		return err
+	}
+	if _, err := os.Stdout.Write(content); err != nil {
+		return err
+	}
+
+	if !*check {
+		return nil
+	}
+
+	tmp, err := os.CreateTemp("", "cardinal-sudoers-*")
+	if err != nil {
+		return err
+	}
+	defer func() { _ = os.Remove(tmp.Name()) }()
+	if _, err := tmp.Write(content); err != nil {
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	if err := os.Chmod(tmp.Name(), 0o440); err != nil { //nolint:gosec // the mode sudo requires
+		return err
+	}
+	if err := sudoers.Validate(ctx, tmp.Name()); err != nil {
+		return err
+	}
+	fmt.Fprintln(os.Stderr, "\n  visudo accepts this file.")
 	return nil
 }
