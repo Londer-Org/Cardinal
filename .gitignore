@@ -38,3 +38,6 @@ examples/.oidc-client-id
 
 # TypeScript incremental build cache — churns on every build.
 web/tsconfig.tsbuildinfo
+
+# Python bytecode from tools/
+__pycache__/
