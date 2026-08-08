@@ -22,6 +22,7 @@ import { useSession } from '@/features/auth/useAuth'
 import { pendingAuthorizationID, useOIDCResume } from '@/features/auth/useOIDCResume'
 import { ConsentPrompt } from '@/features/consent/ConsentPrompt'
 import { EnrollPage, invitationToken } from '@/features/enroll/EnrollPage'
+import { RecoverPage, isRecoveryPath } from '@/features/recover/RecoverPage'
 import { StepUpDialog } from '@/features/auth/StepUpDialog'
 import { ReauthPrompt } from '@/features/auth/ReauthPrompt'
 import { HOME, crumbsFor } from '@/lib/nav'
@@ -39,6 +40,13 @@ export function AppShell() {
   const token = invitationToken()
   if (token !== null) {
     return <EnrollPage token={token} />
+  }
+
+  // Also shell-less, and for the stronger version of the same reason: somebody
+  // here cannot sign in at all, so a sidebar of links they cannot follow would
+  // be the wrong thing to show on what is already a bad day.
+  if (isRecoveryPath()) {
+    return <RecoverPage />
   }
 
   return <Authenticated />

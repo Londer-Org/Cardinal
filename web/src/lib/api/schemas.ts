@@ -571,3 +571,9 @@ export type Setting = z.infer<typeof settingSchema>
 export const configReportSchema = z.object({
   settings: z.array(settingSchema),
 })
+
+/** What redeeming a recovery code returns: an enrollment, not a session. */
+export const redeemedRecoverySchema = z.object({
+  token: z.string(),
+  expiresAt: z.string(),
+})

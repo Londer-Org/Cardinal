@@ -52,6 +52,7 @@ import {
   meSchema,
   cliAuthorizationSchema,
   configReportSchema,
+  redeemedRecoverySchema,
   pendingAuthorizationSchema,
   approvedRecoverySchema,
   pendingInvitationsSchema,
@@ -221,6 +222,19 @@ export const api = {
    * Enrollment: the unauthenticated path a new account takes to its first
    * passkey. The invitation token is the only thing authorising any of it.
    */
+  /**
+   * Spending a recovery code, for somebody who cannot sign in.
+   *
+   * Returns an enrollment rather than a session. Credential self-service is
+   * behind requireDeviceBound, so a session minted from a string on paper could
+   * not register the passkey this exists to let somebody register.
+   */
+  redeemRecoveryCode: (login: string, code: string) =>
+    request('/api/recovery/codes/redeem', redeemedRecoverySchema, {
+      method: 'POST',
+      body: { login, code },
+    }),
+
   enroll: {
     details: (token: string) =>
       request(`/api/enroll?token=${encodeURIComponent(token)}`, invitationSchema),

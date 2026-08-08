@@ -256,6 +256,18 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("GET /api/recovery/codes/remaining",
 		selfService(http.HandlerFunc(s.handleRemainingRecoveryCodes)))
 
+	// And spending one. Unauthenticated by necessity: somebody who could
+	// authenticate would not be here. Rate limited on the same budget as the
+	// rest of recovery — five attempts per quarter hour — which is what makes
+	// the difference between a code being found and a code being guessed.
+	//
+	// It returns an enrollment rather than a session. Everything above is
+	// behind requireDeviceBound, and a session minted from a string on paper
+	// would be unable to register the passkey this exists to let somebody
+	// register.
+	mux.Handle("POST /api/recovery/codes/redeem",
+		s.rateLimit(store.LimitRecovery)(http.HandlerFunc(s.handleRedeemRecoveryCode)))
+
 	// ── Host enrollment ────────────────────────────────────────────────────
 	//
 	// Enrolling is unauthenticated by necessity — a machine with no credential

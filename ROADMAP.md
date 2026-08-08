@@ -28,10 +28,10 @@ Phase 5 is SCIM, SSF/CAEP events, an audit explorer with point-in-time queries,
 a documentation site, hardening and coverage work, and a stated API-stability
 policy for 1.0. The documentation site is built; the audit explorer is built.
 
-Ahead of the rest of it, three things found by audit are worth more than any new
-feature, because each is a promise the project already makes: redeeming a
-recovery code, `cardinal ssh`, and deciding what `recovery.email_enabled` is —
-implemented, or removed so it stops claiming to be a setting.
+Two of the three things that audit found have been built: redeeming a recovery
+code, and `cardinal ssh`. What remains from that list is deciding what
+`recovery.email_enabled` is — implemented, or removed so it stops claiming to be
+a setting — and connecting the two purge routines nothing calls.
 
 ## Built but unreachable
 
@@ -41,10 +41,10 @@ every test it has, and no user can get to it.
 
 | Thing | State | Consequence |
 |---|---|---|
-| **Recovery codes cannot be redeemed** | `store.RedeemRecoveryCode` is written and tested. No route, no CLI command, no page calls it | Codes can be generated and counted. Somebody locked out, holding one on paper, has nowhere to enter it. This is phase-0 non-negotiable #2 |
-| **SSH certificates had no client** | The endpoint has existed since Phase 4; nothing could reach it, because it needs a device-bound session and a terminal cannot perform a ceremony | Half fixed: the browser-handoff flow is built, `cardinal ssh` is not |
+| ~~Recovery codes cannot be redeemed~~ | **Fixed.** A code now redeems into a short-lived enrollment at `/recover` | Not a session: credential self-service is behind `requireDeviceBound`, so a session minted from a string on paper could not register the passkey recovery exists to register |
+| ~~SSH certificates had no client~~ | **Fixed.** `cardinal ssh [user@]host` borrows the console's passkey through a loopback handoff | Building it found two more of the same shape: a session was not accepted as a bearer token anywhere, and CSRF exempted requests by auth method rather than by how they authenticated |
 | **Email recovery is configured, not implemented** | `recovery.email_enabled` and `email_domains` parse and validate, with circular-recovery checks. Nothing sends mail | Worse than absent: setting it to `true` reads as enabling a channel, and enables nothing |
-| **`database.max_conns`, `conn_max_lifetime`** | Parsed; `store.Open` takes a DSN and never sees them | An operator tuning a busy deployment silently gets pgx's defaults |
+| **`database.max_conns`, `conn_max_lifetime`** | Parsed; `store.Open` takes a DSN and never sees them | An operator tuning a busy deployment silently gets pgx's defaults. Shown as ignored on the configuration page, and a test keeps that claim true |
 | **`PurgeACMENonces`, `PurgeExpiredOIDCFlows`** | Written; `backgroundMaintenance` purges only ceremonies and rate limits | ACME nonces and spent OIDC flows accumulate forever |
 
 How they are found: every HTTP route checked for a caller in the console, the
