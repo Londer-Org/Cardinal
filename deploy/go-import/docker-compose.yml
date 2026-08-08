@@ -1,18 +1,21 @@
-# The vanity import path for `go get go.londer.be/cardinal`.
+# The vanity import path behind `go get go.londer.be/cardinal`.
 #
-# Follows the same pattern as the other services on this VPS: on the external
-# `web` network, no published ports, reached through Nginx Proxy Manager.
+# Lives at /home/deploy/services/golang on the VPS, following the same pattern
+# as the other services there: on the external `web` network, no published
+# ports, reached through Nginx Proxy Manager.
 #
-# In Nginx Proxy Manager, add a proxy host:
-#   domain    go.londer.be
-#   forward   go-import : 80
-#   SSL       request a certificate, force SSL
+# The service is called `go` because that is the name the proxy host already
+# forwards to — Docker Compose publishes the service name as a network alias, so
+# `http://go:80` resolves to this container from anywhere on `web`. Renaming it
+# here would mean editing the proxy host too.
 #
-# Then `go install go.londer.be/cardinal/cmd/cardinal@latest` works from
-# anywhere, and it keeps working if the repository moves again — which is the
-# whole reason for doing this rather than naming GitHub in 105 files.
+#   docker compose up -d
+#   curl -s "https://go.londer.be/cardinal?go-get=1" | grep go-import
+#
+# Nothing else is needed: the proxy host go.londer.be -> go:80 with Let's
+# Encrypt is already in place.
 services:
-  go-import:
+  go:
     image: nginx:alpine
     restart: unless-stopped
     volumes:
