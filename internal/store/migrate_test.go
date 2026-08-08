@@ -2,7 +2,6 @@ package store_test
 
 import (
 	"context"
-	"io/fs"
 	"net/url"
 	"strings"
 	"testing"
@@ -14,158 +13,55 @@ import (
 	"go.londer.be/cardinal/migrations"
 )
 
-// TestASchemaFromTheFutureIsRefused.
+// TestASchemaFromTheFutureIsToleratedUnlessItSaysOtherwise.
 //
-// The downgrade case. An older binary against a newer database used to start
-// happily and then fail one request at a time, wherever a code path first
-// touched a column it did not know about — a symptom that looks like a bug in
-// whichever feature was unlucky rather than like the wrong version running.
-func TestASchemaFromTheFutureIsRefused(t *testing.T) {
-	s := newStore(t)
+// The rollback case, and the reason the answer changed. Refusing every schema a
+// binary did not recognise made rolling back impossible without a schema
+// operation — which is the complexity the expand-only rule exists to remove.
+//
+// Migrations only add, so drift on its own is fine. What refuses is a migration
+// whose author declared it incompatible, and that declaration lives in the row
+// rather than in the file, because a binary that predates the migration cannot
+// read the file.
+func TestASchemaFromTheFutureIsToleratedUnlessItSaysOtherwise(t *testing.T) {
+	s := newStoreOnOwnDatabase(t)
 	ctx := t.Context()
+	_, err := s.Migrate(ctx)
+	require.NoError(t, err)
 
-	// A database with no schema_migrations at all is not "ahead" — it is a fresh
-	// install, and saying anything else would refuse to start every new
-	// deployment. This asserted a 42P01 out of the first implementation.
-	ahead, err := s.SchemaAhead(ctx)
+	drift, err := s.SchemaAhead(ctx)
 	require.NoError(t, err)
-	assert.Empty(t, ahead, "a database nobody has migrated is not ahead of anything")
+	assert.Empty(t, drift.Unknown, "a database this binary migrated is not ahead of it")
+	assert.Empty(t, drift.Blocking)
 
-	// Now the ordinary case: the table exists and holds only what this binary
-	// knows. Without this the test below would pass on an implementation that
-	// called everything ahead.
-	_, err = s.Pool().Exec(ctx, `
-		CREATE TABLE IF NOT EXISTS schema_migrations (
-			name       text        PRIMARY KEY,
-			digest     text        NOT NULL,
-			applied_at timestamptz NOT NULL DEFAULT now()
-		)`)
-	require.NoError(t, err)
-	known, err := migrations.Up()
-	require.NoError(t, err)
-	for _, name := range known {
-		_, err = s.Pool().Exec(ctx,
-			`INSERT INTO schema_migrations (name, digest) VALUES ($1, 'x')`, name)
-		require.NoError(t, err)
-	}
-	ahead, err = s.SchemaAhead(ctx)
-	require.NoError(t, err)
-	assert.Empty(t, ahead, "a database holding exactly this binary's set is not ahead")
-
-	// What a newer Cardinal leaves behind: a row naming a migration this build
-	// has never heard of.
+	// What an ordinary newer release leaves behind: a migration this build has
+	// never heard of, which added something and said nothing.
 	_, err = s.Pool().Exec(ctx,
 		`INSERT INTO schema_migrations (name, digest) VALUES ($1, $2)`,
-		"9999_from_the_future.sql", "deadbeef")
+		"9999_added_a_column.sql", "deadbeef")
 	require.NoError(t, err)
 
-	ahead, err = s.SchemaAhead(ctx)
+	drift, err = s.SchemaAhead(ctx)
 	require.NoError(t, err)
-	assert.Equal(t, []string{"9999_from_the_future.sql"}, ahead)
-}
+	assert.Equal(t, []string{"9999_added_a_column.sql"}, drift.Unknown)
+	assert.Empty(t, drift.Blocking,
+		"an ordinary migration must not block an older build, or rollback needs a "+
+			"schema operation again")
 
-// TestDownMigrationsAreNotAppliedAsForwardOnes.
-//
-// `.down.sql` matches the same embed pattern as the migration it reverses, so a
-// naive glob applies every drop immediately after the create that made it — and
-// the first `cardinal migrate` against an empty database leaves no schema at
-// all. Worth a test rather than a comment, because the failure is total and the
-// cause is one character of a filename.
-func TestDownMigrationsAreNotAppliedAsForwardOnes(t *testing.T) {
-	up, err := migrations.Up()
-	require.NoError(t, err)
-	require.NotEmpty(t, up)
-
-	for _, name := range up {
-		assert.False(t, strings.HasSuffix(name, ".down.sql"),
-			"%s is a reversal and must not be in the forward list", name)
-	}
-
-	all, err := fs.Glob(migrations.FS, "*.sql")
-	require.NoError(t, err)
-	assert.LessOrEqual(t, len(up), len(all))
-}
-
-// TestMigratingDownAndUpAgainReachesTheSameSchema.
-//
-// The claim a downgrade rests on: after reversing to some point and applying
-// forward again, the database is the schema the code expects — not merely one
-// that did not error. Compared by asking PostgreSQL for its own column list,
-// because a reversal that drops the wrong thing still succeeds and a reversal
-// that drops nothing succeeds most cheerfully of all.
-func TestMigratingDownAndUpAgainReachesTheSameSchema(t *testing.T) {
-	// Its own database, and it has to be. Reversing a migration drops tables,
-	// and the shared one is shared — a test that leaves it without
-	// webauthn_credentials fails every other test in the package with an error
-	// that looks nothing like this one.
-	s := newStoreOnOwnDatabase(t)
-	ctx := t.Context()
-
-	_, err := s.Migrate(ctx)
+	// And what a declared incompatibility leaves behind.
+	_, err = s.Pool().Exec(ctx,
+		`INSERT INTO schema_migrations (name, digest, breaking) VALUES ($1, $2, $3)`,
+		"9998_removed_a_column.sql", "cafebabe", "dropped entities.display_name")
 	require.NoError(t, err)
 
-	before := schemaShape(t, s)
-	applied, err := s.AppliedMigrations(ctx)
+	drift, err = s.SchemaAhead(ctx)
 	require.NoError(t, err)
-	require.GreaterOrEqual(t, len(applied), 4)
-
-	// Back three, then forward again.
-	target := applied[len(applied)-4].Name
-	undone, err := s.MigrateDownTo(ctx, target)
-	require.NoError(t, err)
-	assert.Len(t, undone, 3)
-
-	during := schemaShape(t, s)
-	assert.NotEqual(t, before, during,
-		"reversing three migrations changed nothing — the reversals are no-ops")
-
-	ran, err := s.Migrate(ctx)
-	require.NoError(t, err)
-	assert.Len(t, ran, 3, "the reversed migrations should be unapplied and reapply")
-
-	assert.Equal(t, before, schemaShape(t, s),
-		"down then up did not reach the schema the code expects")
-}
-
-// TestReversingPastAnUnknownMigrationChangesNothing.
-//
-// Named targets are typed by a person under pressure. A typo must be refused
-// rather than interpreted, and it must be refused before anything is dropped.
-func TestReversingPastAnUnknownMigrationChangesNothing(t *testing.T) {
-	s := newStoreOnOwnDatabase(t)
-	ctx := t.Context()
-	_, err := s.Migrate(ctx)
-	require.NoError(t, err)
-
-	before := schemaShape(t, s)
-	_, err = s.MigrateDownTo(ctx, "0007_consent") // missing the .sql
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "not an applied migration")
-	assert.Equal(t, before, schemaShape(t, s), "a refused target changed the schema")
-}
-
-// schemaShape is every column of every table, as PostgreSQL sees it.
-func schemaShape(t *testing.T, s *store.Store) string {
-	t.Helper()
-	rows, err := s.Pool().Query(t.Context(), `
-		SELECT c.table_name || '.' || c.column_name || ':' || c.data_type
-		  FROM information_schema.columns c
-		  JOIN information_schema.tables t
-		    ON t.table_name = c.table_name AND t.table_schema = c.table_schema
-		 WHERE c.table_schema = 'public' AND t.table_type = 'BASE TABLE'
-		 ORDER BY 1`)
-	require.NoError(t, err)
-	defer rows.Close()
-
-	var out []string
-	for rows.Next() {
-		var line string
-		require.NoError(t, rows.Scan(&line))
-		out = append(out, line)
-	}
-	require.NoError(t, rows.Err())
-	require.NotEmpty(t, out)
-	return strings.Join(out, "\n")
+	assert.Len(t, drift.Unknown, 2)
+	assert.Equal(t,
+		map[string]string{"9998_removed_a_column.sql": "dropped entities.display_name"},
+		drift.Blocking,
+		"the reason has to survive into the database; the older binary cannot read "+
+			"the migration file that explains itself")
 }
 
 // newStoreOnOwnDatabase gives a test a database nothing else touches.
@@ -244,12 +140,13 @@ func TestADatabaseBehindTheBinaryIsRefused(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, behind, "a fully migrated database is not behind")
 
-	// Now the upgrade: the binary gained a migration the database has not seen.
-	// Reversing one is the closest thing to shipping a new build.
+	// Now the upgrade: a new build contains a migration this database has never
+	// been given. Forgetting the newest row is what that looks like from here,
+	// and it is what `kubectl apply` rejecting the migration Job produced.
 	applied, err := s.AppliedMigrations(ctx)
 	require.NoError(t, err)
 	newest := applied[len(applied)-1].Name
-	_, err = s.MigrateDownTo(ctx, applied[len(applied)-2].Name)
+	_, err = s.Pool().Exec(ctx, `DELETE FROM schema_migrations WHERE name = $1`, newest)
 	require.NoError(t, err)
 
 	behind, err = s.SchemaBehind(ctx)

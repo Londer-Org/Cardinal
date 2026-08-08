@@ -60,6 +60,17 @@ func (s *Store) Migrate(ctx context.Context) ([]string, error) {
 		return nil, fmt.Errorf("store: creating migration table: %w", execErr)
 	}
 
+	// Added separately because schema_migrations is bookkeeping rather than
+	// schema: it is created here, not by a migration, so it cannot be altered by
+	// one either. Nullable and defaulted, which is the same rule the migrations
+	// themselves now follow — a version that has never heard of this column goes
+	// on writing rows without it.
+	if _, execErr := conn.Exec(ctx, `
+		ALTER TABLE schema_migrations
+		ADD COLUMN IF NOT EXISTS breaking text`); execErr != nil {
+		return nil, fmt.Errorf("store: recording compatibility: %w", execErr)
+	}
+
 	applied := map[string]string{}
 	rows, err := conn.Query(ctx, `SELECT name, digest FROM schema_migrations`)
 	if err != nil {
@@ -110,9 +121,17 @@ func (s *Store) Migrate(ctx context.Context) ([]string, error) {
 			if _, execErr := tx.Exec(ctx, string(body)); execErr != nil {
 				return fmt.Errorf("applying %s: %w", name, execErr)
 			}
+			// The reason travels into the database, not just the decision.
+			// A binary from before this migration existed cannot read the file
+			// to find out whether it was safe; it can read the row.
+			var breaking *string
+			if why, ok := migrations.Breaking(name); ok {
+				breaking = &why
+			}
 			_, execErr := tx.Exec(ctx,
-				`INSERT INTO schema_migrations (name, digest) VALUES ($1, $2)`,
-				name, digest)
+				`INSERT INTO schema_migrations (name, digest, breaking)
+				 VALUES ($1, $2, $3)`,
+				name, digest, breaking)
 			return execErr
 		})
 		if err != nil {
@@ -144,32 +163,46 @@ func (s *Store) AppliedMigrations(ctx context.Context) ([]AppliedMigration, erro
 	return out, rows.Err()
 }
 
-// ErrSchemaAhead reports a database migrated by a newer Cardinal than this one.
+// ErrSchemaBreaking reports a database carrying a change this binary predates
+// and cannot tolerate.
 //
-// The downgrade case, and until this existed it was silent: an older binary
-// started happily against a newer schema and failed later, one request at a
-// time, in whichever code path first touched a column it did not know about.
-var ErrSchemaAhead = errors.New("store: the database schema is newer than this binary")
+// Rare by construction. Migrations are expand-only, so a schema newer than this
+// binary is normally fine — which is what makes rolling back a matter of
+// deploying the older image and nothing else. This is the declared exception,
+// and it is declared in the database by whatever applied it.
+var ErrSchemaBreaking = errors.New("store: the database carries a change this version cannot run against")
 
-// SchemaAhead names migrations the database has applied and this binary does not
-// contain.
+// SchemaDrift describes a schema newer than this binary.
+type SchemaDrift struct {
+	// Unknown are applied migrations this build does not contain.
+	Unknown []string
+
+	// Blocking are those among them that declared themselves incompatible,
+	// mapped to the reason their author gave.
+	Blocking map[string]string
+}
+
+// SchemaAhead reports what a newer Cardinal has done to this database.
 //
-// Nothing else can detect this. `schema_migrations` records what ran, and a
-// binary knows only what it embeds, so the difference between them is exactly
-// "changes made by a version I am not" — which is the question worth asking
-// before serving a single request.
+// Drift on its own is not a problem and used to be treated as one. Migrations
+// only add, so a binary running against a schema a version or two ahead simply
+// does not use the new columns — which is precisely the property that makes
+// rollback a redeploy. Refusing outright made that impossible and turned every
+// rollback into a schema operation.
 //
-// The reverse case, a database behind the binary, is not an error here: that is
-// an unapplied migration, and `cardinal migrate` is how it gets applied.
-func (s *Store) SchemaAhead(ctx context.Context) ([]string, error) {
+// What does justify refusing is a migration whose author said so. That reason
+// was written into the row when it was applied, so a binary that predates the
+// migration can still read it.
+func (s *Store) SchemaAhead(ctx context.Context) (SchemaDrift, error) {
 	known, err := migrations.Up()
 	if err != nil {
-		return nil, fmt.Errorf("store: listing migrations: %w", err)
+		return SchemaDrift{}, fmt.Errorf("store: listing migrations: %w", err)
 	}
 	mine := make(map[string]struct{}, len(known))
 	for _, name := range known {
 		mine[name] = struct{}{}
 	}
+	drift := SchemaDrift{Blocking: map[string]string{}}
 
 	// to_regclass rather than a bare SELECT, because a database nobody has
 	// migrated yet has no schema_migrations at all — the fresh-install case,
@@ -178,29 +211,49 @@ func (s *Store) SchemaAhead(ctx context.Context) ([]string, error) {
 	var exists bool
 	if scanErr := s.pool.QueryRow(ctx,
 		`SELECT to_regclass('public.schema_migrations') IS NOT NULL`).Scan(&exists); scanErr != nil {
-		return nil, fmt.Errorf("store: looking for the migration table: %w", scanErr)
+		return drift, fmt.Errorf("store: looking for the migration table: %w", scanErr)
 	}
 	if !exists {
-		return nil, nil
+		return drift, nil
 	}
 
-	rows, err := s.pool.Query(ctx, `SELECT name FROM schema_migrations ORDER BY name`)
+	// `breaking` may not exist yet: a database last touched by a version from
+	// before this column was added still has the old three columns, and asking
+	// for a fourth would fail on exactly the deployments this check exists to
+	// protect.
+	var hasColumn bool
+	if scanErr := s.pool.QueryRow(ctx, `
+		SELECT EXISTS (SELECT 1 FROM information_schema.columns
+		                WHERE table_name = 'schema_migrations'
+		                  AND column_name = 'breaking')`).Scan(&hasColumn); scanErr != nil {
+		return drift, fmt.Errorf("store: looking for the compatibility column: %w", scanErr)
+	}
+
+	query := `SELECT name, NULL::text FROM schema_migrations ORDER BY name`
+	if hasColumn {
+		query = `SELECT name, breaking FROM schema_migrations ORDER BY name`
+	}
+	rows, err := s.pool.Query(ctx, query)
 	if err != nil {
-		return nil, fmt.Errorf("store: reading applied migrations: %w", err)
+		return drift, fmt.Errorf("store: reading applied migrations: %w", err)
 	}
 	defer rows.Close()
 
-	var ahead []string
 	for rows.Next() {
 		var name string
-		if err := rows.Scan(&name); err != nil {
-			return nil, err
+		var breaking *string
+		if err := rows.Scan(&name, &breaking); err != nil {
+			return drift, err
 		}
-		if _, ok := mine[name]; !ok {
-			ahead = append(ahead, name)
+		if _, ok := mine[name]; ok {
+			continue
+		}
+		drift.Unknown = append(drift.Unknown, name)
+		if breaking != nil {
+			drift.Blocking[name] = *breaking
 		}
 	}
-	return ahead, rows.Err()
+	return drift, rows.Err()
 }
 
 // ErrSchemaBehind reports a database missing migrations this binary contains.
@@ -258,86 +311,4 @@ func (s *Store) SchemaBehind(ctx context.Context) ([]string, error) {
 		}
 	}
 	return behind, nil
-}
-
-// ErrIrreversible reports a migration that must be undone before one that
-// cannot be.
-var ErrIrreversible = errors.New("store: migration has no reversal")
-
-// MigrateDownTo undoes migrations until target is the newest one applied.
-//
-// Reverse order, one transaction each, and the row is removed from
-// schema_migrations in the same transaction as the reversal it records — so an
-// interrupted downgrade leaves the database at a migration boundary rather than
-// partway through an unknown one, exactly as the forward path does.
-//
-// The name is the whole filename, because that is what schema_migrations holds
-// and what `cardinal migrate -status` prints. A number would be friendlier and
-// would also be a second way to refer to the same thing, which is how the two
-// drift.
-func (s *Store) MigrateDownTo(ctx context.Context, target string) ([]string, error) {
-	applied, err := s.AppliedMigrations(ctx)
-	if err != nil {
-		return nil, err
-	}
-	if len(applied) == 0 {
-		return nil, nil
-	}
-
-	// Everything strictly newer than the target, newest first.
-	var undo []string
-	found := target == ""
-	for i := len(applied) - 1; i >= 0; i-- {
-		if applied[i].Name == target {
-			found = true
-			break
-		}
-		undo = append(undo, applied[i].Name)
-	}
-	if !found {
-		return nil, fmt.Errorf(
-			"store: %q is not an applied migration — `cardinal migrate -status` "+
-				"lists what is", target)
-	}
-
-	// Every reversal is checked before any of them runs. Stopping halfway
-	// because the fourth one turns out to be missing would leave the schema
-	// somewhere no version of Cardinal has ever been.
-	for _, name := range undo {
-		if _, ok := migrations.Down(name); !ok {
-			return nil, fmt.Errorf("%w: %s — nothing was changed", ErrIrreversible, name)
-		}
-	}
-
-	conn, err := s.pool.Acquire(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("store: acquiring connection: %w", err)
-	}
-	defer conn.Release()
-
-	if _, execErr := conn.Exec(ctx, `SELECT pg_advisory_lock($1)`, migrationLock); execErr != nil {
-		return nil, fmt.Errorf("store: taking migration lock: %w", execErr)
-	}
-	defer func() {
-		_, _ = conn.Exec(context.WithoutCancel(ctx), //nolint:errcheck // the lock is released by the connection dropping regardless
-			`SELECT pg_advisory_unlock($1)`, migrationLock)
-	}()
-
-	var undone []string
-	for _, name := range undo {
-		body, _ := migrations.Down(name)
-		err := s.InTx(ctx, func(tx pgx.Tx) error {
-			if _, execErr := tx.Exec(ctx, string(body)); execErr != nil {
-				return fmt.Errorf("reversing %s: %w", name, execErr)
-			}
-			_, execErr := tx.Exec(ctx,
-				`DELETE FROM schema_migrations WHERE name = $1`, name)
-			return execErr
-		})
-		if err != nil {
-			return undone, fmt.Errorf("store: %w", err)
-		}
-		undone = append(undone, name)
-	}
-	return undone, nil
 }

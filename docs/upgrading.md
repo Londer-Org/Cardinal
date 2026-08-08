@@ -3,64 +3,90 @@
 Cardinal is pre-1.0. There is no compatibility promise between versions yet, and
 this page describes the machinery that exists rather than a guarantee.
 
-Three things move independently, and that is deliberate — a fleet cannot update
-atomically, so nothing here assumes it does.
+## The whole procedure
 
-| Component | How it updates | How it goes back |
-|---|---|---|
-| `cardinal server` | Pull the new image, restart | Deploy the old image |
-| Database schema | `cardinal migrate` | `cardinal migrate -to <migration>` |
-| `cardinal-agent` | `.deb` / `.rpm` per host | Install the previous package |
-| `cardinal` CLI | Binary or package | Install the previous one |
-| Policy | `cardinal policy publish -activate` | Activate an earlier version |
-
-Policy is the one that was always reversible: every published version is kept and
-activating an earlier one is a button in the console. The rest of this page is
-about the parts that were not.
-
-## The order that works
-
-**Upgrading.** Migrate first, then the server. Every migration is written to
-leave the previous version able to run, so a database migrated ahead of its
-servers is a normal intermediate state rather than an outage.
+**Upgrade.** Migrate, then deploy.
 
 ```sh
-cardinal migrate -backup /var/backups/cardinal-pre-upgrade.dump
+cardinal migrate      # from the new build
 # then roll the servers
 ```
 
-**Downgrading.** The schema first, using the version you are leaving — then the
-older server.
+**Roll back.** Deploy the previous build.
 
-That ordering is not a preference. Reversals are embedded in the binary, so the
-build that introduced migration N is the only one that contains N's reversal:
-undo it *before* the older build is the one you have.
+That is the entire rollback procedure. No schema change, no reversal, no
+ordering to remember, and nothing to back up first.
 
-```sh
-# still running the newer version, and this must run from it
-cardinal migrate -to 0022_posix_adoption_range.sql -backup /var/backups/pre-downgrade.dump
-# only now install and start the older one
+## Why that works
+
+**Migrations only add.** A migration never drops a table or a column, never
+renames, never changes a type, and never narrows a constraint or adds a `NOT
+NULL` column without a default. So the previous version keeps working against a
+schema newer than itself: it simply does not use the new columns.
+
+This is enforced, not requested. `go test ./migrations/` rejects a migration
+that removes or narrows anything — at the moment it is written, rather than
+during the rollback in November that no longer works.
+
+Removal still happens, a release later, once nothing running reads the thing
+being removed:
+
+| Release | Does | The previous version still works because |
+|---|---|---|
+| N | Adds the column, writes both | The old column is still there and still written |
+| N+1 | Stops reading the old one | Nobody on N-1 is left |
+| N+2 | Drops it | Nothing reads it |
+
+Only N+2 removes anything, and by then it removes something no supported version
+touches.
+
+### This replaced something worse
+
+There was briefly a reversal beside every migration, a `cardinal migrate -to`
+that applied them, and a `-backup` to be taken first. Honestly read, it offered
+very little: a reversal restores the *shape* of the data and not the data, so
+undoing a `DROP COLUMN` yields a column with nothing in it. It also required
+knowing that only the *newer* build contains the reversal for its own migration,
+so the reversal had to run before the older build was deployed — an ordering
+nobody wants to discover during an incident.
+
+Forbidding the destructive change is simpler than reversing it, and it is the
+only version of this where the previous release genuinely still works.
+
+## When a change cannot wait
+
+Some changes are not expressible as an addition. Those declare themselves:
+
+```sql
+-- breaking: entities.legacy_dn removed; 0.4 and earlier read it on every login
 ```
 
-Doing it the other way round is not dangerous — the older server refuses to
-start against a schema holding migrations it does not contain, naming them — but
-it is a dead end, because the binary you now have cannot perform the reversal
-you need.
+Applying one records the reason in `schema_migrations`, and older builds refuse
+to start against it, naming what and why. The reason is stored rather than read
+from the file on purpose: a build from before the migration existed has no copy
+of it, but it can read the row.
 
-Both directions are refused rather than attempted. That check exists because the
-alternative was silent: a mismatched binary started happily and then failed one
-request at a time, wherever a code path first touched a column it did not know
-about, which reads like a bug in whichever feature was unlucky rather than like
-the wrong version running.
+Rolling back past a breaking migration is a restore from backup. That is the
+honest cost, it is stated up front, and it should be rare enough to be an event.
+
+## What the server checks at startup
+
+Both checks live in the binary rather than in a deployment manifest, so they
+hold for a container, a Kubernetes Job, a systemd unit or a laptop.
+
+**A schema behind the binary is refused.** Migrations it needs have not been
+applied; it names them and says to run `cardinal migrate`. This is the check an
+upgrade walks into, and it exists because a Kubernetes Job's immutable pod
+template made `kubectl apply` update the Deployment and reject the migration —
+the new server rolled out and the migration never ran.
+
+**A schema ahead of the binary is allowed, and logged.** That is the rollback
+case working. It refuses only if one of the unrecognised migrations declared
+itself breaking.
 
 ## Container images
 
-The same three steps, but nothing is a shell command on the host — and two
-things about it are not obvious.
-
-**Migrating is its own container run, not something the server does.** The image
-contains the CLI as well as the server, so it is the same image with a different
-argument:
+Migrating is its own run of the same image, not something the server does:
 
 ```sh
 docker pull londerbe/cardinal:0.2.0
@@ -71,121 +97,43 @@ docker compose up -d          # or roll the deployment
 
 `migrate` finds its connection string at `/etc/cardinal/cardinal.toml` by
 convention, so a deployment that already mounts its configuration needs nothing
-else. `CARDINAL_DSN` and `-dsn` still work, and `-config` points elsewhere.
+else. `CARDINAL_DSN` and `-dsn` work too, and `-config` points elsewhere.
 
-The server refuses to start if that middle step did not happen, naming what is
-missing. That check is in the binary rather than in a manifest so it holds
-however the thing is deployed — which matters, because the manifest is exactly
-what got it wrong here first: a Kubernetes Job's pod template is immutable, so
-`kubectl apply` with a new image tag updates the Deployment and *rejects* the
-migration Job. The new server rolled out and the migration never ran, and
-nothing noticed.
+Rolling back is deploying the previous tag. Nothing else.
 
-**Only the newer image can undo its own migrations.** Reversals are embedded in
-the binary, so the image that introduced migration N is the only one that
-contains N's reversal. A downgrade therefore runs the reversal *before* the old
-image is deployed, using the image being left behind:
+## Everything else that moves
 
-```sh
-# still on 0.2.0, and this must run from 0.2.0
-docker run --rm --network=... -v /etc/cardinal:/etc/cardinal:ro \
-    londerbe/cardinal:0.2.0 migrate -to 0023_x509_ca.sql -skip-backup
-# only now
-docker compose up -d          # with 0.1.0
-```
-
-Deploying the old image first is not dangerous — it refuses to start — but it is
-a dead end: the running image no longer contains the reversal you need, and you
-have to pull the newer one back to get out of it.
-
-**`-backup` does not work in the container.** It shells out to `pg_dump`, and the
-image is distroless — no shell, no `pg_dump`, deliberately. The error says so
-rather than failing obscurely. In a container deployment the backup is taken by
-whatever already backs the database up, and `-skip-backup` is how you say it has
-been. That is a weaker guarantee than the flag on a host, and it is the honest
-one: a backup taken by a tool whose restore path nobody exercises is a file
-somebody discovers does not restore at the moment they need it.
-
-## What a reversal actually does
-
-**It restores the shape of the data, not the data.** Dropping a column reverses
-to a column with nothing in it, and afterwards nothing can tell the difference.
-This is why `-to` refuses to run without either `-backup` or an explicit
-`-skip-backup`.
-
-Every reversal states its own cost at the top of the file. Several are
-destructive in ways worth reading before running them:
-
-- **`0017_ssh_ca`** — the authority key. Every host trusting it now trusts
-  nothing this Cardinal can sign. Certificates already issued keep working until
-  they expire; no new one can be issued. Restore rather than re-init, or the
-  whole fleet needs its `TrustedUserCAKeys` replaced by hand.
-- **`0019_posix_identity`** — every uid and gid. Reassigning afterwards does not
-  reproduce the same numbers, so every file those accounts own becomes owned by
-  a number nobody holds.
-- **`0006_oidc`** — the signing key every issued token was signed with. Tokens
-  in the wild stop verifying, which is a logout for every application at once.
-- **`0003_credentials`** — every registered passkey. An account whose only
-  credential was a passkey cannot sign in afterwards.
-
-`0022_posix_adoption_range` is the one that fails rather than losing data, which
-is the better failure: if an adopted number falls outside the older, narrower
-range, the constraint is refused and nothing changes. That is the signal the
-database has outgrown the older version, and it is louder than a silent
-truncation.
-
-`0001_foundation` has no reversal, deliberately. Below it is not an older schema,
-it is no schema — dropping the database is not a migration and should not
-pretend to be one.
-
-## Writing a migration
-
-Two rules, and a test enforces the first.
-
-**Every migration ships its reversal.** `NNNN_name.sql` gets `NNNN_name.down.sql`
-beside it. A migration without one fails `go test ./migrations/`, at the moment
-it is written rather than during the incident where somebody needs it. If a
-change genuinely cannot be reversed, add it to `irreversible` in
-`migrations/migrations_test.go` with the reason — the point is that the decision
-is recorded, not that it is forbidden.
-
-A second test compares what each migration creates against what its reversal
-drops. `DROP TABLE IF EXISTS a_typo` succeeds and does nothing, so a reversal
-naming a table that never existed reports success while changing nothing. Four
-such mistakes were caught this way when the reversals were first written, and no
-amount of running them would have revealed any of them.
-
-**Expand before contracting.** A migration must leave the previous version able
-to run, which means a change lands in two releases:
-
-| Release | Does | Previous version still works because |
+| Component | Updates by | Goes back by |
 |---|---|---|
-| N | Adds the column, backfills, writes to both | The old column is still there and still written |
-| N+1 | Stops reading the old one | Nobody on N-1 is left |
-| N+2 | Drops it | Nothing reads it |
+| `cardinal server` | Pull the image, restart | Deploy the previous image |
+| Database schema | `cardinal migrate` | Nothing — the old build runs against it |
+| `cardinal-agent` | `.deb` / `.rpm` per host | Install the previous package |
+| `cardinal` CLI | Binary or package | Install the previous one |
+| Policy | `cardinal policy publish -activate` | Activate an earlier version |
 
-Adding a nullable column, a table, or an index is safe in one step. Renaming,
-dropping, or narrowing a constraint is not, and doing it in one release is what
-turns a rollback into a restore.
+Policy was always reversible: every published version is kept, activating an
+earlier one is a button in the console, and servers pick it up within ten
+seconds.
 
-## Agents
+Agents update per host and will be a mixed fleet during any rollout, which is
+fine — an agent fetches an assignment and renders it, so a server that adds a
+field sends one older agents ignore. Update servers before agents; a new agent
+may ask for a route an old server does not have.
 
-Agents update per host and will be a mixed fleet during any rollout. That is
-fine and expected — an agent fetches an assignment and renders it, so a server
-that adds a field simply sends one older agents ignore.
-
-The reverse — an agent newer than its server — is the case to avoid, because a
-new agent may ask for something the old server has no route for. Update servers
-before agents.
-
-Host access survives all of this. Certificates are validated by signature and
-carry their own expiry, so a machine keeps working through a server upgrade, a
-downgrade, and a complete outage (ADR 0006) — which is the property that makes
-these operations ordinary rather than frightening.
+Host access survives all of it. Certificates are validated by signature and
+carry their own expiry, so a machine keeps working through an upgrade, a
+rollback, and a complete outage
+([ADR 0006](adr/0006-ssh-certificates-for-host-access.md)).
 
 ## What is not covered
 
-There is no automated compatibility test between adjacent versions yet: nothing
-runs release N-1 against a database migrated by N. The startup gate makes that
-combination refuse rather than misbehave, which is the safe half; proving the
-*supported* combination works is still manual.
+No automated test runs release N-1 against a database migrated by N. The
+expand-only rule is what makes that combination work, and the rule is enforced
+per migration — but the pairing itself is checked by reading, not by running,
+until there are two releases to run it with.
+
+Backups are the operator's own, taken by whatever already backs the database up.
+Cardinal briefly shelled out to `pg_dump` and it was never right: the container
+image is distroless and has no `pg_dump`, so the flag worked on a laptop and not
+where it mattered, and a backup taken by a tool whose restore path nobody
+exercises is a file somebody discovers does not restore.

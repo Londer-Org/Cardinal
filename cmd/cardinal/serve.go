@@ -52,38 +52,40 @@ func runServe(ctx context.Context, args []string) error {
 	}
 	defer st.Close()
 
-	// Refuse a database migrated by a newer Cardinal than this one.
+	// A schema newer than this binary is normal, and used to be fatal.
 	//
-	// The downgrade case, and it used to be silent: an older binary started
-	// happily against a newer schema and then failed one request at a time,
-	// wherever a code path first touched a column it did not know about. The
-	// symptom looked like a bug in whichever feature was unlucky rather than
-	// like the wrong version running, which is the worst way to spend an
-	// afternoon after a rollback.
+	// Migrations only add — enforced by a test in migrations/ — so a build
+	// running against a schema a version or two ahead simply does not use the
+	// new columns. That is the property that makes rolling back a matter of
+	// deploying the older image and nothing else, and refusing outright turned
+	// every rollback into a schema operation performed under pressure.
 	//
-	// Checked before anything serves rather than during migration, because the
-	// binary that must not run is precisely the one nobody is going to run
-	// `migrate` with.
-	ahead, err := st.SchemaAhead(ctx)
+	// What still refuses is a migration whose author declared it incompatible.
+	// The reason was written into the row when it was applied, so a binary that
+	// predates the migration can read it even though it cannot read the file.
+	drift, err := st.SchemaAhead(ctx)
 	if err != nil {
 		return err
 	}
-	if len(ahead) > 0 {
-		// Printed rather than returned as a single error string. The guidance
-		// this trips (ST1005) is about error strings being fragments that
-		// compose; this is an operator message with a list and a next step, and
-		// squeezing it onto one punctuation-free line would make it useless at
-		// the moment somebody most needs it.
+	if len(drift.Blocking) > 0 {
 		fmt.Fprintf(os.Stderr,
-			"\n  This database has %d migration(s) this build does not contain:\n"+
-				"    %s\n\n"+
-				"  It was migrated by a newer Cardinal. This binary is %s.\n\n"+
-				"  Either run the newer version again, or take the database back with\n"+
-				"  `cardinal migrate -to <migration>` — from a backup taken before the\n"+
-				"  upgrade, because a reversal restores the shape of the data and not\n"+
-				"  the data itself.\n\n",
-			len(ahead), strings.Join(ahead, "\n    "), version.String())
-		return store.ErrSchemaAhead
+			"\n  This database carries %d change(s) this build cannot run against:\n\n",
+			len(drift.Blocking))
+		for name, why := range drift.Blocking {
+			fmt.Fprintf(os.Stderr, "    %s\n      %s\n", name, why)
+		}
+		fmt.Fprintf(os.Stderr,
+			"\n  This binary is %s. Run the version that applied them.\n\n",
+			version.String())
+		return store.ErrSchemaBreaking
+	}
+	if len(drift.Unknown) > 0 {
+		// Worth saying, not worth stopping for. Somebody looking at why a node
+		// behaves differently from its neighbours should find this immediately.
+		log.Warn("the database is newer than this build, which is supported",
+			"migrations_ahead", len(drift.Unknown),
+			"newest", drift.Unknown[len(drift.Unknown)-1],
+			"version", version.String())
 	}
 
 	// And refuse a database that has not caught up with this binary.

@@ -9,6 +9,7 @@ package migrations
 import (
 	"embed"
 	"io/fs"
+	"regexp"
 	"sort"
 	"strings"
 )
@@ -22,41 +23,40 @@ import (
 //go:embed *.sql
 var FS embed.FS
 
-// Up lists the forward migrations, in the order they apply.
-//
-// Explicitly not every *.sql file. A reversal lives beside the migration it
-// undoes as `<name>.down.sql`, which the embed pattern also matches — so a naive
-// glob would try to apply every drop immediately after the create that made it,
-// and the first `cardinal migrate` against an empty database would leave no
-// schema at all.
+// Up lists the migrations, in the order they apply.
 func Up() ([]string, error) {
-	all, err := fs.Glob(FS, "*.sql")
+	out, err := fs.Glob(FS, "*.sql")
 	if err != nil {
 		return nil, err
-	}
-	out := make([]string, 0, len(all))
-	for _, name := range all {
-		if strings.HasSuffix(name, downSuffix) {
-			continue
-		}
-		out = append(out, name)
 	}
 	sort.Strings(out)
 	return out, nil
 }
 
-// Down returns the reversal of a forward migration, if one exists.
-//
-// Absent is a legitimate answer rather than an error. Some changes cannot be
-// undone in a way worth offering — dropping a column reverses to a column with
-// no data in it, which is a different database wearing the same schema — and for
-// those the honest reversal is a restore.
-func Down(name string) ([]byte, bool) {
-	body, err := FS.ReadFile(strings.TrimSuffix(name, ".sql") + downSuffix)
-	if err != nil {
-		return nil, false
-	}
-	return body, true
-}
+// breakingHeader marks a migration that is deliberately not backwards
+// compatible: `-- breaking: <why>` on a line of its own.
+var breakingHeader = regexp.MustCompile(`(?im)^--\s*breaking:\s*(\S.*)$`)
 
-const downSuffix = ".down.sql"
+// Breaking reports whether a migration declares itself incompatible with the
+// previous version, and why.
+//
+// Migrations are expand-only — enforced by a test — so the answer is almost
+// always no, and that is what makes rolling back a matter of deploying the old
+// image. The exception exists because "never" would be a lie somebody eventually
+// has to work around quietly, and a declared exception is one an older binary
+// can refuse to run against.
+//
+// The reason travels into the database when the migration is applied, which is
+// the whole point: a version from before this migration existed cannot read the
+// file, but it can read the row.
+func Breaking(name string) (string, bool) {
+	body, err := FS.ReadFile(name)
+	if err != nil {
+		return "", false
+	}
+	m := breakingHeader.FindSubmatch(body)
+	if m == nil {
+		return "", false
+	}
+	return strings.TrimSpace(string(m[1])), true
+}
