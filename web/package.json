@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "postbuild": "node scripts/keep-dist.mjs",
     "lint": "eslint . --max-warnings 0",
     "typecheck": "tsc --noEmit"
   },
