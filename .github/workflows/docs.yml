@@ -19,6 +19,9 @@ on:
     paths:
       - 'docs/**'
       - 'website/**'
+  # So the site can be deployed without inventing a commit that touches it —
+  # which is what was needed the first time Pages was switched on.
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -50,14 +53,14 @@ jobs:
         working-directory: website
 
       - uses: actions/upload-pages-artifact@v4
-        if: github.event_name == 'push'
+        if: github.event_name != 'pull_request'
         with:
           path: website/build
 
   deploy:
     name: Deploy
     needs: build
-    if: github.event_name == 'push'
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     permissions:
       pages: write
