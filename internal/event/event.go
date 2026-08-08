@@ -41,7 +41,12 @@ const (
 	// ceremony. Its own action because "somebody signed in" and "a terminal was
 	// handed device-bound authority" are different things to read in a journal.
 	ActionCLISessionIssued = "session.cli_issued"
-	ActionSessionRevoked   = "session.revoked"
+
+	// ActionMailSettingsChanged records a change to how notifications are sent.
+	// Worth a journal entry because redirecting a deployment's mail is how
+	// somebody stops the account owner hearing about what is being done to it.
+	ActionMailSettingsChanged = "mail.settings_changed"
+	ActionSessionRevoked      = "session.revoked"
 
 	// ActionSessionReauthenticated is a step-up: an existing session re-proved
 	// its credential to satisfy a freshness rule. Distinct from session.created

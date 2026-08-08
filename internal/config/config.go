@@ -42,6 +42,7 @@ type Config struct {
 	WebAuthn WebAuthn `toml:"webauthn"`
 	Sessions Sessions `toml:"sessions"`
 	Recovery Recovery `toml:"recovery"`
+	Mail     Mail     `toml:"mail"`
 	OIDC     OIDC     `toml:"oidc"`
 	SSH      SSH      `toml:"ssh"`
 	X509     X509     `toml:"x509"`
@@ -264,6 +265,20 @@ const (
 	DefaultIdleSession     = 8 * time.Hour
 	DefaultAbsoluteSession = 7 * 24 * time.Hour
 )
+
+// Mail configures notification email.
+//
+// Only the encryption key, and deliberately only that. Everything else about
+// mail — the relay, the credentials, the from address, the wording of every
+// message — lives in the database and is edited from the console or the CLI,
+// because a deployment running the published image cannot edit files inside it.
+//
+// The key stays here for the same reason the certificate authorities' keys do:
+// it is what protects a credential in the database, so keeping it beside that
+// credential would be taping the key to the door (ADR 0021).
+type Mail struct {
+	EncryptionKey string `toml:"encryption_key"`
+}
 
 // Recovery configures account recovery channels.
 type Recovery struct {
