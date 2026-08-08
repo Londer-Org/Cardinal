@@ -1,0 +1,160 @@
+# The example estate: applications that consume Cardinal and have no privileged
+# access to it.
+#
+# Nothing here can reach the database. That is enforced by the NetworkPolicy in
+# 90-networkpolicy.yaml rather than asserted here, and the end-to-end check
+# proves it by trying and failing.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: protected-app
+  namespace: example
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: protected-app}
+  template:
+    metadata:
+      labels: {app: protected-app}
+    spec:
+      containers:
+        - name: protected-app
+          image: cardinal-e2e-protected-app:latest
+          # Loaded into the cluster's own image store by `make k8s-images`,
+          # never pulled: the cluster does not share Docker's image store, so a
+          # locally built image has to be imported and must not be looked for
+          # in a registry that has never heard of it.
+          imagePullPolicy: Never
+          env:
+            - {name: LISTEN, value: "0.0.0.0:8000"}
+          ports:
+            - {name: http, containerPort: 8000}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: protected-app
+  namespace: example
+spec:
+  selector: {app: protected-app}
+  ports:
+    - {name: http, port: 8000, targetPort: http}
+---
+# An OpenID Connect relying party, using coreos/go-oidc.
+#
+# Deliberately a different library from the one the provider is built on:
+# zitadel's server satisfying zitadel's client would mostly prove they agree with
+# each other.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: oidc-client
+  namespace: example
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: oidc-client}
+  template:
+    metadata:
+      labels: {app: oidc-client}
+    spec:
+      containers:
+        - name: oidc-client
+          image: cardinal-e2e-oidc-client:latest
+          imagePullPolicy: Never
+          env:
+            # The issuer is the same string the browser uses. This is the whole
+            # reason CoreDNS rewrites *.cardinal.test to Traefik: an OIDC issuer
+            # must be one identifier everywhere, because the value in the token
+            # has to match what the client discovered. Giving the pod a separate
+            # internal URL is how "issuer mismatch" reaches production.
+            - {name: OIDC_ISSUER, value: "https://id.cardinal.test"}
+            - {name: OIDC_REDIRECT_URL, value: "https://client.cardinal.test/callback"}
+            - {name: LISTEN, value: "0.0.0.0:8000"}
+            - name: OIDC_CLIENT_ID
+              valueFrom:
+                configMapKeyRef:
+                  name: oidc-client-registration
+                  key: client_id
+                  optional: true
+            # The relying party has to trust the CA that signed Cardinal's
+            # certificate, and a pod inherits nothing from the host's trust
+            # store. Not a demo wrinkle: it is the same work every workload needs
+            # against an internal CA.
+            #
+            # SSL_CERT_FILE replaces the pool rather than adding to it, which is
+            # fine for a client that talks to exactly one host and would be wrong
+            # for anything that also reaches the public internet.
+            - {name: SSL_CERT_FILE, value: /etc/ssl/local-ca.pem}
+          volumeMounts:
+            - {name: local-ca, mountPath: /etc/ssl/local-ca.pem, subPath: local-ca.pem, readOnly: true}
+          ports:
+            - {name: http, containerPort: 8000}
+      volumes:
+        - name: local-ca
+          secret: {secretName: local-ca}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: oidc-client
+  namespace: example
+spec:
+  selector: {app: oidc-client}
+  ports:
+    - {name: http, port: 8000, targetPort: http}
+---
+# The protected application. Strip first, then authenticate.
+#
+# It contains no Cardinal code and no OIDC library. Everything it knows about who
+# is calling arrives in headers Traefik copied from Cardinal's answer.
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: protected-app
+  namespace: example
+spec:
+  entryPoints: [websecure]
+  routes:
+    - kind: Rule
+      match: Host(`app.cardinal.test`)
+      middlewares:
+        - {name: strip-identity, namespace: traefik}
+        - {name: cardinal-auth, namespace: traefik}
+      services:
+        - {name: protected-app, port: 8000}
+  tls: {}
+---
+# The OpenID Connect relying party. NOT behind forwardAuth: it does its own
+# authentication, via the provider, which is the whole point — an application
+# that speaks OIDC does not need a proxy in front of it.
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: oidc-client
+  namespace: example
+spec:
+  entryPoints: [websecure]
+  routes:
+    - kind: Rule
+      match: Host(`client.cardinal.test`)
+      services:
+        - {name: oidc-client, port: 8000}
+  tls: {}
+---
+# The same application with no auth, so a check can prove the middleware is what
+# makes the difference rather than something incidental. Never do this in a real
+# deployment.
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: unprotected-app
+  namespace: example
+spec:
+  entryPoints: [websecure]
+  routes:
+    - kind: Rule
+      match: Host(`open.cardinal.test`)
+      services:
+        - {name: protected-app, port: 8000}
+  tls: {}

@@ -1,0 +1,86 @@
+# PostgreSQL, and nothing else, because it is the only datastore (ADR 0004).
+#
+# A StatefulSet rather than a Deployment. Not ceremony: a Deployment with a PVC
+# will happily start a second pod that mounts the same volume during a rolling
+# update, and two postgres processes over one data directory is corruption
+# rather than contention. A StatefulSet's ordering guarantee is what prevents it.
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  namespace: cardinal
+spec:
+  # Headless: a StatefulSet's pods are addressed individually, and there is
+  # exactly one writer by design (ADR 0004 — split-brain in an identity store
+  # means two primaries accepting credential writes).
+  clusterIP: None
+  selector: {app: postgres}
+  ports:
+    - {name: postgres, port: 5432, targetPort: 5432}
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: postgres-credentials
+  namespace: cardinal
+type: Opaque
+stringData:
+  # A fixture, exactly as in examples/compose.yml, and no more secret than the
+  # one in the Makefile. A real deployment takes these from wherever its secrets
+  # live; the shape is what this demonstrates.
+  POSTGRES_USER: cardinal
+  POSTGRES_PASSWORD: cardinal
+  POSTGRES_DB: cardinal
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+  namespace: cardinal
+spec:
+  serviceName: postgres
+  replicas: 1
+  selector:
+    matchLabels: {app: postgres}
+  template:
+    metadata:
+      labels: {app: postgres}
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:19beta2
+          envFrom:
+            - secretRef: {name: postgres-credentials}
+          env:
+            - name: POSTGRES_INITDB_ARGS
+              value: "--data-checksums"
+            # The image initialises at /var/lib/postgresql/data, and the volume
+            # is mounted a level above at /var/lib/postgresql — which is what
+            # the PG18+ image expects, so pg_upgrade --link does not cross a
+            # mount boundary. Mounting the old path fails to start.
+            - name: PGDATA
+              value: /var/lib/postgresql/data
+          ports:
+            - {name: postgres, containerPort: 5432}
+          volumeMounts:
+            - {name: pgdata, mountPath: /var/lib/postgresql}
+          readinessProbe:
+            exec:
+              command: [sh, -c, "pg_isready -U cardinal -d cardinal"]
+            initialDelaySeconds: 5
+            periodSeconds: 3
+            timeoutSeconds: 3
+          livenessProbe:
+            exec:
+              command: [sh, -c, "pg_isready -U cardinal -d cardinal"]
+            initialDelaySeconds: 30
+            periodSeconds: 10
+  volumeClaimTemplates:
+    - metadata:
+        name: pgdata
+      spec:
+        accessModes: [ReadWriteOnce]
+        storageClassName: standard
+        resources:
+          requests:
+            storage: 2Gi

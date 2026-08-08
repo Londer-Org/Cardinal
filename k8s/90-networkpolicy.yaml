@@ -1,0 +1,79 @@
+# What makes the two namespaces two estates rather than two labels.
+#
+# In examples/compose.yml every container shares one network, so "protected-app
+# cannot read Cardinal's database" is true only because nothing tries. Here it is
+# enforced, and test/k8s proves it by trying.
+#
+# Note the default-deny below is ingress-only. Egress is deliberately left open:
+# the relying party has to reach the issuer, and locking egress down as well
+# would mean allowing DNS, the API server and Traefik back in one rule at a time
+# for no gain in what this is demonstrating.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-ingress
+  namespace: cardinal
+spec:
+  podSelector: {}
+  policyTypes: [Ingress]
+---
+# Cardinal answers the edge, and only the edge.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: cardinal-from-traefik-only
+  namespace: cardinal
+spec:
+  podSelector:
+    matchLabels: {app: cardinal}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels: {kubernetes.io/metadata.name: traefik}
+          podSelector:
+            matchLabels: {app: traefik}
+      ports:
+        - {protocol: TCP, port: 8080}
+---
+# The database answers Cardinal, and only Cardinal.
+#
+# This is the rule that matters. An identity platform's datastore holds every
+# credential hash, every session and the audit journal; an application that
+# consumes the platform has no business reaching it, and in compose it could.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: postgres-from-cardinal-only
+  namespace: cardinal
+spec:
+  podSelector:
+    matchLabels: {app: postgres}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        # Same namespace. Cardinal itself, and the migration Job, which is a
+        # different pod with a different label and legitimately needs the
+        # database — so this admits the namespace rather than one label.
+        - podSelector: {}
+      ports:
+        - {protocol: TCP, port: 5432}
+---
+# The example applications answer the edge only. Neither is reachable from the
+# other, and protected-app in particular must never be reachable except through
+# Traefik: it trusts its identity headers unconditionally, which is only safe
+# because the auth middleware is the sole path to it.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: apps-from-traefik-only
+  namespace: example
+spec:
+  podSelector: {}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels: {kubernetes.io/metadata.name: traefik}
+          podSelector:
+            matchLabels: {app: traefik}

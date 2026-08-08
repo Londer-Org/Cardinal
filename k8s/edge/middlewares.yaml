@@ -1,0 +1,101 @@
+# The middlewares, carried over from examples/traefik/dynamic.yml.
+#
+# These are the interesting part of the whole arrangement: forwardAuth is what
+# turns Cardinal into an enforcement point for applications that know nothing
+# about it. protected-app contains no Cardinal code and no OIDC library.
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: cardinal-auth
+  namespace: traefik
+spec:
+  forwardAuth:
+    # Traefik makes a sub-request here for every request to a protected route.
+    # A 2xx admits the original request; anything else is returned to the client
+    # instead — which is how the 302 to the login page and the 403 with an
+    # explanation both reach the browser.
+    #
+    # Fully qualified and cross-namespace on purpose. The edge reaching into the
+    # cardinal namespace is the only connection that has to exist between them,
+    # and naming it in full makes that visible rather than implied.
+    address: http://cardinal.cardinal.svc.cluster.local:8080/api/auth/verify
+
+    # false means Traefik sets X-Forwarded-* itself and discards whatever the
+    # client sent.
+    #
+    # This is the setting that makes Cardinal's trusted_proxies safe. With true,
+    # a client could send its own X-Forwarded-For, Traefik would pass it through,
+    # and Cardinal — trusting Traefik — would believe it. The two settings have
+    # to agree, and this is the half that is easy to get wrong because `true`
+    # sounds like the trusting option and is in fact the credulous one.
+    trustForwardHeader: false
+
+    # ONLY these response headers are copied onto the original request.
+    #
+    # Anything Cardinal sets that is not listed here is silently dropped — the
+    # single most common cause of "the header worked in curl but not through
+    # Traefik". Adding a header on the Cardinal side means adding it here too.
+    authResponseHeaders:
+      - X-Auth-Request-User
+      - X-Auth-Request-Preferred-Username
+      - X-Auth-Request-Name
+      - X-Auth-Request-Groups
+      - X-Auth-Request-Auth-Method
+      - X-Auth-Request-Device-Bound
+      - X-Cardinal-Policy
+---
+# Strips any inbound X-Auth-Request-* headers before the auth middleware runs.
+#
+# Defence in depth: forwardAuth overwrites the ones it sets, but a header it does
+# not set would pass straight through to the backend. An application reading a
+# header Cardinal never emits would be trusting the client.
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: strip-identity
+  namespace: traefik
+spec:
+  headers:
+    customRequestHeaders:
+      X-Auth-Request-User: ""
+      X-Auth-Request-Preferred-Username: ""
+      X-Auth-Request-Name: ""
+      X-Auth-Request-Groups: ""
+      X-Auth-Request-Auth-Method: ""
+      X-Auth-Request-Device-Bound: ""
+      X-Cardinal-Policy: ""
+---
+# Plain HTTP goes to HTTPS and nowhere else. Permanent, so a browser stops asking
+# after the first time.
+#
+# It exists at all because without it an old bookmark or a typed hostname lands
+# on a connection refused, which reads as the stack being down.
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: https-redirect
+  namespace: traefik
+spec:
+  redirectScheme:
+    scheme: https
+    permanent: true
+---
+# Catches every *.cardinal.test name on the plain-HTTP entrypoint and redirects.
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: redirect-to-https
+  namespace: traefik
+spec:
+  entryPoints: [web]
+  routes:
+    - kind: Rule
+      match: HostRegexp(`^.+\.cardinal\.test$`)
+      middlewares:
+        - {name: https-redirect, namespace: traefik}
+      services:
+        # Never reached — the middleware answers first — but a route must name a
+        # service, so it names the one that is always present.
+        - name: cardinal
+          namespace: cardinal
+          port: 8080
