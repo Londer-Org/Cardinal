@@ -206,7 +206,7 @@ func TestAnEnrollmentTokenFromTheConsoleActuallyEnrols(t *testing.T) {
 	}
 
 	// Redeem it the way a machine does.
-	if identity := redeemEnrollment(t, host, token); identity == nil {
+	if identity := redeemEnrollment(t, token); identity == nil {
 		t.Fatal("the token issued by the console did not enrol the host")
 	}
 

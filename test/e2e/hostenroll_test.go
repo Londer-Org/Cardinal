@@ -43,7 +43,7 @@ func enrolledHost(t *testing.T, name string) *hostclient.Identity {
 		t.Fatalf("no enrollment token in output: %q", out)
 	}
 
-	return redeemEnrollment(t, name, token)
+	return redeemEnrollment(t, token)
 }
 
 // redeemEnrollment turns a token into an identity, the way a machine does.
@@ -55,7 +55,7 @@ func enrolledHost(t *testing.T, name string) *hostclient.Identity {
 // The keypair is generated here rather than passed in, which is the whole
 // design: Cardinal never holds a host's private key, so the only thing that can
 // produce one is the machine itself.
-func redeemEnrollment(t *testing.T, name, token string) *hostclient.Identity {
+func redeemEnrollment(t *testing.T, token string) *hostclient.Identity {
 	t.Helper()
 
 	public, private, err := ed25519.GenerateKey(rand.Reader)

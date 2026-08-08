@@ -101,6 +101,12 @@ const policyRoute = createRoute({
   component: lazyRouteComponent(() => import('@/views/policy'), 'PolicyView'),
 })
 
+const auditRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/audit',
+  component: lazyRouteComponent(() => import('@/views/audit'), 'AuditView'),
+})
+
 const recoveryRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/directory/recovery',
@@ -122,6 +128,7 @@ const routeTree = rootRoute.addChildren([
   hostDetailRoute,
   applicationsRoute,
   policyRoute,
+  auditRoute,
   recoveryRoute,
 ])
 

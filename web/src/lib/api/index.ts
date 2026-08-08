@@ -50,6 +50,8 @@ import {
   pendingInvitationsSchema,
   recoveryRequestsSchema,
   recoveryRequestSchema,
+  auditEventsSchema,
+  chainReportSchema,
   policySchema,
   policyVersionsSchema,
   policyDocumentSchema,
@@ -399,6 +401,31 @@ export const api = {
       ),
   },
 
+  /** The hash-chained journal of everything that happened. Admin-only. */
+  audit: {
+    events: (filter: { action?: string; subject?: string; before?: number }) => {
+      const params = new URLSearchParams()
+      if (filter.action !== undefined && filter.action !== '') {
+        params.set('action', filter.action)
+      }
+      if (filter.subject !== undefined && filter.subject !== '') {
+        params.set('subject', filter.subject)
+      }
+      if (filter.before !== undefined && filter.before !== 0) {
+        params.set('before', String(filter.before))
+      }
+      return request(`/api/audit/events?${params.toString()}`, auditEventsSchema)
+    },
+
+    /**
+     * Recomputes every hash from the first record forward.
+     *
+     * A POST despite reading nothing: it walks the entire journal, so it must
+     * not be something a page does on load or a browser does on prefetch.
+     */
+    verify: () => request('/api/audit/verify', chainReportSchema, { method: 'POST' }),
+  },
+
   policy: {
     /** The live policy set, including its text, so the explorer can show the
      *  rule that fired rather than only its name. */
@@ -486,6 +513,9 @@ export type {
   Me,
   PendingAuthorization,
   Policy,
+  AuditEvent,
+  AuditParty,
+  ChainReport,
   PolicyVersion,
   PolicyDocument,
   RecoveryCodes,
@@ -517,6 +547,8 @@ export const queryKeys = {
   tokens: ['tokens'] as const,
   decisions: (deniedOnly: boolean) => ['decisions', deniedOnly] as const,
   policy: ['policy'] as const,
+  auditEvents: (filter: { action: string; subject: string; before: number }) =>
+    ['audit', 'events', filter] as const,
   policyVersions: ['policy', 'versions'] as const,
   policyDocument: (version: number) => ['policy', 'versions', version] as const,
 }

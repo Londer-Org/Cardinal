@@ -445,3 +445,43 @@ export const policyDocumentSchema = z.object({
   document: z.string(),
 })
 export type PolicyDocument = z.infer<typeof policyDocumentSchema>
+
+/** One party to a journal entry: what it was about, or who caused it. */
+export const auditPartySchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  type: z.string(),
+  // The name is a tombstone rather than something somebody chose. The journal
+  // holds no personal data by design, so an erased account leaves its events
+  // intact and unreadable by name — the design working, not corruption.
+  redacted: z.boolean(),
+})
+export type AuditParty = z.infer<typeof auditPartySchema>
+
+export const auditEventSchema = z.object({
+  seq: z.number(),
+  id: z.string(),
+  occurredAt: z.string(),
+  action: z.string(),
+  subject: auditPartySchema.nullable(),
+  actor: auditPartySchema.nullable(),
+  // Opaque identifiers and enumerations only — never free text (ADR 0010).
+  payload: z.record(z.string(), z.unknown()),
+})
+export type AuditEvent = z.infer<typeof auditEventSchema>
+
+export const auditEventsSchema = z.object({
+  events: z.array(auditEventSchema),
+  // Cursor for the next page. Zero means this is the end — an append-only log
+  // is paged by sequence rather than offset, because counting one that grows
+  // forever is a full scan and an offset into one skips rows as it grows.
+  before: z.number(),
+})
+
+export const chainReportSchema = z.object({
+  valid: z.boolean(),
+  eventsChecked: z.number(),
+  brokenAtSeq: z.number(),
+  reason: z.string(),
+})
+export type ChainReport = z.infer<typeof chainReportSchema>

@@ -6,6 +6,7 @@ import {
   LifeBuoyIcon,
   ScaleIcon,
   ScrollTextIcon,
+  ShieldCheckIcon,
   ServerIcon,
   TerminalIcon,
   UsersIcon,
@@ -77,7 +78,13 @@ export const NAV: NavSection[] = [
     // the pages somebody gets for managing accounts.
     label: 'Authorization',
     visible: (session) => session.canAdministerDirectory,
-    items: [{ label: 'Policy', to: '/policy', icon: ScaleIcon }],
+    items: [
+      { label: 'Policy', to: '/policy', icon: ScaleIcon },
+      // Beside policy rather than under Directory: this is the record of what
+      // happened, which is the other half of the same question as what is
+      // allowed to happen.
+      { label: 'Audit journal', to: '/audit', icon: ShieldCheckIcon },
+    ],
   },
   {
     label: 'Integrations',

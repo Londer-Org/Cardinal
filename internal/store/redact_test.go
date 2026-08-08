@@ -6,6 +6,7 @@ import (
 
 	"github.com/arthur-lonfils/cardinal/internal/directory"
 	"github.com/arthur-lonfils/cardinal/internal/temporal"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -135,4 +136,52 @@ func TestRedactionConstraintCatchesIncompleteErasure(t *testing.T) {
 	require.Error(t, err,
 		"marking an entity redacted without clearing its personal data must be rejected")
 	assert.Contains(t, err.Error(), "entities_redaction_is_complete")
+}
+
+// TestTwoErasuresOfTheSameTypeBothSucceed.
+//
+// The tombstone has to be unique per type, and it used to be built from the
+// first eight characters of the entity's id. For a UUIDv7 those are the high 32
+// bits of a millisecond timestamp: they change roughly every seven weeks, so
+// every entity of a type created in the same window shared them.
+//
+// The consequence was that the *second* erasure of a user failed on
+// entities_name_unique_per_type — a GDPR request refused by a constraint
+// violation, with nothing suggesting the reason. On a real directory the two
+// people would almost certainly have been created within seven weeks of each
+// other, so this was the common case rather than the corner.
+//
+// Two accounts created back to back is the whole test, which is the point: it
+// needs no contrivance, and nothing had ever tried it.
+func TestTwoErasuresOfTheSameTypeBothSucceed(t *testing.T) {
+	s := newStore(t)
+	ctx := t.Context()
+
+	first := mustCreate(t, s, directory.TypeUser, "first-to-go")
+	second := mustCreate(t, s, directory.TypeUser, "second-to-go")
+
+	require.NoError(t, s.RedactEntity(ctx, first.ID, nil))
+	require.NoError(t, s.RedactEntity(ctx, second.ID, nil),
+		"the second erasure of the same type must not collide with the first")
+
+	// And the tombstones differ, which is what the constraint was protecting.
+	var names []string
+	rows, err := s.Pool().Query(ctx,
+		`SELECT name FROM entities WHERE id = ANY($1)`,
+		[]uuid.UUID{first.ID, second.ID})
+	require.NoError(t, err)
+	defer rows.Close()
+	for rows.Next() {
+		var name string
+		require.NoError(t, rows.Scan(&name))
+		names = append(names, name)
+	}
+	require.NoError(t, rows.Err())
+
+	require.Len(t, names, 2)
+	assert.NotEqual(t, names[0], names[1], "two erasures produced one tombstone")
+	for _, name := range names {
+		assert.NotContains(t, name, "first-to-go")
+		assert.NotContains(t, name, "second-to-go")
+	}
 }

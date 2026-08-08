@@ -33,9 +33,21 @@ import (
 func (s *Store) RedactEntity(ctx context.Context, id uuid.UUID, actorID *uuid.UUID) error {
 	return s.InTx(ctx, func(tx pgx.Tx) error {
 		// The tombstone keeps the type-scoped uniqueness constraint satisfiable
-		// while carrying no information about who this was. The ID suffix is
-		// only to disambiguate multiple redactions of the same type.
-		tombstone := fmt.Sprintf("redacted-%s", id.String()[:8])
+		// while carrying no information about who this was.
+		//
+		// The whole id, not a prefix of it. This used to take the first eight
+		// characters, which for a UUIDv7 are the high 32 bits of a millisecond
+		// timestamp — they change roughly every seven weeks. So every entity of
+		// a type redacted within the same window produced the *same* tombstone,
+		// and the second erasure failed on entities_name_unique_per_type.
+		//
+		// That is a GDPR request failing with a constraint violation, which is
+		// not a class of bug to leave to chance: found because a test erased two
+		// accounts and the second one could not be.
+		//
+		// The id is already public — it appears in the journal, which erasure
+		// deliberately cannot reach — so nothing is disclosed by using all of it.
+		tombstone := "redacted-" + id.String()
 
 		tag, err := tx.Exec(ctx, `
 			UPDATE entities

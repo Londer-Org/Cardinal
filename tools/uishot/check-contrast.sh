@@ -97,6 +97,10 @@ PAGES=(
   /directory/hosts
   /directory/hosts/uishot-web.prod
   /directory/recovery
+  /audit
+  # The chain report, which only exists after somebody asks for it — and is the
+  # one alert on the page that turns destructive when it has bad news.
+  "/audit|button[data-action=\"verify\"]"
   /policy
   # The confirmation before making a version live: a destructive button and the
   # alert explaining that this decides everything, neither of which is on the
