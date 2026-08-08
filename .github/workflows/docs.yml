@@ -1,11 +1,15 @@
 name: Docs
 
-# On main so the site tracks what is in the tree, and on tags because a release
-# is when a version snapshot becomes worth keeping.
+# On main only.
+#
+# It ran on tags too, on the reasoning that a release is when a version snapshot
+# becomes worth keeping. That was wrong twice: a snapshot is made by
+# `npm run docs:version`, which is a commit on main rather than anything a build
+# produces, and the github-pages environment permits deployments only from main
+# — so every tag failed at the deploy step having built the site for nothing.
 on:
   push:
     branches: [main]
-    tags: ['v[0-9]+.[0-9]+.[0-9]+*']
     # Everything the site is built from. The docs live in ../docs rather than
     # inside website/, because they are read in a checkout and on GitHub as
     # often as here — a second copy under website/ would be the one that goes
