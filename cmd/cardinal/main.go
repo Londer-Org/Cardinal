@@ -182,6 +182,14 @@ ACCESS TOKENS (scripts and automation)
   refuses it administrative actions and SSH certificates.
 
 HOST ACCESS (SSH certificates)
+  ssh [user@]<host> [-server <url>]        Log into a machine. Opens a browser
+                                           for the passkey, fetches a
+                                           short-lived certificate, hands it to
+                                           ssh-agent, and connects. Nothing is
+                                           written to disk.
+      -l <account>                           the local account, if not your own
+      -print                                 print the certificate, do not connect
+
   ssh ca init [-activate]                  Create an authority key, print its
                                            public half for TrustedUserCAKeys
   ssh ca list                              Keys, and which one is signing

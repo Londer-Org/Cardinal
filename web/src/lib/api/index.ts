@@ -50,6 +50,7 @@ import {
   credentialsSchema,
   decisionsSchema,
   meSchema,
+  cliAuthorizationSchema,
   pendingAuthorizationSchema,
   approvedRecoverySchema,
   pendingInvitationsSchema,
@@ -77,6 +78,20 @@ export const api = {
     me: () => request('/api/auth/me', meSchema),
 
     logout: () => request('/api/auth/logout', z.undefined(), { method: 'POST' }),
+
+    /**
+     * Approves a terminal, handing it a code rather than a session.
+     *
+     * Requires a device-bound session, which is the whole point: the terminal
+     * receives what the passkey proved. If this accepted an access token, a
+     * leaked one could mint a device-bound session and walk past every rule
+     * that refuses tokens.
+     */
+    authorizeCLI: (callback: string, verifierHash: string) =>
+      request('/api/cli/authorize', cliAuthorizationSchema, {
+        method: 'POST',
+        body: { callback, verifierHash },
+      }),
 
     /**
      * Edits your own display name and email.

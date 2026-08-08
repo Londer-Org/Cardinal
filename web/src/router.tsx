@@ -23,6 +23,15 @@ const homeRoute = createRoute({
   component: lazyRouteComponent(() => import('@/views/home'), 'HomeView'),
 })
 
+// Arrived at from a terminal, never from the navigation. It is the one screen
+// whose usual correct answer is "no", so it deliberately has no menu entry —
+// somebody finding it by browsing has nothing to approve.
+const cliLoginRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/cli-login',
+  component: lazyRouteComponent(() => import('@/views/cli-login'), 'CLILoginView'),
+})
+
 const accountRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/account',
@@ -121,6 +130,7 @@ const recoveryRoute = createRoute({
 
 const routeTree = rootRoute.addChildren([
   homeRoute,
+  cliLoginRoute,
   accountRoute,
   passkeysRoute,
   tokensRoute,

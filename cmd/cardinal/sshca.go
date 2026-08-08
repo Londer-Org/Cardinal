@@ -14,26 +14,22 @@ import (
 	"go.londer.be/cardinal/internal/store"
 )
 
-func runSSH(ctx context.Context, args []string) error {
+// runSSHCA administers the authority. `cardinal ssh <host>` — logging in — is
+// in ssh.go and dispatches here when the first argument is `ca`.
+func runSSHCA(ctx context.Context, args []string) error {
 	if len(args) == 0 {
 		return fmt.Errorf("%w: cardinal ssh ca <init|list|trust|rotate>", errUsage)
 	}
-	if args[0] != "ca" {
-		return fmt.Errorf("%w: cardinal ssh ca <init|list|trust|rotate>", errUsage)
-	}
-	if len(args) == 1 {
-		return fmt.Errorf("%w: cardinal ssh ca <init|list|trust|rotate>", errUsage)
-	}
 
-	switch args[1] {
+	switch args[0] {
 	case "init":
-		return runSSHCAInit(ctx, args[2:])
+		return runSSHCAInit(ctx, args[1:])
 	case "list":
-		return runSSHCAList(ctx, args[2:])
+		return runSSHCAList(ctx, args[1:])
 	case "trust":
-		return runSSHCATrust(ctx, args[2:])
+		return runSSHCATrust(ctx, args[1:])
 	case "rotate":
-		return runSSHCARotate(ctx, args[2:])
+		return runSSHCARotate(ctx, args[1:])
 	default:
 		return fmt.Errorf("%w: cardinal ssh ca <init|list|trust|rotate>", errUsage)
 	}

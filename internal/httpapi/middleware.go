@@ -30,6 +30,11 @@ type ctxKey int
 
 const (
 	ctxSession ctxKey = iota
+
+	// ctxHeaderAuth marks a request that authenticated from an Authorization
+	// header rather than a cookie. Read only by csrfProtect, which needs to
+	// know how a request proved itself and not what it proved.
+	ctxHeaderAuth
 )
 
 // SessionFrom returns the authenticated session, if any.
@@ -128,6 +133,27 @@ func (s *Server) authenticate(next http.Handler) http.Handler {
 			return
 		}
 
+		// A session presented as a bearer token, which is what a terminal does.
+		//
+		// It has no cookie jar — that is the premise of `cardinal ssh` — so the
+		// session it was issued has to travel in a header. Distinguished by
+		// prefix rather than by trying both: an access token is `crd_pat_…`, and
+		// guessing would mean two lookups on every request and a failed one in
+		// the log for each.
+		if !strings.HasPrefix(presented, store.TokenPrefix) {
+			sess, err := s.store.LookupSession(r.Context(), presented)
+			if err != nil {
+				if !errors.Is(err, store.ErrSessionInvalid) {
+					s.log.ErrorContext(r.Context(), "session lookup failed", "error", err)
+				}
+				next.ServeHTTP(w, r)
+				return
+			}
+			ctx := context.WithValue(r.Context(), ctxSession, sess)
+			next.ServeHTTP(w, r.WithContext(context.WithValue(ctx, ctxHeaderAuth, true)))
+			return
+		}
+
 		token, err := s.store.LookupAccessToken(r.Context(), presented)
 		if err != nil {
 			if !errors.Is(err, store.ErrTokenInvalid) {
@@ -137,8 +163,8 @@ func (s *Server) authenticate(next http.Handler) http.Handler {
 			return
 		}
 
-		next.ServeHTTP(w, r.WithContext(
-			context.WithValue(r.Context(), ctxSession, sessionForToken(token))))
+		ctx := context.WithValue(r.Context(), ctxSession, sessionForToken(token))
+		next.ServeHTTP(w, r.WithContext(context.WithValue(ctx, ctxHeaderAuth, true)))
 	})
 }
 
@@ -285,9 +311,19 @@ func (s *Server) csrfProtect(next http.Handler) http.Handler {
 			return
 		}
 
-		// ACME, for the third time and the same reason. Every request is a JWS
-		// signed by an account key; there is no cookie, no ambient authority,
-		// and a client is a machine with no browser to be tricked.
+		// A terminal exchanging its code, for the same reason again. It holds
+		// no cookie — that is the premise of the whole flow — so there is no
+		// ambient authority to abuse. A browser tricked into posting here would
+		// still need the code *and* the verifier, and it can have neither: one
+		// was handed to a process on this machine and the other never left it.
+		if r.URL.Path == "/api/cli/exchange" {
+			next.ServeHTTP(w, r)
+			return
+		}
+
+		// ACME, and the same reason. Every request is a JWS signed by an
+		// account key; there is no cookie, no ambient authority, and a client is
+		// a machine with no browser to be tricked.
 		if strings.HasPrefix(r.URL.Path, "/acme/") {
 			next.ServeHTTP(w, r)
 			return
@@ -303,8 +339,15 @@ func (s *Server) csrfProtect(next http.Handler) http.Handler {
 		// request could switch the protection off. authenticate() prefers the
 		// cookie for the same reason, so a request holding both is
 		// cookie-authenticated and still lands here.
-		if session, ok := SessionFrom(r.Context()); ok &&
-			session.AuthMethod == store.AuthMethodAccessToken {
+		// How it authenticated, not what it authenticated as.
+		//
+		// This used to ask whether the session's method was "access token",
+		// which was the same question only while access tokens were the sole
+		// thing presented in a header. A terminal now presents a session it was
+		// issued, whose method is the passkey it inherited — so the old test
+		// refused the very requests this exemption exists for, and the reasoning
+		// three paragraphs above already said what the right one is.
+		if headerAuthenticated, ok := r.Context().Value(ctxHeaderAuth).(bool); ok && headerAuthenticated {
 			next.ServeHTTP(w, r)
 			return
 		}

@@ -537,3 +537,16 @@ export const healthSchema = z.object({
   version: z.string(),
 })
 export type Health = z.infer<typeof healthSchema>
+
+/**
+ * What the server returns when a terminal is approved.
+ *
+ * A code, not a session token. The console hands the code to the terminal
+ * through a redirect, and the terminal exchanges it presenting a verifier the
+ * console never saw — so what passes through the browser is worthless alone.
+ */
+export const cliAuthorizationSchema = z.object({
+  code: z.string(),
+  expiresIn: z.number(),
+})
+export type CLIAuthorization = z.infer<typeof cliAuthorizationSchema>
