@@ -141,12 +141,29 @@ verify-host: ## Check the host integration against real getent, id and sudo
 	@docker build -q -f tools/hostcheck/Dockerfile -t cardinal-hostcheck . >/dev/null
 	@docker run --rm cardinal-hostcheck
 
+# Pinned, and the same value CI uses. A local golangci-lint one minor version
+# behind reported a clean tree while CI found five gosec issues the older build
+# had no rules for, which is the worst way for a gate to fail: silently, and
+# only after a push.
+GOLANGCI_VERSION := v2.12.2
+GOLANGCI := $(shell go env GOPATH)/bin/golangci-lint
+
+GOVULNCHECK := $(shell go env GOPATH)/bin/govulncheck
+
+.PHONY: lint-tools
+lint-tools: ## Install the pinned linter and govulncheck if they are missing or stale
+	@$(GOLANGCI) version 2>/dev/null | grep -q '$(GOLANGCI_VERSION:v%=%)' || { \
+		echo "installing golangci-lint $(GOLANGCI_VERSION)"; \
+		go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_VERSION); }
+	@test -x $(GOVULNCHECK) || { echo "installing govulncheck"; \
+		go install golang.org/x/vuln/cmd/govulncheck@latest; }
+
 .PHONY: lint
-lint: ## Run linters and vulnerability scanning
+lint: lint-tools ## Run linters and vulnerability scanning
 	gofumpt -l -d .
 	go vet ./...
-	golangci-lint run
-	govulncheck ./...
+	$(GOLANGCI) run
+	$(GOVULNCHECK) ./...
 
 .PHONY: ui
 ui: ## Build the admin UI into web/dist (embedded by the Go build)

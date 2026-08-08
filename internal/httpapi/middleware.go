@@ -319,6 +319,9 @@ func (s *Server) csrfProtect(next http.Handler) http.Handler {
 					// into the header. It is not a credential — it is only
 					// useful in combination with the session cookie, which
 					// stays HttpOnly.
+					//nolint:gosec // G124 wants HttpOnly; this cookie must be
+					// readable by script, which is the whole double-submit
+					// mechanism. See the note above.
 					http.SetCookie(w, &http.Cookie{
 						Name:  csrfCookie,
 						Value: token,
@@ -437,6 +440,8 @@ func (r *statusRecorder) WriteHeader(code int) {
 }
 
 func setSessionCookie(w http.ResponseWriter, token string, expires time.Time, secure bool, domain string) {
+	//nolint:gosec // G124 cannot see that `secure` is `!DevMode` (server.go),
+	// so it reads a variable where it wants a literal true.
 	http.SetCookie(w, &http.Cookie{
 		Name:  sessionCookie,
 		Value: token,
@@ -456,6 +461,8 @@ func setSessionCookie(w http.ResponseWriter, token string, expires time.Time, se
 }
 
 func clearCookie(w http.ResponseWriter, name string, secure bool, domain string) {
+	//nolint:gosec // G124 again: the attributes here must mirror whatever set
+	// the cookie, or the browser keeps the original.
 	http.SetCookie(w, &http.Cookie{
 		Name:  name,
 		Value: "",

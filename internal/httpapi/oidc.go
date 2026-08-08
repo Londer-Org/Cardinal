@@ -129,7 +129,11 @@ func (s *Server) handleOIDCLogin(w http.ResponseWriter, r *http.Request) {
 		"subject", session.SubjectID, "auth_method", session.AuthMethod)
 
 	// Back to the library, which mints the code and redirects to the client.
-	http.Redirect(w, r, "/oidc/authorize/callback?id="+requestID.String(),
+	//
+	// G710 traces requestID back to a request parameter and calls this an open
+	// redirect. It is not: requestID is a uuid.UUID, so String() can only
+	// produce hex and dashes — there is no input that makes this leave the path.
+	http.Redirect(w, r, "/oidc/authorize/callback?id="+requestID.String(), //nolint:gosec // a UUID cannot carry a scheme or host
 		http.StatusFound)
 }
 
@@ -243,5 +247,11 @@ func redirectAuthError(w http.ResponseWriter, r *http.Request,
 	}
 	target.RawQuery = query.Encode()
 
-	http.Redirect(w, r, target.String(), http.StatusFound)
+	// G710 flags this as an open redirect because RedirectURI reaches here from
+	// the request. Checked in zitadel/oidc v3.49.1: authorize() runs
+	// ValidateAuthRequestClient -> ValidateAuthReqRedirectURI ->
+	// checkURIAgainstRedirects (auth_request.go:122) before it ever calls
+	// CreateAuthRequest (auth_request.go:145), so a URI that reached storage is
+	// one the client registered. Redirecting errors there is what OIDC requires.
+	http.Redirect(w, r, target.String(), http.StatusFound) //nolint:gosec // validated against the client's registered URIs before storage
 }
