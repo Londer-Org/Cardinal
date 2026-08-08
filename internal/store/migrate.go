@@ -202,3 +202,85 @@ func (s *Store) SchemaAhead(ctx context.Context) ([]string, error) {
 	}
 	return ahead, rows.Err()
 }
+
+// ErrIrreversible reports a migration that must be undone before one that
+// cannot be.
+var ErrIrreversible = errors.New("store: migration has no reversal")
+
+// MigrateDownTo undoes migrations until target is the newest one applied.
+//
+// Reverse order, one transaction each, and the row is removed from
+// schema_migrations in the same transaction as the reversal it records — so an
+// interrupted downgrade leaves the database at a migration boundary rather than
+// partway through an unknown one, exactly as the forward path does.
+//
+// The name is the whole filename, because that is what schema_migrations holds
+// and what `cardinal migrate -status` prints. A number would be friendlier and
+// would also be a second way to refer to the same thing, which is how the two
+// drift.
+func (s *Store) MigrateDownTo(ctx context.Context, target string) ([]string, error) {
+	applied, err := s.AppliedMigrations(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if len(applied) == 0 {
+		return nil, nil
+	}
+
+	// Everything strictly newer than the target, newest first.
+	var undo []string
+	found := target == ""
+	for i := len(applied) - 1; i >= 0; i-- {
+		if applied[i].Name == target {
+			found = true
+			break
+		}
+		undo = append(undo, applied[i].Name)
+	}
+	if !found {
+		return nil, fmt.Errorf(
+			"store: %q is not an applied migration — `cardinal migrate -status` "+
+				"lists what is", target)
+	}
+
+	// Every reversal is checked before any of them runs. Stopping halfway
+	// because the fourth one turns out to be missing would leave the schema
+	// somewhere no version of Cardinal has ever been.
+	for _, name := range undo {
+		if _, ok := migrations.Down(name); !ok {
+			return nil, fmt.Errorf("%w: %s — nothing was changed", ErrIrreversible, name)
+		}
+	}
+
+	conn, err := s.pool.Acquire(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("store: acquiring connection: %w", err)
+	}
+	defer conn.Release()
+
+	if _, execErr := conn.Exec(ctx, `SELECT pg_advisory_lock($1)`, migrationLock); execErr != nil {
+		return nil, fmt.Errorf("store: taking migration lock: %w", execErr)
+	}
+	defer func() {
+		_, _ = conn.Exec(context.WithoutCancel(ctx), //nolint:errcheck // the lock is released by the connection dropping regardless
+			`SELECT pg_advisory_unlock($1)`, migrationLock)
+	}()
+
+	var undone []string
+	for _, name := range undo {
+		body, _ := migrations.Down(name)
+		err := s.InTx(ctx, func(tx pgx.Tx) error {
+			if _, execErr := tx.Exec(ctx, string(body)); execErr != nil {
+				return fmt.Errorf("reversing %s: %w", name, execErr)
+			}
+			_, execErr := tx.Exec(ctx,
+				`DELETE FROM schema_migrations WHERE name = $1`, name)
+			return execErr
+		})
+		if err != nil {
+			return undone, fmt.Errorf("store: %w", err)
+		}
+		undone = append(undone, name)
+	}
+	return undone, nil
+}
