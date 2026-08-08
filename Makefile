@@ -165,64 +165,6 @@ lint: lint-tools ## Run linters and vulnerability scanning
 	$(GOLANGCI) run
 	$(GOVULNCHECK) ./...
 
-# ── Kubernetes ─────────────────────────────────────────────────────────────
-#
-# A second way to run the same stack, on Docker Desktop's Kubernetes. Not a
-# replacement for `make e2e-up` — that is what the end-to-end suite drives and
-# it stays the fast path. This one exists because compose cannot express the
-# thing worth rehearsing: Cardinal and the applications that consume it as
-# separate estates, where "the application cannot reach the database" is
-# enforced rather than merely true.
-#
-# Every target pins the context. kubeconfig on a work machine also holds real
-# clusters, and `kubectl apply -f k8s/` against the wrong one is one keystroke
-# away.
-K8S_CONTEXT ?= docker-desktop
-KUBECTL ?= $(shell go env GOPATH)/bin/kubectl
-
-.PHONY: k8s-up
-k8s-up: ## Bring up the Kubernetes stack on Docker Desktop
-	@K8S_CONTEXT=$(K8S_CONTEXT) KUBECTL=$(KUBECTL) ./k8s/up.sh
-
-.PHONY: k8s-down
-k8s-down: ## Tear the Kubernetes stack down, volumes included
-	@K8S_CONTEXT=$(K8S_CONTEXT) KUBECTL=$(KUBECTL) ./k8s/down.sh
-
-.PHONY: k8s-images
-k8s-images: ## Rebuild the example images and load them into the cluster
-	@./k8s/load-images.sh
-
-.PHONY: k8s-status
-k8s-status: ## What is running, across all three namespaces
-	@$(KUBECTL) --context $(K8S_CONTEXT) get pods,svc -n cardinal -n example 2>/dev/null || true
-	@$(KUBECTL) --context $(K8S_CONTEXT) get pods -A -l app=traefik
-
-.PHONY: k8s-seed
-k8s-seed: ## Policy, authorities, a user and a relying party
-	@K8S_CONTEXT=$(K8S_CONTEXT) KUBECTL=$(KUBECTL) ./k8s/seed.sh
-
-.PHONY: k8s-host
-k8s-host: ## Join a Linux machine to the Cardinal running in the cluster
-	@K8S_CONTEXT=$(K8S_CONTEXT) KUBECTL=$(KUBECTL) ./k8s/host.sh
-
-.PHONY: k8s-verify
-k8s-verify: ## Prove the stack works
-	@K8S_CONTEXT=$(K8S_CONTEXT) KUBECTL=$(KUBECTL) ./k8s/verify.sh
-
-.PHONY: k8s-verify-sabotage
-k8s-verify-sabotage: ## Delete the network policies, re-verify, restore
-	@# The isolation checks pass by failing to connect, which is exactly how a
-	@# check that tests nothing looks. This removes what they depend on and
-	@# expects them to fail — if they still pass, they were never checking.
-	@echo '==> removing the network policies'
-	@$(KUBECTL) --context $(K8S_CONTEXT) -n cardinal delete networkpolicy \
-		postgres-from-cardinal-only cardinal-from-traefik-only default-deny-ingress >/dev/null 2>&1 || true
-	@sleep 3
-	@K8S_CONTEXT=$(K8S_CONTEXT) KUBECTL=$(KUBECTL) ./k8s/verify.sh || true
-	@echo '==> restoring'
-	@$(KUBECTL) --context $(K8S_CONTEXT) apply -f k8s/90-networkpolicy.yaml >/dev/null
-
-
 .PHONY: ui
 ui: ## Build the admin UI into web/dist (embedded by the Go build)
 	cd web && npm ci --silent && npm run build

@@ -84,6 +84,11 @@ application that knows nothing about authentication, and an OIDC relying party
 that speaks the protocol itself. The end-to-end suite drives this same stack, so
 it does not rot.
 
+It is a fixture, and stays small on purpose. For a full deployment to stand up by
+hand, break, and demo — Kubernetes, separate namespaces with the isolation
+actually enforced, and a Linux machine joined to it over the network — see
+[cardinal-lab](https://github.com/Londer-Org/cardinal-lab).
+
 ```sh
 sudo apt install mkcert libnss3-tools   # macOS: brew install mkcert
 mkcert -install                         # a local CA in your trust store

@@ -516,9 +516,16 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	// person with curl. "Which build is that node running" is otherwise a
 	// question you can only answer by getting a shell on it, which is exactly
 	// what you cannot do during a rolling deploy that went wrong.
-	writeJSON(w, http.StatusOK, map[string]string{
-		"status":  "ok",
-		"version": version.String(),
+	// The policy version for the same reason as the build. Policy is loaded
+	// asynchronously — serve.go polls for an activated version every ten
+	// seconds — so a node can be enforcing a set the database no longer calls
+	// active, and until this was here nothing outside the process could tell.
+	// That is the state somebody is asking about after a publish, a rollback, or
+	// a rolling deploy where one node picked it up and another has not.
+	writeJSON(w, http.StatusOK, map[string]any{
+		"status":        "ok",
+		"version":       version.String(),
+		"policyVersion": s.PolicyVersion(),
 	})
 }
 

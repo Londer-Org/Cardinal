@@ -551,3 +551,48 @@ func postJSON(t *testing.T, c *http.Client, path, csrf string, body, out any) *h
 	}
 	return resp
 }
+
+// TestHealthSaysWhichBuildAndWhichPolicy.
+//
+// Both are the questions asked of a node during a rolling deploy that went
+// wrong, and both are otherwise answerable only by getting a shell on it —
+// which is exactly what you cannot do at that moment.
+//
+// The policy version matters separately from the build. Policy is loaded
+// asynchronously: serve.go polls for an activated version every ten seconds, so
+// a node can be enforcing a set the database no longer calls active, and nothing
+// outside the process could see that. Found the hard way, by a script that
+// waited for a new policy by grepping the log for a line every earlier startup
+// had also written.
+func TestHealthSaysWhichBuildAndWhichPolicy(t *testing.T) {
+	var body struct {
+		Status        string `json:"status"`
+		Version       string `json:"version"`
+		PolicyVersion *int64 `json:"policyVersion"`
+	}
+
+	resp := request(t, client(t), http.MethodGet, hostCardinal, "/api/health", "")
+	defer drain(resp)
+
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatalf("decoding health: %v", err)
+	}
+
+	if body.Status != "ok" {
+		t.Errorf("status = %q, want ok", body.Status)
+	}
+	if body.Version == "" {
+		t.Error("no version reported — a node that cannot say what it is running " +
+			"cannot be diagnosed during the rollout where that matters")
+	}
+	if body.PolicyVersion == nil {
+		t.Fatal("no policyVersion reported")
+	}
+	// The stack is seeded with an activated policy, so a node serving it reports
+	// a real version. Zero would mean it is enforcing nothing, which is a
+	// working server that denies everything.
+	if *body.PolicyVersion <= 0 {
+		t.Errorf("policyVersion = %d, want the activated set — 0 means this node "+
+			"is enforcing no policy at all", *body.PolicyVersion)
+	}
+}
