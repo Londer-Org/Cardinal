@@ -200,8 +200,22 @@ export const grantSchema = z.object({
 })
 export type Grant = z.infer<typeof grantSchema>
 
+/** A POSIX identity, when the account has one. */
+export const posixIdentitySchema = z.object({
+  uid: z.number(),
+  homeDirectory: z.string(),
+  loginShell: z.string(),
+  // Until a host has been told, the number can still be changed to match one
+  // an existing system already uses. After that it is on a filesystem
+  // somewhere and changing it would move files rather than edit a row.
+  adoptable: z.boolean(),
+})
+export type PosixIdentity = z.infer<typeof posixIdentitySchema>
+
 export const directoryUserDetailSchema = directoryUserSchema.extend({
   memberships: z.array(grantSchema),
+  // Null for the common case: most accounts never touch a Linux host.
+  posix: posixIdentitySchema.nullable(),
   // Set while a link is outstanding. "issued" and "issued yesterday, expiring
   // in an hour" call for different actions.
   invitationExpiresAt: z.string().nullable(),

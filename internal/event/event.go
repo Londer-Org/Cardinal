@@ -97,6 +97,12 @@ const (
 	ActionRecoveryCodesIssued = "recovery.codes_issued"
 	ActionRecoveryCodeUsed    = "recovery.code_used"
 
+	// A client secret was replaced. Not the secret, obviously, and not the
+	// client id either — the entity id says which application, and the client
+	// id is the value an attacker holding a leaked secret would need to pair
+	// with it.
+	ActionClientSecretRotated = "application.secret_rotated"
+
 	ActionConsentGranted = "consent.granted"
 	ActionConsentRevoked = "consent.revoked"
 

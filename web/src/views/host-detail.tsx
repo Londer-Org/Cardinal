@@ -39,6 +39,7 @@ import {
   useRemoveHostAlias,
 } from '@/features/directory/useDirectory'
 import { RequiresFreshAuth } from '@/features/auth/RequiresFreshAuth'
+import { RenameDialog } from '@/features/directory/RenameDialog'
 import { ViewHeader } from '@/views/ViewHeader'
 import { hostAliasRequest, type HostAliasRequest, type HostDetail } from '@/lib/api'
 
@@ -329,6 +330,7 @@ function HostDetailViewBody() {
       <ViewHeader
         title={host.name}
         description={host.displayName === '' ? undefined : host.displayName}
+        action={<RenameDialog kind="hosts" current={host.name} />}
       />
 
       {host.disabled && (

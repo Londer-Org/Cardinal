@@ -68,6 +68,13 @@ var allowedPayloadKeys = []string{
 	// can reach it.
 	"display_name_changed",
 	"email_changed",
+
+	// A rename happened. Not what it was, and not what it became: a login
+	// identifies a person, and the journal is the one place erasure cannot
+	// reach. The old name is exactly what an auditor would want here, and it is
+	// exactly what must not be kept — the same trade the rest of this list
+	// makes, applied where it costs the most.
+	"name_changed",
 }
 
 // deniedPayloadKeys are rejected with a pointed message. They would be caught

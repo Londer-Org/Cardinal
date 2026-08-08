@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import type { AdminProfileRequest, PosixRequest } from '@/lib/api'
 import { api, queryKeys, type GroupKind, type PageQuery, type UserStatus } from '@/lib/api'
 
 export function useUsers(page: PageQuery, status: UserStatus = '') {
@@ -226,6 +227,26 @@ export function useRemoveHostAlias(name: string) {
     mutationFn: (alias: string) => api.directory.removeHostAlias(name, alias),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: queryKeys.host(name) })
+    },
+  })
+}
+
+export function useUpdateUser(login: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (input: AdminProfileRequest) => api.directory.updateUser(login, input),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: queryKeys.user(login) })
+    },
+  })
+}
+
+export function useSetPosix(login: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (input: PosixRequest) => api.directory.setPosix(login, input),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: queryKeys.user(login) })
     },
   })
 }

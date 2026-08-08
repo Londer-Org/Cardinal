@@ -23,6 +23,13 @@ var (
 
 	// ErrInsecureRedirect means a redirect URI would weaken the flow.
 	ErrInsecureRedirect = errors.New("store: insecure redirect URI")
+
+	// ErrPublicClient means a secret was asked for on a client that has none.
+	//
+	// Giving one to a public client would change what it is: PKCE is its
+	// protection, and a registration that suddenly carried a secret would no
+	// longer describe the application it belongs to.
+	ErrPublicClient = errors.New("store: this is a public client and has no secret")
 )
 
 // AuthMethod is how a client authenticates at the token endpoint.
@@ -423,4 +430,74 @@ func (s *Store) DisableOIDCClient(ctx context.Context, clientID string, actorID 
 		return fmt.Errorf("store: revoking consents for disabled client: %w", err)
 	}
 	return nil
+}
+
+// RotateClientSecret issues a new secret and invalidates the old one.
+//
+// There was no way to do this. A client secret that leaked — in a repository,
+// a log, a screenshot, a departing engineer's notes — could only be dealt with
+// by disabling the application and registering a new one, which changes the
+// client id and so requires reconfiguring the application anyway. That is a
+// migration in response to an incident, at the worst possible moment.
+//
+// Deliberately not a grace period. Two valid secrets would let a leaked one
+// keep working while somebody arranges the change-over, which is the opposite
+// of what a rotation is for: this is what you press when you believe someone
+// else has it. The application breaks until it is reconfigured, and that is the
+// intended behaviour rather than a shortcoming — the alternative is a control
+// that does not control anything.
+func (s *Store) RotateClientSecret(ctx context.Context, clientID string, actorID *uuid.UUID) (string, error) {
+	secret, err := newOpaqueID()
+	if err != nil {
+		return "", err
+	}
+
+	err = s.InTx(ctx, func(tx pgx.Tx) error {
+		var entityID uuid.UUID
+		var method string
+
+		err := tx.QueryRow(ctx, `
+			SELECT entity_id, auth_method FROM oidc_clients WHERE client_id = $1`,
+			clientID).Scan(&entityID, &method)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ErrClientNotFound
+		}
+		if err != nil {
+			return fmt.Errorf("store: reading client: %w", err)
+		}
+
+		// A public client has no secret, and giving it one would change what it
+		// is: PKCE is its protection, and an application that suddenly had a
+		// secret would be one whose registration no longer describes it.
+		if method != string(AuthClientSecretBasic) && method != string(AuthClientSecretPost) {
+			return ErrPublicClient
+		}
+
+		if _, err := tx.Exec(ctx, `
+			UPDATE oidc_clients SET secret_hash = $2 WHERE client_id = $1`,
+			clientID, hashClientSecret(clientID, secret)); err != nil {
+			return fmt.Errorf("store: rotating client secret: %w", err)
+		}
+
+		// Every token the old secret was used to obtain goes with it. Leaving
+		// them would mean a rotation that stops an attacker getting *new*
+		// tokens while the ones they already hold keep working for their full
+		// lifetime — which is the part that matters when a secret has leaked.
+		if _, err := tx.Exec(ctx,
+			`UPDATE oidc_tokens
+			    SET revoked_at = now()
+			  WHERE client_id = $1 AND revoked_at IS NULL`, clientID); err != nil {
+			return fmt.Errorf("store: revoking this client's tokens: %w", err)
+		}
+
+		ev, err := event.New(event.ActionClientSecretRotated, &entityID, actorID, nil)
+		if err != nil {
+			return err
+		}
+		return s.AppendEvent(ctx, tx, ev)
+	})
+	if err != nil {
+		return "", err
+	}
+	return secret, nil
 }

@@ -13,6 +13,7 @@ import (
 	"github.com/arthur-lonfils/cardinal/internal/auth"
 	"github.com/arthur-lonfils/cardinal/internal/claims"
 	"github.com/arthur-lonfils/cardinal/internal/config"
+	"github.com/arthur-lonfils/cardinal/internal/directory"
 	"github.com/arthur-lonfils/cardinal/internal/oidcprovider"
 	"github.com/arthur-lonfils/cardinal/internal/policy"
 	"github.com/arthur-lonfils/cardinal/internal/sshca"
@@ -315,6 +316,22 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("GET /api/directory/users/{login}", people(s.handleGetUser))
 	mux.Handle("DELETE /api/directory/users/{login}", people(s.handleDisableUser))
 	mux.Handle("POST /api/directory/users/{login}/enable", people(s.handleEnableUser))
+	mux.Handle("PATCH /api/directory/users/{login}", people(s.handleUpdateUserProfile))
+
+	// Renaming, which the data model exists to make ordinary: the identity is
+	// an immutable id and the name is an attribute, so this is one UPDATE and
+	// nothing else moves (ADR 0002). One handler for every type, because a
+	// per-type endpoint would imply a difference that does not exist.
+	mux.Handle("POST /api/directory/users/{name}/rename",
+		people(s.handleRename(directory.TypeUser)))
+	mux.Handle("POST /api/directory/groups/{name}/rename",
+		people(s.handleRename(directory.TypeGroup)))
+	mux.Handle("POST /api/directory/hosts/{name}/rename",
+		people(s.handleRename(directory.TypeHost)))
+
+	// POSIX identity. The uid is never in the request — it is allocated once
+	// and is permanent, because every file on every disk records it.
+	mux.Handle("PUT /api/directory/users/{login}/posix", people(s.handleAssignPOSIX))
 
 	mux.Handle("GET /api/directory/groups", people(s.handleListGroups))
 	// The same tier as people and groups: a host is a directory entity, and
@@ -343,6 +360,11 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("POST /api/applications", apps(s.handleRegisterApplication))
 	mux.Handle("GET /api/applications/{clientID}", apps(s.handleGetApplication))
 	mux.Handle("DELETE /api/applications/{clientID}", apps(s.handleDisableApplication))
+	// Rotation, which had no implementation. A leaked secret could previously
+	// only be dealt with by disabling the application and registering a new
+	// one — which changes the client id, so it is a reconfiguration anyway.
+	mux.Handle("POST /api/applications/{clientID}/secret",
+		apps(s.handleRotateClientSecret))
 	mux.Handle("GET /api/policy", s.requireAuth(http.HandlerFunc(s.handlePolicy)))
 
 	// Policy versions and rollback.

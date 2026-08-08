@@ -130,6 +130,9 @@ func describeGrants(grants []*store.NamedGrant) []grantResponse {
 }
 
 type userDetailResponse struct {
+	// POSIX is nil when this account has no uid.
+	POSIX map[string]any `json:"posix"`
+
 	userResponse
 
 	Memberships []grantResponse `json:"memberships"`
@@ -178,6 +181,14 @@ func (s *Server) handleGetUser(w http.ResponseWriter, r *http.Request) {
 		invitationExpiry = &inv.ExpiresAt
 	}
 
+	// Nil when they have none, which is the common case: most accounts never
+	// touch a Linux host, and a uid handed out to everybody would be a number
+	// on a filesystem for no reason.
+	var posix map[string]any
+	if identity, err := s.store.POSIXIdentityFor(ctx, entity.ID); err == nil {
+		posix = posixResponse(identity)
+	}
+
 	email, _ := entity.Attrs["email"].(string)
 	writeJSON(w, http.StatusOK, userDetailResponse{
 		userResponse: userResponse{
@@ -193,6 +204,7 @@ func (s *Server) handleGetUser(w http.ResponseWriter, r *http.Request) {
 		},
 		Memberships:         describeGrants(memberships),
 		InvitationExpiresAt: invitationExpiry,
+		POSIX:               posix,
 	})
 }
 

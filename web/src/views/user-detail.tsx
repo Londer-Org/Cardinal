@@ -23,6 +23,8 @@ import {
   useUser,
 } from '@/features/directory/useDirectory'
 import { RequiresFreshAuth } from '@/features/auth/RequiresFreshAuth'
+import { RenameDialog } from '@/features/directory/RenameDialog'
+import { PosixCard, UserProfileCard } from '@/features/directory/UserAdmin'
 import { ViewHeader } from '@/views/ViewHeader'
 
 function UserDetailViewBody() {
@@ -45,6 +47,7 @@ function UserDetailViewBody() {
       <ViewHeader
         title={user.displayName || user.login}
         description={user.email === '' ? user.login : `${user.login} · ${user.email}`}
+        action={<RenameDialog kind="users" current={user.login} />}
       />
 
       {/* Said at the top, not only in the card that offers the reverse. Every
@@ -65,6 +68,11 @@ function UserDetailViewBody() {
           </AlertDescription>
         </Alert>
       )}
+
+      <div className="grid gap-4 lg:grid-cols-2">
+        <UserProfileCard user={user} />
+        <PosixCard user={user} />
+      </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>

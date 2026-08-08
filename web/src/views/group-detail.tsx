@@ -14,6 +14,7 @@ import { ErrorMessage } from '@/components/ErrorMessage'
 import { GrantPeriod } from '@/features/directory/GrantPeriod'
 import { useGroup, useRevokeMembership } from '@/features/directory/useDirectory'
 import { RequiresFreshAuth } from '@/features/auth/RequiresFreshAuth'
+import { RenameDialog } from '@/features/directory/RenameDialog'
 import { ViewHeader } from '@/views/ViewHeader'
 
 function GroupDetailViewBody() {
@@ -33,6 +34,9 @@ function GroupDetailViewBody() {
       <ViewHeader
         title={group.name}
         description={group.displayName === '' ? undefined : group.displayName}
+        // System groups refuse renaming server-side; offering a button that is
+        // always refused would be worse than not offering one.
+        action={group.system ? undefined : <RenameDialog kind="groups" current={group.name} />}
       />
 
       {group.system && (

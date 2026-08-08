@@ -304,3 +304,41 @@ export const hostAliasRequest = z.object({
   alias: entityName,
 })
 export type HostAliasRequest = z.infer<typeof hostAliasRequest>
+
+/** Renaming anything. MIRRORS ValidateName, like every other name field. */
+export const renameRequest = z.object({ name: entityName })
+export type RenameRequest = z.infer<typeof renameRequest>
+
+/**
+ * Somebody else's profile, edited by an administrator.
+ *
+ * Deliberately no login field. Renaming has its own endpoint, its own
+ * confirmation and its own consequences; folding it in here is how a login gets
+ * changed by somebody meaning to fix a typo in a display name.
+ */
+export const adminProfileRequest = z.object({
+  displayName,
+  email: optionalEmail,
+})
+export type AdminProfileRequest = z.infer<typeof adminProfileRequest>
+
+/**
+ * A POSIX identity's editable parts.
+ *
+ * The uid is not among them. It is allocated once and is permanent — every file
+ * on every disk records it — so a field for it would be offering a mistake that
+ * cannot be corrected once a host has been told.
+ */
+export const posixRequest = z.object({
+  homeDirectory: z
+    .string()
+    .trim()
+    .min(1, 'Required.')
+    .refine((v) => v.startsWith('/'), 'Must be an absolute path.'),
+  loginShell: z
+    .string()
+    .trim()
+    .min(1, 'Required.')
+    .refine((v) => v.startsWith('/'), 'Must be an absolute path.'),
+})
+export type PosixRequest = z.infer<typeof posixRequest>

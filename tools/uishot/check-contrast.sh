@@ -72,6 +72,21 @@ $PSQL -q -c "INSERT INTO sessions (subject_id, token_hash, valid_period, auth_me
                FROM entities e WHERE e.name='uishot'
              ON CONFLICT (token_hash) DO NOTHING" >/dev/null
 
+# A confidential application, so the rotate-secret control exists at all — a
+# public client correctly shows "no secret, protected by PKCE instead", and a
+# sweep pointed at one would find nothing and be right to.
+$PSQL -q -c "INSERT INTO entities (type, name, display_name)
+             VALUES ('application','uishot-confidential','Contrast client')
+             ON CONFLICT (type,name) DO NOTHING" >/dev/null
+$PSQL -q -c "INSERT INTO oidc_clients (entity_id, client_id, secret_hash, auth_method,
+                                       redirect_uris, grant_types, scopes,
+                                       require_pkce, dev_mode, require_consent)
+             SELECT e.id, 'uishot-confidential-client', sha256('unused'::bytea),
+                    'client_secret_basic', ARRAY['https://uishot.example.com/cb'],
+                    ARRAY['authorization_code'], ARRAY['openid'], true, false, false
+               FROM entities e WHERE e.name='uishot-confidential'
+             ON CONFLICT DO NOTHING" >/dev/null
+
 # path, then any selectors to click before measuring. Anything that only exists
 # after an interaction is invisible to a sweep that just navigates — and the
 # colours used least are the ones most likely to be wrong, because nobody has
@@ -93,6 +108,11 @@ PAGES=(
   /access/connected
   /access/decisions
   /directory/people
+  # A person's page now carries the profile, the Linux identity and the rename
+  # dialog. The dialog is a layer over the page and none of it exists until
+  # somebody opens it.
+  /directory/people/uishot
+  "/directory/people/uishot|button[data-action=\"rename\"]"
   /directory/groups
   /directory/hosts
   /directory/hosts/uishot-web.prod
@@ -108,6 +128,9 @@ PAGES=(
   # page as it loads.
   "/policy|button[data-action=\"activate\"]"
   /integrations/applications
+  # The rotate-secret confirmation, which is where the warning about breaking
+  # the application lives.
+  "/integrations/applications|button[data-app=\"uishot-confidential\"]|button[data-action=\"rotate-secret\"]"
 )
 
 port=9600

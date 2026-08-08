@@ -1,5 +1,11 @@
 import { useState } from 'react'
-import { ChevronDownIcon, ChevronRightIcon } from 'lucide-react'
+import {
+  CheckIcon,
+  ChevronDownIcon,
+  ChevronRightIcon,
+  CopyIcon,
+  KeyRoundIcon,
+} from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -10,6 +16,7 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Skeleton } from '@/components/ui/skeleton'
 import { ErrorMessage } from '@/components/ErrorMessage'
 import type { Application } from '@/lib/api'
@@ -18,6 +25,7 @@ import {
   useApplication,
   useApplications,
   useDisableApplication,
+  useRotateSecret,
 } from './useApplications'
 
 /**
@@ -91,6 +99,13 @@ function ApplicationRow({
       <button
         type="button"
         className="flex w-full items-start gap-3 text-left"
+        // A hook for the contrast sweep, which has to expand a row before
+        // anything inside it exists to measure.
+        data-action="expand"
+        // Named, so a sweep can reach a specific application rather than
+        // whichever happens to sort first — a public client has no secret to
+        // rotate, so "the first row" is not a stable way to find the control.
+        data-app={application.name}
         onClick={onToggle}
         aria-expanded={expanded}
       >
@@ -124,6 +139,107 @@ function ApplicationRow({
 
       {expanded && <ApplicationDetail application={application} />}
     </li>
+  )
+}
+
+/**
+ * Replacing a leaked secret.
+ *
+ * There was no way to do this. A secret that got into a repository or a log
+ * could only be dealt with by disabling the application and registering a new
+ * one — which changes the client id, so it is a reconfiguration of the
+ * application anyway: a migration in response to an incident, at the worst
+ * possible moment.
+ */
+function RotateSecret({ application }: { application: Application }) {
+  const rotate = useRotateSecret()
+  const [confirming, setConfirming] = useState(false)
+  const [copied, setCopied] = useState(false)
+
+  // A public client has no secret and must not be given one: PKCE is its
+  // protection, and a registration that suddenly carried a secret would no
+  // longer describe the application it belongs to.
+  if (application.public) {
+    return (
+      <Detail label="Secret">
+        <p className="text-xs text-muted-foreground">
+          A public client — no secret, protected by PKCE instead.
+        </p>
+      </Detail>
+    )
+  }
+
+  if (rotate.data !== undefined) {
+    return (
+      <Alert className="border-primary/50">
+        <KeyRoundIcon />
+        <AlertTitle>New secret for {application.name}</AlertTitle>
+        <AlertDescription className="space-y-2">
+          <p>
+            Copy it now — only a hash is stored. The old one stopped working the
+            moment this was issued, along with every token it had obtained, so
+            the application is signing nobody in until it is reconfigured.
+          </p>
+          <div className="flex w-full items-center gap-2">
+            <code className="min-w-0 flex-1 truncate rounded bg-muted px-2 py-1.5 font-mono text-xs">
+              {rotate.data.secret}
+            </code>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                void navigator.clipboard.writeText(rotate.data.secret).then(() => {
+                  setCopied(true)
+                  setTimeout(() => { setCopied(false) }, 2000)
+                })
+              }}
+            >
+              {copied ? <CheckIcon /> : <CopyIcon />}
+              {copied ? 'Copied' : 'Copy'}
+            </Button>
+          </div>
+        </AlertDescription>
+      </Alert>
+    )
+  }
+
+  return (
+    <Detail label="Secret">
+      <ErrorMessage error={rotate.error} />
+      {confirming ? (
+        <div className="rounded-md border border-destructive/50 p-3">
+          <p className="text-xs text-muted-foreground">
+            The current secret stops working immediately and every token it
+            obtained is revoked. {application.name} will sign nobody in until it
+            is reconfigured with the new one. There is no grace period, on
+            purpose: this is what you press when you believe somebody else has
+            it.
+          </p>
+          <div className="mt-3 flex gap-2">
+            <Button variant="outline" size="sm" onClick={() => { setConfirming(false) }}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              size="sm"
+              disabled={rotate.isPending}
+              onClick={() => { rotate.mutate(application.clientId) }}
+            >
+              {rotate.isPending ? 'Rotating…' : 'Rotate now'}
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <Button
+          variant="outline"
+          size="sm"
+          data-action="rotate-secret"
+          onClick={() => { setConfirming(true) }}
+        >
+          Rotate the secret
+        </Button>
+      )}
+    </Detail>
   )
 }
 
@@ -165,6 +281,8 @@ function ApplicationDetail({ application }: { application: Application }) {
           </p>
         )}
       </Detail>
+
+      <RotateSecret application={application} />
 
       <ErrorMessage error={disable.error} />
 

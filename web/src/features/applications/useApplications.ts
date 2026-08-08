@@ -49,3 +49,22 @@ export function useDisableApplication() {
     },
   })
 }
+
+/**
+ * Replaces the secret, invalidating the old one at once.
+ *
+ * No grace period: two valid secrets would let a leaked one keep working while
+ * somebody arranges the change-over, which is the opposite of what a rotation
+ * is for. The application breaks until reconfigured, and that is intended.
+ */
+export function useRotateSecret() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: api.applications.rotateSecret,
+    onSuccess: async () => {
+      // Every token the old secret obtained is revoked with it, so the
+      // "in use" counts on this page are now wrong.
+      await queryClient.invalidateQueries({ queryKey: queryKeys.applications })
+    },
+  })
+}

@@ -2,8 +2,11 @@ import { z } from 'zod'
 import { request } from './client'
 import {
   createGroupRequest,
+  adminProfileRequest,
   createHostRequest,
   createTokenRequest,
+  posixRequest,
+  renameRequest,
   createUserRequest,
   enrollRequest,
   grantRequest,
@@ -14,8 +17,10 @@ import {
   registerApplicationRequest,
   updateProfileRequest,
   type CreateGroupRequest,
+  type AdminProfileRequest,
   type CreateHostRequest,
   type CreateTokenRequest,
+  type PosixRequest,
   type CreateUserRequest,
   type GrantRequest,
   type OpenRecoveryRequest,
@@ -174,6 +179,18 @@ export const api = {
     disable: (clientID: string) =>
       request(`/api/applications/${encodeURIComponent(clientID)}`, z.undefined(),
         { method: 'DELETE' }),
+
+    /**
+     * Replaces the secret and invalidates the old one immediately.
+     *
+     * No grace period, deliberately: two valid secrets would let a leaked one
+     * keep working while somebody arranges the change-over, which is the
+     * opposite of what this is for. The application breaks until it is
+     * reconfigured, and that is the intended behaviour.
+     */
+    rotateSecret: (clientID: string) =>
+      request(`/api/applications/${encodeURIComponent(clientID)}/secret`,
+        z.object({ secret: z.string() }), { method: 'POST' }),
   },
 
   /**
@@ -277,6 +294,34 @@ export const api = {
     disableUser: (login: string) =>
       request(`/api/directory/users/${encodeURIComponent(login)}`, z.undefined(),
         { method: 'DELETE' }),
+
+    /**
+     * Renames anything.
+     *
+     * The operation the data model exists to make ordinary: identity is an
+     * immutable id and the name is an attribute, so this moves nothing else
+     * (ADR 0002). Group membership, policy, sessions, tokens and the journal
+     * all reference the id and do not notice.
+     */
+    rename: (kind: 'users' | 'groups' | 'hosts', name: string, next: string) =>
+      request(`/api/directory/${kind}/${encodeURIComponent(name)}/rename`,
+        z.object({ name: z.string() }),
+        { method: 'POST', body: renameRequest.parse({ name: next }) }),
+
+    updateUser: (login: string, input: AdminProfileRequest) =>
+      request(`/api/directory/users/${encodeURIComponent(login)}`,
+        z.object({ displayName: z.string(), email: z.string() }),
+        { method: 'PATCH', body: adminProfileRequest.parse(input) }),
+
+    setPosix: (login: string, input: PosixRequest) =>
+      request(`/api/directory/users/${encodeURIComponent(login)}/posix`,
+        z.object({
+          uid: z.number(),
+          homeDirectory: z.string(),
+          loginShell: z.string(),
+          adoptable: z.boolean(),
+        }),
+        { method: 'PUT', body: posixRequest.parse(input) }),
 
     enableUser: (login: string) =>
       request(`/api/directory/users/${encodeURIComponent(login)}/enable`,
@@ -511,6 +556,7 @@ export type {
   DirectoryGroupDetail,
   DirectoryUser,
   DirectoryUserDetail,
+  PosixIdentity,
   Grant,
   Invitation,
   IssuedInvitation,

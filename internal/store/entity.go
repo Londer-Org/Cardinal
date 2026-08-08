@@ -4,11 +4,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/arthur-lonfils/cardinal/internal/directory"
 	"github.com/arthur-lonfils/cardinal/internal/event"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
 const entityColumns = `id, type, name, coalesce(display_name, ''), attrs,
@@ -266,4 +268,88 @@ func (s *Store) UpdateProfile(ctx context.Context, id uuid.UUID, in ProfileUpdat
 	})
 
 	return updated, err
+}
+
+// RenameEntity changes what something is called.
+//
+// The operation the whole data model exists to make ordinary. LDAP's original
+// sin is that the DN *is* the identity, so renaming a person breaks every
+// reference to them; here the identity is an immutable UUIDv7 and the name is
+// an attribute, which means this is an UPDATE of one column and nothing else
+// moves (ADR 0002).
+//
+// That claim was in the README and in no code. Nothing could rename anything.
+//
+// What genuinely follows a rename, and what does not, is worth being precise
+// about because it is the interesting part:
+//
+//   - Group membership, policy, sessions, tokens, credentials and the audit
+//     journal all reference the id. None of them notice.
+//   - POSIX identity does follow: the assignment endpoint joins entities.name,
+//     so `getent passwd` reports the new name on the next refresh. The uid does
+//     not change, so every file on every disk keeps its owner — which is the
+//     whole reason the number is permanent and the name is not.
+//   - The home directory does *not* follow, and must not. It is recorded per
+//     identity and the files are in it; moving them would be the data migration
+//     this design exists to avoid.
+//   - SSH certificate principals are issued per login, so the next certificate
+//     carries the new name. Ones already issued keep the old, and expire within
+//     minutes.
+func (s *Store) RenameEntity(ctx context.Context, id uuid.UUID, name string, actorID *uuid.UUID) (*directory.Entity, error) {
+	name = strings.TrimSpace(name)
+	if err := directory.ValidateName(name); err != nil {
+		return nil, err
+	}
+
+	var out *directory.Entity
+	err := s.InTx(ctx, func(tx pgx.Tx) error {
+		var e directory.Entity
+		var displayName *string
+
+		err := tx.QueryRow(ctx, `
+			UPDATE entities
+			   SET name = $2, updated_at = now()
+			 WHERE id = $1 AND redacted_at IS NULL
+			 RETURNING id, type, name, display_name, attrs, created_at, updated_at,
+			           disabled_at, redacted_at`,
+			id, name,
+		).Scan(&e.ID, &e.Type, &e.Name, &displayName, &e.Attrs, &e.CreatedAt,
+			&e.UpdatedAt, &e.DisabledAt, &e.RedactedAt)
+
+		if errors.Is(err, pgx.ErrNoRows) {
+			// Redacted is deliberately indistinguishable from absent here. An
+			// erased account's tombstone must not become editable, and renaming
+			// one would reintroduce a name to a record whose whole purpose is
+			// not to have one.
+			return directory.ErrNotFound
+		}
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+			return fmt.Errorf("%w: another %s is already called %q",
+				directory.ErrAlreadyExists, e.Type, name)
+		}
+		if err != nil {
+			return fmt.Errorf("store: renaming entity: %w", err)
+		}
+		if displayName != nil {
+			e.DisplayName = *displayName
+		}
+
+		// The fact, never the names. A login identifies a person and the
+		// journal cannot hold one (ADR 0010) — so the old name is gone from the
+		// record the moment it is replaced, which is the cost of the journal
+		// being the one thing erasure cannot reach.
+		ev, err := event.New(event.ActionEntityUpdated, &id, actorID,
+			map[string]any{"name_changed": true})
+		if err != nil {
+			return err
+		}
+		if err := s.AppendEvent(ctx, tx, ev); err != nil {
+			return err
+		}
+
+		out = &e
+		return nil
+	})
+	return out, err
 }

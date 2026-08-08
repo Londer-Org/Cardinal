@@ -30,6 +30,46 @@ type updateProfileRequest struct {
 	Email       *string `json:"email"`
 }
 
+// checkEmail applies every rule about an address somebody may be reached at.
+//
+// Extracted so the administrative path uses exactly these rules rather than a
+// similar-looking set. The comment this replaced already said why — "enforced
+// on every path that can set one, because a rule enforced on one path is a rule
+// with a way around it" — and then there was a second path.
+var errMalformedEmail = errors.New("that does not look like an email address")
+
+func (s *Server) checkEmail(address string) error {
+	addr, err := mail.ParseAddress(address)
+	if err != nil || addr.Address != address {
+		return errMalformedEmail
+	}
+
+	// The recovery/IdP circularity rule from ADR 0009: an address on a domain
+	// Cardinal is the identity provider for cannot serve as a recovery channel,
+	// because an outage would take the way back in along with the thing that is
+	// down.
+	at := strings.LastIndex(address, "@")
+	if at < 0 {
+		return errMalformedEmail
+	}
+	return s.cfg.CheckRelyingPartyDomain(address[at+1:])
+}
+
+// statusForEmail separates "you typed something wrong" from "we could not
+// check", which are a 400 and a 500 and must not be collapsed.
+func statusForEmail(err error) int {
+	if errors.Is(err, config.ErrCircularRecovery) {
+		return http.StatusBadRequest
+	}
+	if errors.Is(err, errMalformedEmail) {
+		return http.StatusBadRequest
+	}
+	// Anything else came from the domain check failing to run rather than from
+	// the address being wrong, and reporting that as "you typed it wrong" would
+	// send somebody editing a perfectly good address.
+	return http.StatusInternalServerError
+}
+
 func (s *Server) handleUpdateProfile(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	session, _ := SessionFrom(ctx)
@@ -54,28 +94,9 @@ func (s *Server) handleUpdateProfile(w http.ResponseWriter, r *http.Request) {
 	if req.Email != nil {
 		trimmed := strings.TrimSpace(*req.Email)
 		if trimmed != "" {
-			addr, err := mail.ParseAddress(trimmed)
-			if err != nil || addr.Address != trimmed {
-				writeError(w, http.StatusBadRequest,
-					"that does not look like an email address")
+			if err := s.checkEmail(trimmed); err != nil {
+				writeError(w, statusForEmail(err), err.Error())
 				return
-			}
-			// The recovery/IdP circularity rule from ADR 0009 applies here too,
-			// not only at client registration. An address on a domain Cardinal
-			// is the identity provider for cannot serve as a recovery channel:
-			// an outage would take the way back in along with the thing that is
-			// down. Enforced on every path that can set one, because a rule
-			// enforced on one path is a rule with a way around it.
-			if at := strings.LastIndex(trimmed, "@"); at >= 0 {
-				if err := s.cfg.CheckRelyingPartyDomain(trimmed[at+1:]); err != nil {
-					if errors.Is(err, config.ErrCircularRecovery) {
-						writeError(w, http.StatusBadRequest, err.Error())
-						return
-					}
-					s.log.ErrorContext(ctx, "recovery domain check failed", "error", err)
-					writeError(w, http.StatusInternalServerError, "could not check that address")
-					return
-				}
 			}
 		}
 		update.Email = &trimmed

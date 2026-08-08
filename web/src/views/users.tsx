@@ -17,6 +17,7 @@ import { usePageState } from '@/features/directory/usePageState'
 import type { UserStatus } from '@/lib/api'
 import type { DirectoryUser } from '@/lib/api'
 import { RequiresFreshAuth } from '@/features/auth/RequiresFreshAuth'
+import { PendingInvitations } from '@/features/directory/PendingInvitations'
 import { ViewHeader } from '@/views/ViewHeader'
 
 /** Enrollment state, at a glance. */
@@ -113,6 +114,11 @@ function UsersViewBody() {
       />
 
       <ErrorMessage error={error} />
+
+      {/* Above the table, because an outstanding invitation is a person who
+          cannot start work yet — the one thing on this page that needs doing
+          rather than merely being true. */}
+      <PendingInvitations />
 
       <DataTable
         columns={columns}
