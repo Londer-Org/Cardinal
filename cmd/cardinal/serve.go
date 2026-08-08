@@ -19,6 +19,7 @@ import (
 	"go.londer.be/cardinal/internal/policy"
 	"go.londer.be/cardinal/internal/sshca"
 	"go.londer.be/cardinal/internal/store"
+	"go.londer.be/cardinal/internal/version"
 	"go.londer.be/cardinal/internal/x509ca"
 	"go.londer.be/cardinal/web"
 )
@@ -50,6 +51,36 @@ func runServe(ctx context.Context, args []string) error {
 		return err
 	}
 	defer st.Close()
+
+	// Refuse a database migrated by a newer Cardinal than this one.
+	//
+	// The downgrade case, and it used to be silent: an older binary started
+	// happily against a newer schema and then failed one request at a time,
+	// wherever a code path first touched a column it did not know about. The
+	// symptom looked like a bug in whichever feature was unlucky rather than
+	// like the wrong version running, which is the worst way to spend an
+	// afternoon after a rollback.
+	//
+	// Checked before anything serves rather than during migration, because the
+	// binary that must not run is precisely the one nobody is going to run
+	// `migrate` with.
+	ahead, err := st.SchemaAhead(ctx)
+	if err != nil {
+		return err
+	}
+	if len(ahead) > 0 {
+		return fmt.Errorf(
+			"%w\n\n"+
+				"  This database has %d migration(s) this build does not contain:\n"+
+				"    %s\n\n"+
+				"  It was migrated by a newer Cardinal. This binary is %s.\n\n"+
+				"  Either run the newer version again, or take the database back with\n"+
+				"  `cardinal migrate -to <migration>` — from a backup taken before the\n"+
+				"  upgrade, because a reversal restores the shape of the data and not\n"+
+				"  the data itself.",
+			store.ErrSchemaAhead, len(ahead), strings.Join(ahead, "\n    "),
+			version.String())
+	}
 
 	idle, absolute := cfg.Sessions.Effective()
 	st.SetSessionLimits(store.SessionLimits{Idle: idle, Absolute: absolute})

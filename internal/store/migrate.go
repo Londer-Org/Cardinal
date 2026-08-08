@@ -4,9 +4,8 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
-	"io/fs"
-	"sort"
 
 	"github.com/jackc/pgx/v5"
 	"go.londer.be/cardinal/migrations"
@@ -33,11 +32,10 @@ type AppliedMigration struct {
 // is how rolling deploys break, and that should be a decision rather than a
 // side effect.
 func (s *Store) Migrate(ctx context.Context) ([]string, error) {
-	entries, err := fs.Glob(migrations.FS, "*.sql")
+	entries, err := migrations.Up()
 	if err != nil {
 		return nil, fmt.Errorf("store: listing migrations: %w", err)
 	}
-	sort.Strings(entries)
 
 	conn, err := s.pool.Acquire(ctx)
 	if err != nil {
@@ -144,4 +142,63 @@ func (s *Store) AppliedMigrations(ctx context.Context) ([]AppliedMigration, erro
 		out = append(out, m)
 	}
 	return out, rows.Err()
+}
+
+// ErrSchemaAhead reports a database migrated by a newer Cardinal than this one.
+//
+// The downgrade case, and until this existed it was silent: an older binary
+// started happily against a newer schema and failed later, one request at a
+// time, in whichever code path first touched a column it did not know about.
+var ErrSchemaAhead = errors.New("store: the database schema is newer than this binary")
+
+// SchemaAhead names migrations the database has applied and this binary does not
+// contain.
+//
+// Nothing else can detect this. `schema_migrations` records what ran, and a
+// binary knows only what it embeds, so the difference between them is exactly
+// "changes made by a version I am not" — which is the question worth asking
+// before serving a single request.
+//
+// The reverse case, a database behind the binary, is not an error here: that is
+// an unapplied migration, and `cardinal migrate` is how it gets applied.
+func (s *Store) SchemaAhead(ctx context.Context) ([]string, error) {
+	known, err := migrations.Up()
+	if err != nil {
+		return nil, fmt.Errorf("store: listing migrations: %w", err)
+	}
+	mine := make(map[string]struct{}, len(known))
+	for _, name := range known {
+		mine[name] = struct{}{}
+	}
+
+	// to_regclass rather than a bare SELECT, because a database nobody has
+	// migrated yet has no schema_migrations at all — the fresh-install case,
+	// where the honest answer is "nothing has been applied, so nothing is ahead"
+	// and not a 42P01 that reads like the database is broken.
+	var exists bool
+	if err := s.pool.QueryRow(ctx,
+		`SELECT to_regclass('public.schema_migrations') IS NOT NULL`).Scan(&exists); err != nil {
+		return nil, fmt.Errorf("store: looking for the migration table: %w", err)
+	}
+	if !exists {
+		return nil, nil
+	}
+
+	rows, err := s.pool.Query(ctx, `SELECT name FROM schema_migrations ORDER BY name`)
+	if err != nil {
+		return nil, fmt.Errorf("store: reading applied migrations: %w", err)
+	}
+	defer rows.Close()
+
+	var ahead []string
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return nil, err
+		}
+		if _, ok := mine[name]; !ok {
+			ahead = append(ahead, name)
+		}
+	}
+	return ahead, rows.Err()
 }

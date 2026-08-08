@@ -19,6 +19,7 @@ import (
 	"github.com/testcontainers/testcontainers-go/wait"
 	"go.londer.be/cardinal/internal/directory"
 	"go.londer.be/cardinal/internal/store"
+	"go.londer.be/cardinal/migrations"
 )
 
 // defaultPostgresImage is pinned, not floated.
@@ -107,16 +108,24 @@ func applyMigrations(ctx context.Context, dsn string) error {
 	}
 	defer s.Close()
 
-	paths, err := filepath.Glob(filepath.Join("..", "..", "migrations", "*.sql"))
+	// From the embedded set, via the same helper the real migrator uses.
+	//
+	// This used to glob ../../migrations/*.sql off disk, which is a landmine the
+	// moment a reversal exists: `<name>.down.sql` matches that pattern, so every
+	// drop would run immediately after the create that made it and the suite
+	// would test against a schema with most of itself removed. Asking
+	// migrations.Up() means the harness and the migrator cannot disagree about
+	// what a migration is.
+	paths, err := migrations.Up()
 	if err != nil {
 		return err
 	}
 	if len(paths) == 0 {
-		return errors.New("no migrations found — is the working directory wrong?")
+		return errors.New("no migrations embedded")
 	}
 
 	for _, path := range paths {
-		sql, err := os.ReadFile(path)
+		sql, err := migrations.FS.ReadFile(path)
 		if err != nil {
 			return fmt.Errorf("reading %s: %w", path, err)
 		}
