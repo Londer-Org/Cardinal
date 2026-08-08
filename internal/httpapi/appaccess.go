@@ -4,9 +4,9 @@ import (
 	"context"
 	"net/http"
 
-	"github.com/arthur-lonfils/cardinal/internal/policy"
-	"github.com/arthur-lonfils/cardinal/internal/store"
 	"github.com/cedar-policy/cedar-go/types"
+	"go.londer.be/cardinal/internal/policy"
+	"go.londer.be/cardinal/internal/store"
 )
 
 // Who may sign in to which application.

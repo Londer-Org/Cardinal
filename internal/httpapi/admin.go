@@ -7,10 +7,10 @@ import (
 	"slices"
 	"time"
 
-	"github.com/arthur-lonfils/cardinal/internal/claims"
-	"github.com/arthur-lonfils/cardinal/internal/policy"
-	"github.com/arthur-lonfils/cardinal/internal/store"
 	"github.com/cedar-policy/cedar-go/types"
+	"go.londer.be/cardinal/internal/claims"
+	"go.londer.be/cardinal/internal/policy"
+	"go.londer.be/cardinal/internal/store"
 )
 
 // Administering the directory is a Cedar decision like any other.

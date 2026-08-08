@@ -56,6 +56,7 @@ import {
   recoveryRequestsSchema,
   recoveryRequestSchema,
   auditEventsSchema,
+  healthSchema,
   authoritiesSchema,
   chainReportSchema,
   policySchema,
@@ -447,6 +448,16 @@ export const api = {
       ),
   },
 
+  /**
+   * Which build this is.
+   *
+   * From the server rather than compiled into the bundle, and that is the point:
+   * the UI is embedded in the binary, so if these two could disagree something
+   * has gone wrong with the deployment rather than with the number. Asking the
+   * server means the console reports what is actually serving it.
+   */
+  health: () => request('/api/health', healthSchema),
+
   /** The certificate authorities, and the bundles machines have to trust. */
   authorities: {
     get: () => request('/api/authorities', authoritiesSchema),
@@ -564,6 +575,7 @@ export type {
   Decision,
   Me,
   PendingAuthorization,
+  Health,
   Policy,
   AuditEvent,
   Authority,
@@ -601,6 +613,7 @@ export const queryKeys = {
   tokens: ['tokens'] as const,
   decisions: (deniedOnly: boolean) => ['decisions', deniedOnly] as const,
   policy: ['policy'] as const,
+  health: ['health'] as const,
   authorities: ['authorities'] as const,
   auditEvents: (filter: { action: string; subject: string; before: number }) =>
     ['audit', 'events', filter] as const,

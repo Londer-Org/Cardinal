@@ -22,12 +22,12 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/arthur-lonfils/cardinal/internal/agent"
-	"github.com/arthur-lonfils/cardinal/internal/shadow"
-	"github.com/arthur-lonfils/cardinal/internal/sshca"
-	"github.com/arthur-lonfils/cardinal/internal/sudoers"
-	"github.com/arthur-lonfils/cardinal/internal/userdb"
 	"github.com/google/uuid"
+	"go.londer.be/cardinal/internal/agent"
+	"go.londer.be/cardinal/internal/shadow"
+	"go.londer.be/cardinal/internal/sshca"
+	"go.londer.be/cardinal/internal/sudoers"
+	"go.londer.be/cardinal/internal/userdb"
 	"golang.org/x/crypto/ssh"
 )
 

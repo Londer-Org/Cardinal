@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/arthur-lonfils/cardinal/internal/event"
-	"github.com/arthur-lonfils/cardinal/internal/temporal"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"go.londer.be/cardinal/internal/event"
+	"go.londer.be/cardinal/internal/temporal"
 )
 
 // Grant records a time-bounded membership.

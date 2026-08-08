@@ -71,7 +71,7 @@ to its URL, and vice versa. An application using both needs a rule for each,
 under each name. That is a rough edge rather than a design: nothing today links
 a registered application to the hostnames it answers on, so `forwardAuth` has
 only the `Host` header to key on. Worth knowing before writing policy, and
-recorded as a gap in the [roadmap](../ROADMAP.md).
+recorded as a gap in the [roadmap](https://github.com/Londer-Org/Cardinal/blob/main/ROADMAP.md).
 
 ## Style 1 — the proxy asks, the app trusts headers
 

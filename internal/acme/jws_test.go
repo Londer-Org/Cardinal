@@ -12,7 +12,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/arthur-lonfils/cardinal/internal/acme"
+	"go.londer.be/cardinal/internal/acme"
 )
 
 // TestThumbprintIsStableAndDistinct.

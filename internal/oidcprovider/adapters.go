@@ -14,11 +14,11 @@ import (
 	"crypto/rsa"
 	"time"
 
-	"github.com/arthur-lonfils/cardinal/internal/store"
 	"github.com/go-jose/go-jose/v4"
 	"github.com/google/uuid"
 	"github.com/zitadel/oidc/v3/pkg/oidc"
 	"github.com/zitadel/oidc/v3/pkg/op"
+	"go.londer.be/cardinal/internal/store"
 )
 
 // ── Client ─────────────────────────────────────────────────────────────────

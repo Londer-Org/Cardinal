@@ -4,9 +4,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/arthur-lonfils/cardinal/internal/claims"
 	"github.com/cedar-policy/cedar-go/types"
 	"github.com/google/uuid"
+	"go.londer.be/cardinal/internal/claims"
 )
 
 // Host access, which is the FreeIPA HBAC replacement.

@@ -6,11 +6,11 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/arthur-lonfils/cardinal/internal/auth"
-	"github.com/arthur-lonfils/cardinal/internal/directory"
-	"github.com/arthur-lonfils/cardinal/internal/store"
 	"github.com/go-webauthn/webauthn/protocol"
 	"github.com/google/uuid"
+	"go.londer.be/cardinal/internal/auth"
+	"go.londer.be/cardinal/internal/directory"
+	"go.londer.be/cardinal/internal/store"
 )
 
 // ── Login ──────────────────────────────────────────────────────────────────

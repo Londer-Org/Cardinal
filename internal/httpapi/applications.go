@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/arthur-lonfils/cardinal/internal/store"
+	"go.londer.be/cardinal/internal/store"
 )
 
 // Managing OIDC applications over the API.

@@ -129,7 +129,48 @@ jobs:
       - name: Pre-pull PostgreSQL image
         run: docker pull postgres:${{ matrix.postgres }}
 
+      # Everything except test/e2e, which needs the example stack running and
+      # has a job of its own below. `go test ./...` would include it, and its
+      # TestMain exits 1 with "the stack is not running" rather than skipping —
+      # deliberately, so somebody running it by hand is told what to do rather
+      # than handed a dial timeout.
       - name: Test
         env:
           CARDINAL_TEST_POSTGRES_IMAGE: postgres:${{ matrix.postgres }}
-        run: go test ./... -race -count=1 -timeout 10m
+        run: go test ./internal/... ./cmd/... ./migrations/... -race -count=1 -timeout 10m
+
+  e2e:
+    name: End-to-end
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.25'
+
+      # The stack is served over HTTPS on a real domain, and both halves of
+      # that are load-bearing rather than ceremony: WebAuthn needs a secure
+      # context, forwardAuth single sign-on needs a parent-domain cookie, and
+      # no plain-http origin provides both. `make e2e-check` refuses to start
+      # without these and explains why.
+      - name: Trust a local certificate authority
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq mkcert libnss3-tools
+          mkcert -install
+
+      - name: Resolve the stack's hostnames
+        run: make hosts-line | sudo tee -a /etc/hosts
+
+      - name: Start the stack
+        run: make e2e-up
+
+      - name: Test
+        run: make e2e
+
+      # The stack's own logs, and only when something failed. A red e2e job
+      # whose output is "expected 200, got 502" is a job somebody has to
+      # reproduce locally to learn anything from.
+      - name: Stack logs
+        if: failure()
+        run: docker compose -f examples/compose.yml logs --tail 200

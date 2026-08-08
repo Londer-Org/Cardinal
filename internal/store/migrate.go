@@ -8,8 +8,8 @@ import (
 	"io/fs"
 	"sort"
 
-	"github.com/arthur-lonfils/cardinal/migrations"
 	"github.com/jackc/pgx/v5"
+	"go.londer.be/cardinal/migrations"
 )
 
 // migrationLock serialises migrators.

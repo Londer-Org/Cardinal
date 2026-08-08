@@ -6,8 +6,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/arthur-lonfils/cardinal/internal/store"
 	"github.com/google/uuid"
+	"go.londer.be/cardinal/internal/store"
 )
 
 // Sessions, for the person signed into them.

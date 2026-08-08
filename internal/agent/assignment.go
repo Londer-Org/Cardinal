@@ -19,7 +19,7 @@ import (
 	"slices"
 	"time"
 
-	"github.com/arthur-lonfils/cardinal/internal/userdb"
+	"go.londer.be/cardinal/internal/userdb"
 )
 
 // Assignment is what Cardinal says this host should serve.

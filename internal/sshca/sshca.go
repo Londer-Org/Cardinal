@@ -29,8 +29,8 @@ import (
 	"math"
 	"time"
 
-	"github.com/arthur-lonfils/cardinal/internal/store"
 	"github.com/google/uuid"
+	"go.londer.be/cardinal/internal/store"
 	"golang.org/x/crypto/ssh"
 )
 

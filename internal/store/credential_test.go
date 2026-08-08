@@ -3,11 +3,11 @@ package store_test
 import (
 	"testing"
 
-	"github.com/arthur-lonfils/cardinal/internal/directory"
-	"github.com/arthur-lonfils/cardinal/internal/store"
 	"github.com/go-webauthn/webauthn/webauthn"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.londer.be/cardinal/internal/directory"
+	"go.londer.be/cardinal/internal/store"
 )
 
 // fakeCredential builds a credential as the WebAuthn library would hand it

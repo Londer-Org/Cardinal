@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/arthur-lonfils/cardinal/internal/userdb"
+	"go.londer.be/cardinal/internal/userdb"
 )
 
 // The wire protocol, exercised over a real Unix socket.

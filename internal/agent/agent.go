@@ -12,9 +12,9 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/arthur-lonfils/cardinal/internal/hostclient"
-	"github.com/arthur-lonfils/cardinal/internal/sudoers"
-	"github.com/arthur-lonfils/cardinal/internal/userdb"
+	"go.londer.be/cardinal/internal/hostclient"
+	"go.londer.be/cardinal/internal/sudoers"
+	"go.londer.be/cardinal/internal/userdb"
 )
 
 // DefaultInterval is how often the agent asks Cardinal for its assignment.

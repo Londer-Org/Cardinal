@@ -15,9 +15,9 @@ import (
 	"math/big"
 	"time"
 
-	"github.com/arthur-lonfils/cardinal/internal/event"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"go.londer.be/cardinal/internal/event"
 )
 
 // ErrNoX509CA means no authority key is signing.

@@ -16,7 +16,7 @@ section will change at 1.0.
 problem.**
 
 Report privately through
-[GitHub Security Advisories](https://github.com/arthur-lonfils/cardinal/security/advisories/new),
+[GitHub Security Advisories](https://github.com/Londer-Org/Cardinal/security/advisories/new),
 which creates a private channel visible only to maintainers.
 
 Please include:

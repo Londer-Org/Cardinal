@@ -9,8 +9,8 @@ import (
 	"text/tabwriter"
 	"time"
 
-	"github.com/arthur-lonfils/cardinal/internal/directory"
-	"github.com/arthur-lonfils/cardinal/internal/store"
+	"go.londer.be/cardinal/internal/directory"
+	"go.londer.be/cardinal/internal/store"
 )
 
 func runInvite(ctx context.Context, args []string) error {

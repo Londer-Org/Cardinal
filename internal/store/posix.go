@@ -7,11 +7,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/arthur-lonfils/cardinal/internal/directory"
-	"github.com/arthur-lonfils/cardinal/internal/event"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"go.londer.be/cardinal/internal/directory"
+	"go.londer.be/cardinal/internal/event"
 )
 
 var (

@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/arthur-lonfils/cardinal/internal/sshca"
+	"go.londer.be/cardinal/internal/sshca"
 	"golang.org/x/crypto/ssh"
 )
 

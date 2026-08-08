@@ -16,6 +16,15 @@ version: 2
 before:
   hooks:
     - go mod tidy
+    # The admin UI, before any Go build. //go:embed all:dist takes whatever is
+    # in web/dist at compile time, so without this a release binary ships an
+    # empty directory and serves a blank page — with no build error, because an
+    # empty embed is a valid embed.
+    #
+    # Here rather than only in the Dockerfile so the archives and the image
+    # contain the same UI. Two build paths that each compile their own would be
+    # two things to keep in step.
+    - sh -c "cd web && npm ci && npm run build"
 
 builds:
   - id: cardinal
@@ -27,8 +36,14 @@ builds:
     flags: [-trimpath]
     ldflags:
       - -s -w
-      - -X main.version={{.Version}}
-      - -X main.commit={{.FullCommit}}
+      # These land on symbols that exist. The previous pair named
+      # `main.version` and `main.commit`, which no package declared — and Go
+      # discards an -X for an unknown symbol without a warning, so every
+      # release binary carried nothing. The version itself is a constant in
+      # internal/version now, generated from the VERSION file, because a
+      # constant cannot fail this way: a missing one does not compile.
+      - -X go.londer.be/cardinal/internal/version.Commit={{.FullCommit}}
+      - -X go.londer.be/cardinal/internal/version.Date={{.Date}}
 
   - id: cardinal-agent
     main: ./cmd/cardinal-agent
@@ -42,8 +57,8 @@ builds:
     flags: [-trimpath]
     ldflags:
       - -s -w
-      - -X main.version={{.Version}}
-      - -X main.commit={{.FullCommit}}
+      - -X go.londer.be/cardinal/internal/version.Commit={{.FullCommit}}
+      - -X go.londer.be/cardinal/internal/version.Date={{.Date}}
 
 archives:
   - id: default
@@ -58,7 +73,7 @@ nfpms:
     formats: [deb, rpm]
 
     vendor: Cardinal
-    homepage: https://github.com/arthur-lonfils/cardinal
+    homepage: https://github.com/Londer-Org/Cardinal
     maintainer: Arthur Lonfils <alon@londer.be>
     description: |
       Cardinal agent — POSIX identity, sudo rules and host certificates.
@@ -108,6 +123,35 @@ nfpms:
     #
     # `cardinal-agent doctor` reports precisely what is missing and how to fix
     # it. The unit is not enabled on install for the same reason.
+
+dockers_v2:
+  # Multi-platform in one entry: goreleaser builds both architectures and
+  # publishes the manifest, so `docker pull londerbe/cardinal:0.1.0` finds
+  # something. The older `dockers` + `docker_manifests` pair does the same job
+  # and is being phased out, and writing a deprecated form on the day the
+  # release pipeline is created is how a project acquires its first migration.
+  #
+  # The plan calls container images the primary distribution, and goreleaser
+  # was producing archives and packages and no images at all.
+  - id: cardinal
+    ids: [cardinal]
+    dockerfile: Dockerfile.release
+    platforms: [linux/amd64, linux/arm64]
+    images:
+      - londerbe/cardinal
+    tags:
+      - "{{ .Version }}"
+      # Only for a real release. A prerelease taking `latest` would be pulled
+      # by everything that does not pin, which is most things.
+      - "{{ if not .Prerelease }}latest{{ end }}"
+    labels:
+      org.opencontainers.image.title: cardinal
+      org.opencontainers.image.description: A directory and identity platform built on Go and PostgreSQL
+      org.opencontainers.image.version: "{{ .Version }}"
+      org.opencontainers.image.revision: "{{ .FullCommit }}"
+      org.opencontainers.image.created: "{{ .Date }}"
+      org.opencontainers.image.source: https://github.com/Londer-Org/Cardinal
+      org.opencontainers.image.licenses: Apache-2.0
 
 release:
   # No repository to publish to yet. Building the artefacts is the useful half

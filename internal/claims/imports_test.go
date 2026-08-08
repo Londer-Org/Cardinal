@@ -23,7 +23,7 @@ import (
 // protocol type, which is what keeps its own API neutral.
 func TestClaimsImportsNoProtocolPackages(t *testing.T) {
 	out, err := exec.Command("go", "list", "-f", `{{join .Imports "\n"}}`,
-		"github.com/arthur-lonfils/cardinal/internal/claims").Output()
+		"go.londer.be/cardinal/internal/claims").Output()
 	if err != nil {
 		t.Fatalf("listing imports: %v", err)
 	}
@@ -63,7 +63,7 @@ func TestClaimsImportsNoProtocolPackages(t *testing.T) {
 // and nothing else may.
 func TestStoreCredentialCouplingIsKnown(t *testing.T) {
 	out, err := exec.Command("go", "list", "-f", `{{join .Imports "\n"}}`,
-		"github.com/arthur-lonfils/cardinal/internal/store").Output()
+		"go.londer.be/cardinal/internal/store").Output()
 	if err != nil {
 		t.Fatalf("listing imports: %v", err)
 	}

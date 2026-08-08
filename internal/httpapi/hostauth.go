@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/arthur-lonfils/cardinal/internal/store"
+	"go.londer.be/cardinal/internal/store"
 	"golang.org/x/crypto/ssh"
 )
 

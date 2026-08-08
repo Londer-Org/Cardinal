@@ -8,8 +8,8 @@ import (
 	"strings"
 	"text/tabwriter"
 
-	"github.com/arthur-lonfils/cardinal/internal/config"
-	"github.com/arthur-lonfils/cardinal/internal/store"
+	"go.londer.be/cardinal/internal/config"
+	"go.londer.be/cardinal/internal/store"
 )
 
 func runApp(ctx context.Context, args []string) error {

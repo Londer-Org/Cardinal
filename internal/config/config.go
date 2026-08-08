@@ -28,7 +28,7 @@ import (
 	// For the POSIX range constants only. They live in store because that is
 	// where the SQL constraint enforcing the floor lives, and two statements of
 	// the same number are how they come to disagree.
-	"github.com/arthur-lonfils/cardinal/internal/store"
+	"go.londer.be/cardinal/internal/store"
 )
 
 type Config struct {

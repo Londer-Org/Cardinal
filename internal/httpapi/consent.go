@@ -6,8 +6,8 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/arthur-lonfils/cardinal/internal/store"
 	"github.com/google/uuid"
+	"go.londer.be/cardinal/internal/store"
 )
 
 // scopeDescriptions render a scope as something a person can weigh.

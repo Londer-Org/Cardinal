@@ -2,6 +2,9 @@ SHELL := /bin/bash
 PSQL  := docker exec -i cardinal-postgres psql -U cardinal -d cardinal -v ON_ERROR_STOP=1
 PYTHON ?= python3
 
+# The release this tree is. One file, read by everything.
+VERSION := $(shell cat VERSION)
+
 # Where the example stack listens.
 #
 # Overridable because 8443 is a popular port and a laptop running anything else
@@ -174,9 +177,89 @@ release: ui build ## Build the UI and a binary containing it
 serve: build ## Run the server in development mode
 	./bin/cardinal serve -config cardinal.toml -dev
 
-.PHONY: hosts
-hosts: ## Print the /etc/hosts line the example stack needs
+.PHONY: docs
+docs: ## Serve the documentation site locally
+	@cd website && npm install --silent && npm start
+
+.PHONY: docs-build
+docs-build: ## Build the documentation site, failing on any broken link
+	@cd website && npm ci --silent && npm run build
+
+.PHONY: version
+version: ## Print the version this tree builds
+	@echo $(VERSION)
+
+.PHONY: version-file
+version-file: ## Regenerate internal/version from VERSION
+	@# A constant rather than an ldflag, because Go discards an -X for a symbol
+	@# that does not exist and says nothing about it. .goreleaser.yaml passed
+	@# `-X main.version` to exactly such a symbol, so every release binary
+	@# carried no version at all and nothing noticed — there was no `cardinal
+	@# version` to notice with.
+	@sed -i.bak 's|^const Number = ".*"$$|const Number = "$(VERSION)"|' \
+		internal/version/version.go && rm -f internal/version/version.go.bak
+	@grep -q 'const Number = "$(VERSION)"' internal/version/version.go \
+		|| { echo 'version-file did not take effect'; exit 1; }
+	@echo "  internal/version/version.go is $(VERSION)"
+
+.PHONY: bump-patch bump-minor bump-major
+bump-patch: ## Bump the patch version, regenerate, commit and tag
+	@$(MAKE) --no-print-directory bump PART=patch
+bump-minor: ## Bump the minor version, regenerate, commit and tag
+	@$(MAKE) --no-print-directory bump PART=minor
+bump-major: ## Bump the major version, regenerate, commit and tag
+	@$(MAKE) --no-print-directory bump PART=major
+
+.PHONY: bump
+bump:
+	@# Refuses on a dirty tree. A bump commit that swept up unrelated changes
+	@# would put them in a release nobody reviewed, and the tag would point at
+	@# something other than what was tested.
+	@git diff --quiet && git diff --cached --quiet \
+		|| { echo 'working tree is dirty — commit or stash first'; exit 1; }
+	@current=$$(cat VERSION); \
+	major=$$(echo $$current | cut -d. -f1); \
+	minor=$$(echo $$current | cut -d. -f2); \
+	patch=$$(echo $$current | cut -d. -f3); \
+	case "$(PART)" in \
+		major) major=$$((major + 1)); minor=0; patch=0 ;; \
+		minor) minor=$$((minor + 1)); patch=0 ;; \
+		patch) patch=$$((patch + 1)) ;; \
+		*) echo 'PART must be major, minor or patch'; exit 1 ;; \
+	esac; \
+	next="$$major.$$minor.$$patch"; \
+	echo "$$next" > VERSION; \
+	echo "  checking the documentation builds"; \
+	$(MAKE) --no-print-directory version-file VERSION=$$next; \
+	$(MAKE) --no-print-directory docs-build >/dev/null \
+		|| { echo; echo '  the documentation site does not build.'; \
+		     echo '  Run `make docs-build` to see why.'; \
+		     echo; \
+		     echo '  Checked before the snapshot rather than after, because a'; \
+		     echo '  snapshot freezes whatever the docs say at this moment — a'; \
+		     echo '  broken link committed here is broken in this version'; \
+		     echo '  forever, and every later build of the site fails on it.'; \
+		     git checkout -- VERSION; exit 1; }; \
+	echo "  snapshotting the docs as $$current"; \
+	(cd website && npm run docs:version -- "$$current" >/dev/null); \
+	git add VERSION internal/version/version.go website/versioned_docs \
+		website/versioned_sidebars website/versions.json; \
+	git commit -q -m "Release $$next"; \
+	git tag -a "v$$next" -m "v$$next"; \
+	echo; \
+	echo "  $$current -> $$next, committed and tagged v$$next"; \
+	echo "  push it to release:  git push && git push origin v$$next"
+
+.PHONY: hosts-line
+hosts-line: ## Print only the /etc/hosts entry, for scripting
+	@# Its own target so a caller can pipe it. `make hosts | head -1` gives make
+	@# a broken pipe and a non-zero exit, which in CI is a failed step reporting
+	@# nothing useful.
 	@echo '127.0.0.1  id.cardinal.test app.cardinal.test client.cardinal.test open.cardinal.test'
+
+.PHONY: hosts
+hosts: ## Print the /etc/hosts line the example stack needs, and what to do with it
+	@$(MAKE) --no-print-directory hosts-line
 	@echo
 	@echo '  Add that to /etc/hosts, or on Windows to'
 	@echo '  C:/Windows/System32/drivers/etc/hosts (backslashes there).'

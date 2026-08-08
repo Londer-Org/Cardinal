@@ -9,8 +9,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/arthur-lonfils/cardinal/internal/sudoers"
-	"github.com/arthur-lonfils/cardinal/internal/userdb"
+	"go.londer.be/cardinal/internal/sudoers"
+	"go.londer.be/cardinal/internal/userdb"
 )
 
 // Checking a machine is ready, rather than making it ready.

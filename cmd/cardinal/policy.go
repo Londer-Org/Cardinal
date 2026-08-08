@@ -9,7 +9,7 @@ import (
 	"text/tabwriter"
 	"time"
 
-	"github.com/arthur-lonfils/cardinal/internal/policy"
+	"go.londer.be/cardinal/internal/policy"
 )
 
 func runPolicy(ctx context.Context, args []string) error {

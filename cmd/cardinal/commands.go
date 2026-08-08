@@ -9,9 +9,9 @@ import (
 	"text/tabwriter"
 	"time"
 
-	"github.com/arthur-lonfils/cardinal/internal/directory"
-	"github.com/arthur-lonfils/cardinal/internal/store"
-	"github.com/arthur-lonfils/cardinal/internal/temporal"
+	"go.londer.be/cardinal/internal/directory"
+	"go.londer.be/cardinal/internal/store"
+	"go.londer.be/cardinal/internal/temporal"
 )
 
 // open connects to the directory. Every command needs this and none should

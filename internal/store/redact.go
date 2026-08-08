@@ -5,10 +5,10 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/arthur-lonfils/cardinal/internal/directory"
-	"github.com/arthur-lonfils/cardinal/internal/event"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"go.londer.be/cardinal/internal/directory"
+	"go.londer.be/cardinal/internal/event"
 )
 
 // RedactEntity erases an entity's personal data in response to a GDPR

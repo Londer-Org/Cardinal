@@ -13,12 +13,12 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/arthur-lonfils/cardinal/internal/config"
-	"github.com/arthur-lonfils/cardinal/internal/directory"
-	"github.com/arthur-lonfils/cardinal/internal/store"
 	"github.com/go-webauthn/webauthn/protocol"
 	"github.com/go-webauthn/webauthn/webauthn"
 	"github.com/google/uuid"
+	"go.londer.be/cardinal/internal/config"
+	"go.londer.be/cardinal/internal/directory"
+	"go.londer.be/cardinal/internal/store"
 )
 
 // CeremonyTTL bounds how long a challenge may sit unanswered.

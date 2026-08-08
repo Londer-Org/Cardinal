@@ -32,6 +32,7 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from '@/components/ui/sidebar'
+import { BuildVersion } from '@/components/BuildVersion'
 import { CardinalMark } from '@/components/CardinalMark'
 import { useLogout, useSession } from '@/features/auth/useAuth'
 import { useTheme } from '@/features/theme/useTheme'
@@ -104,6 +105,7 @@ export function AppSidebar() {
             <NavUser />
           </SidebarMenuItem>
         </SidebarMenu>
+        <BuildVersion />
       </SidebarFooter>
     </Sidebar>
   )

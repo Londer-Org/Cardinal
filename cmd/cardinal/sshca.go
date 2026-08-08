@@ -9,9 +9,9 @@ import (
 	"text/tabwriter"
 	"time"
 
-	"github.com/arthur-lonfils/cardinal/internal/config"
-	"github.com/arthur-lonfils/cardinal/internal/store"
 	"github.com/google/uuid"
+	"go.londer.be/cardinal/internal/config"
+	"go.londer.be/cardinal/internal/store"
 )
 
 func runSSH(ctx context.Context, args []string) error {

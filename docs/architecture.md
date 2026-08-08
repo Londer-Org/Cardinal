@@ -32,7 +32,7 @@ flowchart TB
 
 There is no second process, no cache, no queue and no sidecar. `make release`
 produces one binary containing the compiled admin UI
-([`embed.FS`](../web/embed.go)), so deploying Cardinal is copying a file and
+([`embed.FS`](https://github.com/Londer-Org/Cardinal/blob/main/web/embed.go)), so deploying Cardinal is copying a file and
 pointing it at a database.
 
 That is a deliberate constraint rather than minimalism for its own sake: an
@@ -117,7 +117,7 @@ the POSIX records of the people who may log into it and nobody else
 stops a compromised build agent from yielding the whole staff list, the way an
 LDAP-bound host does.
 
-Policy lives in [`policies/cardinal.cedar`](../policies/cardinal.cedar), is
+Policy lives in [`policies/cardinal.cedar`](https://github.com/Londer-Org/Cardinal/blob/main/policies/cardinal.cedar), is
 versioned in the database, and is activated with one command — so changing who
 may do what is not a deployment.
 

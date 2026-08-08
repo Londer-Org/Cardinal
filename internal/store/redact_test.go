@@ -4,11 +4,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/arthur-lonfils/cardinal/internal/directory"
-	"github.com/arthur-lonfils/cardinal/internal/temporal"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.londer.be/cardinal/internal/directory"
+	"go.londer.be/cardinal/internal/temporal"
 )
 
 // TestRedactionErasesPersonalDataAndKeepsChainValid is the resolution of the

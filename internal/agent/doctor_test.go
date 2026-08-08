@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/arthur-lonfils/cardinal/internal/agent"
+	"go.londer.be/cardinal/internal/agent"
 )
 
 // TestConfigNeedsOnlyAServer.

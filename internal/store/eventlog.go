@@ -8,9 +8,9 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/arthur-lonfils/cardinal/internal/event"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"go.londer.be/cardinal/internal/event"
 )
 
 // eventChainLock serialises appenders to the journal.

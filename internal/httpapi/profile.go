@@ -6,8 +6,8 @@ import (
 	"net/mail"
 	"strings"
 
-	"github.com/arthur-lonfils/cardinal/internal/config"
-	"github.com/arthur-lonfils/cardinal/internal/store"
+	"go.londer.be/cardinal/internal/config"
+	"go.londer.be/cardinal/internal/store"
 )
 
 // Self-service profile editing.

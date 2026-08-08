@@ -12,9 +12,9 @@ import (
 	"text/tabwriter"
 	"time"
 
-	"github.com/arthur-lonfils/cardinal/internal/directory"
-	"github.com/arthur-lonfils/cardinal/internal/hostclient"
-	"github.com/arthur-lonfils/cardinal/internal/store"
+	"go.londer.be/cardinal/internal/directory"
+	"go.londer.be/cardinal/internal/hostclient"
+	"go.londer.be/cardinal/internal/store"
 	"golang.org/x/crypto/ssh"
 )
 

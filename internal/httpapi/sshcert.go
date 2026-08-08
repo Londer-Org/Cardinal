@@ -7,11 +7,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/arthur-lonfils/cardinal/internal/directory"
-	"github.com/arthur-lonfils/cardinal/internal/policy"
-	"github.com/arthur-lonfils/cardinal/internal/sshca"
-	"github.com/arthur-lonfils/cardinal/internal/store"
 	"github.com/cedar-policy/cedar-go/types"
+	"go.londer.be/cardinal/internal/directory"
+	"go.londer.be/cardinal/internal/policy"
+	"go.londer.be/cardinal/internal/sshca"
+	"go.londer.be/cardinal/internal/store"
 	"golang.org/x/crypto/ssh"
 )
 

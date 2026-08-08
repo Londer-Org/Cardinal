@@ -6,12 +6,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/arthur-lonfils/cardinal/internal/claims"
-	"github.com/arthur-lonfils/cardinal/internal/policy"
 	"github.com/cedar-policy/cedar-go/types"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.londer.be/cardinal/internal/claims"
+	"go.londer.be/cardinal/internal/policy"
 )
 
 // engine loads the real shipped policy set, not a test fixture.

@@ -17,7 +17,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/arthur-lonfils/cardinal/internal/store"
+	"go.londer.be/cardinal/internal/store"
 )
 
 // CA issues certificates with the directory's active authority key.

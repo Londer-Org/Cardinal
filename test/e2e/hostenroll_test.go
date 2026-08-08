@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/arthur-lonfils/cardinal/internal/hostclient"
+	"go.londer.be/cardinal/internal/hostclient"
 	"golang.org/x/crypto/ssh"
 )
 

@@ -1,0 +1,121 @@
+name: Release
+
+# Tags only, and only ones that look like a release.
+#
+# The tag is created by `make bump-patch|minor|major`, which refuses on a dirty
+# tree and writes the same number into VERSION and internal/version — so what
+# this builds is what that commit says it is, rather than whatever happened to
+# be checked out.
+on:
+  push:
+    tags: ['v[0-9]+.[0-9]+.[0-9]+*']
+
+permissions:
+  contents: write
+
+jobs:
+  # Everything CI checks, again, before anything is published.
+  #
+  # Not "CI already passed on main": a tag can point anywhere, tags get moved,
+  # and the cost of finding out at publish time is an image on Docker Hub that
+  # nobody can unpublish cleanly. This is the last moment it is still free.
+  verify:
+    name: Verify
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.25'
+
+      - name: The tag must match the VERSION file
+        run: |
+          tagged="${GITHUB_REF_NAME#v}"
+          declared="$(cat VERSION)"
+          if [ "$tagged" != "$declared" ]; then
+            echo "tag v$tagged does not match VERSION ($declared)."
+            echo
+            echo "  Every binary built here reports $declared, because the"
+            echo "  version is a constant compiled in rather than derived from"
+            echo "  the tag. Publishing them under v$tagged would mean a release"
+            echo "  whose artefacts disagree with their own name."
+            echo
+            echo "  Use \`make bump-patch|bump-minor|bump-major\`, which writes"
+            echo "  both and tags the commit that holds them."
+            exit 1
+          fi
+
+      - name: Test
+        run: go test ./internal/... ./cmd/... ./migrations/... -race -count=1 -timeout 10m
+
+      - name: Trust a local certificate authority
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq mkcert libnss3-tools
+          mkcert -install
+
+      - name: Resolve the stack's hostnames
+        run: make hosts-line | sudo tee -a /etc/hosts
+
+      - name: Start the stack
+        run: make e2e-up
+
+      - name: End-to-end
+        run: make e2e
+
+      - name: Stack logs
+        if: failure()
+        run: docker compose -f examples/compose.yml logs --tail 200
+
+  release:
+    name: Publish
+    needs: verify
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          # goreleaser derives the changelog from the commits since the previous
+          # tag, so a shallow clone produces an empty one.
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.25'
+
+      # goreleaser's `before` hook builds the admin UI, which //go:embed takes
+      # into the binary. Without Node here that hook fails, and without the hook
+      # the binary embeds an empty directory and serves a blank page — with no
+      # build error, because an empty embed is a valid embed.
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      # Multi-platform images need an emulator for the architecture the runner
+      # is not.
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - uses: goreleaser/goreleaser-action@v6
+        with:
+          version: '~> v2'
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # What was published, in the log, so the run itself answers "did the
+      # image get pushed" without anybody opening Docker Hub.
+      - name: What went out
+        run: |
+          echo "https://hub.docker.com/r/londerbe/cardinal/tags"
+          docker buildx imagetools inspect \
+            "londerbe/cardinal:${GITHUB_REF_NAME#v}" \
+            --format '{{ range .Manifest.Manifests }}{{ .Platform.OS }}/{{ .Platform.Architecture }} {{ end }}'

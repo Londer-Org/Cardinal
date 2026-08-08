@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/arthur-lonfils/cardinal/internal/sudoers"
+	"go.londer.be/cardinal/internal/sudoers"
 )
 
 var generated = time.Date(2026, 8, 7, 12, 0, 0, 0, time.UTC)

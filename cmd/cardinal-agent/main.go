@@ -29,11 +29,11 @@ import (
 	"text/tabwriter"
 	"time"
 
-	"github.com/arthur-lonfils/cardinal/internal/agent"
-	"github.com/arthur-lonfils/cardinal/internal/hostclient"
-	"github.com/arthur-lonfils/cardinal/internal/shadow"
-	"github.com/arthur-lonfils/cardinal/internal/sudoers"
-	"github.com/arthur-lonfils/cardinal/internal/userdb"
+	"go.londer.be/cardinal/internal/agent"
+	"go.londer.be/cardinal/internal/hostclient"
+	"go.londer.be/cardinal/internal/shadow"
+	"go.londer.be/cardinal/internal/sudoers"
+	"go.londer.be/cardinal/internal/userdb"
 )
 
 var errUsage = errors.New("usage")

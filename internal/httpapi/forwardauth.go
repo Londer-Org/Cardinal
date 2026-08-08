@@ -5,9 +5,9 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/arthur-lonfils/cardinal/internal/policy"
-	"github.com/arthur-lonfils/cardinal/internal/store"
 	"github.com/cedar-policy/cedar-go/types"
+	"go.londer.be/cardinal/internal/policy"
+	"go.londer.be/cardinal/internal/store"
 )
 
 // Traefik forwardAuth.

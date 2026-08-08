@@ -8,9 +8,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/arthur-lonfils/cardinal/internal/store"
 	"github.com/go-webauthn/webauthn/protocol"
 	"github.com/google/uuid"
+	"go.londer.be/cardinal/internal/store"
 )
 
 // Enrollment: how a new account gets its first passkey.

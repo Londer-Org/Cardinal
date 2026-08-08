@@ -6,11 +6,11 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/arthur-lonfils/cardinal/internal/event"
 	"github.com/go-webauthn/webauthn/protocol"
 	"github.com/go-webauthn/webauthn/webauthn"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"go.londer.be/cardinal/internal/event"
 )
 
 // MinCredentialsForFullEnrollment is why lockout is rare rather than merely

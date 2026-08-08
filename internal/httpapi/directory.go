@@ -8,10 +8,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/arthur-lonfils/cardinal/internal/directory"
-	"github.com/arthur-lonfils/cardinal/internal/policy"
-	"github.com/arthur-lonfils/cardinal/internal/store"
-	"github.com/arthur-lonfils/cardinal/internal/temporal"
+	"go.londer.be/cardinal/internal/directory"
+	"go.londer.be/cardinal/internal/policy"
+	"go.londer.be/cardinal/internal/store"
+	"go.londer.be/cardinal/internal/temporal"
 )
 
 // People and groups, over the admin API.

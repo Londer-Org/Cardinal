@@ -6,12 +6,12 @@ import (
 	"slices"
 	"time"
 
-	"github.com/arthur-lonfils/cardinal/internal/claims"
-	"github.com/arthur-lonfils/cardinal/internal/directory"
-	"github.com/arthur-lonfils/cardinal/internal/policy"
-	"github.com/arthur-lonfils/cardinal/internal/store"
 	"github.com/cedar-policy/cedar-go/types"
 	"github.com/google/uuid"
+	"go.londer.be/cardinal/internal/claims"
+	"go.londer.be/cardinal/internal/directory"
+	"go.londer.be/cardinal/internal/policy"
+	"go.londer.be/cardinal/internal/store"
 )
 
 // What a host is allowed to know.

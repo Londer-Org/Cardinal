@@ -1,4 +1,4 @@
-module github.com/arthur-lonfils/cardinal
+module go.londer.be/cardinal
 
 go 1.25.6
 

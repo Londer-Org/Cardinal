@@ -1,0 +1,25 @@
+<!doctype html>
+<meta charset="utf-8">
+<!--
+  What makes `go get go.londer.be/cardinal` work.
+
+  The Go tool fetches this URL with ?go-get=1 and reads the meta tag below. The
+  tag has to name the vanity prefix itself — a redirect to GitHub does not work,
+  because GitHub serves its own meta tag declaring `github.com/Londer-Org/Cardinal`,
+  which is not the prefix that was asked for, and the Go tool refuses the
+  mismatch.
+
+  Served for every path under this host, because Go walks up from the full
+  package path — go.londer.be/cardinal/cmd/cardinal first, then shorter
+  prefixes — until something returns a tag it accepts.
+-->
+<meta name="go-import" content="go.londer.be/cardinal git https://github.com/Londer-Org/Cardinal">
+<meta name="go-source" content="go.londer.be/cardinal https://github.com/Londer-Org/Cardinal https://github.com/Londer-Org/Cardinal/tree/main{/dir} https://github.com/Londer-Org/Cardinal/blob/main{/dir}/{file}#L{line}">
+
+<title>go.londer.be/cardinal</title>
+<meta http-equiv="refresh" content="0; url=https://github.com/Londer-Org/Cardinal">
+
+<p>
+  <a href="https://github.com/Londer-Org/Cardinal">Cardinal</a> —
+  <code>go install go.londer.be/cardinal/cmd/cardinal@latest</code>
+</p>

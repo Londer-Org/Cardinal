@@ -14,9 +14,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/arthur-lonfils/cardinal/internal/claims"
 	cedar "github.com/cedar-policy/cedar-go"
 	"github.com/cedar-policy/cedar-go/types"
+	"go.londer.be/cardinal/internal/claims"
 )
 
 // Cedar entity types. These are the vocabulary a policy author writes against,

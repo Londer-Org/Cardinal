@@ -11,16 +11,16 @@ import (
 	"strings"
 	"time"
 
-	"github.com/arthur-lonfils/cardinal/internal/auth"
-	"github.com/arthur-lonfils/cardinal/internal/claims"
-	"github.com/arthur-lonfils/cardinal/internal/config"
-	"github.com/arthur-lonfils/cardinal/internal/httpapi"
-	"github.com/arthur-lonfils/cardinal/internal/oidcprovider"
-	"github.com/arthur-lonfils/cardinal/internal/policy"
-	"github.com/arthur-lonfils/cardinal/internal/sshca"
-	"github.com/arthur-lonfils/cardinal/internal/store"
-	"github.com/arthur-lonfils/cardinal/internal/x509ca"
-	"github.com/arthur-lonfils/cardinal/web"
+	"go.londer.be/cardinal/internal/auth"
+	"go.londer.be/cardinal/internal/claims"
+	"go.londer.be/cardinal/internal/config"
+	"go.londer.be/cardinal/internal/httpapi"
+	"go.londer.be/cardinal/internal/oidcprovider"
+	"go.londer.be/cardinal/internal/policy"
+	"go.londer.be/cardinal/internal/sshca"
+	"go.londer.be/cardinal/internal/store"
+	"go.londer.be/cardinal/internal/x509ca"
+	"go.londer.be/cardinal/web"
 )
 
 func runServe(ctx context.Context, args []string) error {

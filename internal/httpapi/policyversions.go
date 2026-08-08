@@ -7,8 +7,8 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/arthur-lonfils/cardinal/internal/policy"
-	"github.com/arthur-lonfils/cardinal/internal/store"
+	"go.londer.be/cardinal/internal/policy"
+	"go.londer.be/cardinal/internal/store"
 )
 
 // Policy versions, and rolling back to one.

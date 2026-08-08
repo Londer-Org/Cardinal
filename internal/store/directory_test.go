@@ -5,11 +5,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/arthur-lonfils/cardinal/internal/directory"
-	"github.com/arthur-lonfils/cardinal/internal/store"
-	"github.com/arthur-lonfils/cardinal/internal/temporal"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.londer.be/cardinal/internal/directory"
+	"go.londer.be/cardinal/internal/store"
+	"go.londer.be/cardinal/internal/temporal"
 )
 
 // TestListUsersCountsWhatTheConsoleShows.

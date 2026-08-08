@@ -1,0 +1,17 @@
+# The image goreleaser builds, from a binary it has already compiled.
+#
+# Distinct from Dockerfile at the root, which builds everything from source and
+# is what `docker build .` and CI use. This one exists because goreleaser has
+# already produced the binary — with the UI embedded by its `before` hook and
+# the version stamped by ldflags — and rebuilding it here would produce a second
+# artifact that is not the one being released.
+FROM gcr.io/distroless/static-debian12:nonroot
+
+# Named in the OCI labels goreleaser passes at build time, so `docker inspect`
+# answers what this is without anybody reading a tag.
+COPY cardinal /usr/local/bin/cardinal
+
+USER nonroot:nonroot
+EXPOSE 8080
+ENTRYPOINT ["/usr/local/bin/cardinal"]
+CMD ["serve"]

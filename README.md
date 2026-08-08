@@ -193,6 +193,34 @@ TLS instead.
 is one file plus a database. The container image is distroless, static and runs
 as nonroot.
 
+### Releasing
+
+One file holds the version. `make bump-patch|bump-minor|bump-major` rewrites it,
+regenerates `internal/version`, snapshots the documentation for the version being
+left behind, commits, and tags:
+
+```sh
+make bump-minor          # 0.1.0 -> 0.2.0, tagged v0.2.0
+git push && git push origin v0.2.0
+```
+
+Pushing the tag runs the release workflow, which re-runs the whole test suite —
+including end-to-end — before publishing anything, then builds the archives,
+the `.deb` and `.rpm`, and multi-architecture images to
+`londerbe/cardinal:0.2.0` and `:latest`.
+
+The number is a **constant compiled in**, not derived from the tag, and the
+release refuses to publish if the two disagree. That is not belt-and-braces:
+`.goreleaser.yaml` previously injected `-X main.version` into a symbol no package
+declared, and Go discards an `-X` for an unknown symbol silently — so every
+release binary would have carried no version at all, indefinitely, because
+nothing anywhere asked a binary what it was. `cardinal version`, `/api/health`
+and the console's sidebar all report it now.
+
+`make bump` refuses on a dirty tree, and builds the documentation site before
+snapshotting it — a snapshot freezes whatever the docs say at that moment, so a
+broken link committed there is broken in that version forever.
+
 ### Documentation
 
 | Document | What it answers |
@@ -204,6 +232,11 @@ as nonroot.
 | [comparison.md](docs/comparison.md) | Authelia, Keycloak, FreeIPA, Kanidm — and where Cardinal is the wrong choice |
 | [threat-model.md](docs/threat-model.md) | What it defends against, and the gaps it does not |
 | [adr/](docs/adr/) | Why things are the way they are |
+| [ROADMAP.md](ROADMAP.md) | What works, what does not, and what is deliberately not being built |
+
+The published site is at <https://londer-org.github.io/Cardinal/>, built from
+this same `docs/` directory with a version picker — the sources are not copied
+into `website/`, because a second copy is the one that goes stale.
 
 The development tools have their own notes: [tools/uishot/](tools/uishot/) covers
 the screenshot and contrast checker, including the two bugs that once had it

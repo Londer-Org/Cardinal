@@ -7,9 +7,9 @@ import (
 	"time"
 
 	"github.com/BurntSushi/toml"
-	"github.com/arthur-lonfils/cardinal/internal/hostclient"
-	"github.com/arthur-lonfils/cardinal/internal/sudoers"
-	"github.com/arthur-lonfils/cardinal/internal/userdb"
+	"go.londer.be/cardinal/internal/hostclient"
+	"go.londer.be/cardinal/internal/sudoers"
+	"go.londer.be/cardinal/internal/userdb"
 )
 
 // DefaultConfigPath is where the package puts the agent's configuration.

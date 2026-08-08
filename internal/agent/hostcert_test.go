@@ -11,8 +11,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/arthur-lonfils/cardinal/internal/agent"
-	"github.com/arthur-lonfils/cardinal/internal/sshca"
+	"go.londer.be/cardinal/internal/agent"
+	"go.londer.be/cardinal/internal/sshca"
 	"golang.org/x/crypto/ssh"
 )
 

@@ -3,10 +3,10 @@ package store_test
 import (
 	"testing"
 
-	"github.com/arthur-lonfils/cardinal/internal/config"
-	"github.com/arthur-lonfils/cardinal/internal/store"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.londer.be/cardinal/internal/config"
+	"go.londer.be/cardinal/internal/store"
 )
 
 // TestRedirectURIValidation.

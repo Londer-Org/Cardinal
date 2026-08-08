@@ -7,11 +7,11 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/arthur-lonfils/cardinal/internal/claims"
-	"github.com/arthur-lonfils/cardinal/internal/config"
-	"github.com/arthur-lonfils/cardinal/internal/store"
 	"github.com/zitadel/oidc/v3/pkg/oidc"
 	"github.com/zitadel/oidc/v3/pkg/op"
+	"go.londer.be/cardinal/internal/claims"
+	"go.londer.be/cardinal/internal/config"
+	"go.londer.be/cardinal/internal/store"
 )
 
 // Storage must satisfy the library's contract. Asserted at compile time so a

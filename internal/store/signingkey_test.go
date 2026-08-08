@@ -4,9 +4,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/arthur-lonfils/cardinal/internal/store"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.londer.be/cardinal/internal/store"
 )
 
 const testSealKey = "a-test-encryption-key-not-for-real-use"

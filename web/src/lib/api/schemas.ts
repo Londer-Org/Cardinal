@@ -530,3 +530,10 @@ export const authoritiesSchema = z.object({
   ssh: authoritySchema,
   x509: authoritySchema,
 })
+
+/** What /api/health reports. The version is why the console asks. */
+export const healthSchema = z.object({
+  status: z.string(),
+  version: z.string(),
+})
+export type Health = z.infer<typeof healthSchema>

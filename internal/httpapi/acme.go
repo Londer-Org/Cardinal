@@ -17,9 +17,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/arthur-lonfils/cardinal/internal/acme"
-	"github.com/arthur-lonfils/cardinal/internal/store"
 	"github.com/google/uuid"
+	"go.londer.be/cardinal/internal/acme"
+	"go.londer.be/cardinal/internal/store"
 )
 
 // ACME, RFC 8555.

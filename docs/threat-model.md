@@ -178,7 +178,7 @@ Stated plainly, because unexamined assumptions are where threat models fail:
 
 ## Known gaps
 
-Honest list, tracked in [ROADMAP.md](../ROADMAP.md):
+Honest list, tracked in [ROADMAP.md](https://github.com/Londer-Org/Cardinal/blob/main/ROADMAP.md):
 
 | Gap | Consequence | Phase |
 |---|---|---|

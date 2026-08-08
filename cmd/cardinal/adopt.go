@@ -13,9 +13,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/arthur-lonfils/cardinal/internal/directory"
-	"github.com/arthur-lonfils/cardinal/internal/shadow"
-	"github.com/arthur-lonfils/cardinal/internal/store"
+	"go.londer.be/cardinal/internal/directory"
+	"go.londer.be/cardinal/internal/shadow"
+	"go.londer.be/cardinal/internal/store"
 )
 
 // Adopting the numbers a fleet already uses.

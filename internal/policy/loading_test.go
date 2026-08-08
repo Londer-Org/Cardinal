@@ -4,9 +4,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/arthur-lonfils/cardinal/internal/policy"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.londer.be/cardinal/internal/policy"
 )
 
 // TestUnnamedPolicyRejected guards the explainability the decision point exists

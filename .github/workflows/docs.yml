@@ -1,0 +1,70 @@
+name: Docs
+
+# On main so the site tracks what is in the tree, and on tags because a release
+# is when a version snapshot becomes worth keeping.
+on:
+  push:
+    branches: [main]
+    tags: ['v[0-9]+.[0-9]+.[0-9]+*']
+    # Everything the site is built from. The docs live in ../docs rather than
+    # inside website/, because they are read in a checkout and on GitHub as
+    # often as here — a second copy under website/ would be the one that goes
+    # stale.
+    paths:
+      - 'docs/**'
+      - 'website/**'
+      - 'VERSION'
+      - '.github/workflows/docs.yml'
+  pull_request:
+    paths:
+      - 'docs/**'
+      - 'website/**'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: docs-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # On a pull request this is the whole job: build it, and fail on a broken
+  # link. That is not a formality — the first build of this site found two
+  # documents pointing at a ROADMAP.md that had never existed, from the "known
+  # gaps" section a reader is most likely to follow.
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: website/package-lock.json
+
+      - run: npm ci
+        working-directory: website
+
+      - run: npm run build
+        working-directory: website
+
+      - uses: actions/upload-pages-artifact@v4
+        if: github.event_name == 'push'
+        with:
+          path: website/build
+
+  deploy:
+    name: Deploy
+    needs: build
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - id: deploy
+        uses: actions/deploy-pages@v4

@@ -1,0 +1,26 @@
+# The vanity import path for `go get go.londer.be/cardinal`.
+#
+# Follows the same pattern as the other services on this VPS: on the external
+# `web` network, no published ports, reached through Nginx Proxy Manager.
+#
+# In Nginx Proxy Manager, add a proxy host:
+#   domain    go.londer.be
+#   forward   go-import : 80
+#   SSL       request a certificate, force SSL
+#
+# Then `go install go.londer.be/cardinal/cmd/cardinal@latest` works from
+# anywhere, and it keeps working if the repository moves again — which is the
+# whole reason for doing this rather than naming GitHub in 105 files.
+services:
+  go-import:
+    image: nginx:alpine
+    restart: unless-stopped
+    volumes:
+      - ./index.html:/usr/share/nginx/html/index.html:ro
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    networks:
+      - web
+
+networks:
+  web:
+    external: true

@@ -10,6 +10,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"go.londer.be/cardinal/internal/version"
 	"os"
 	"os/signal"
 	"syscall"
@@ -75,6 +76,9 @@ func run(ctx context.Context, args []string) error {
 		return runHistory(ctx, rest)
 	case "init":
 		return runInit(ctx, args[1:])
+	case "version":
+		fmt.Println(version.String())
+		return nil
 	case "migrate":
 		return runMigrate(ctx, rest)
 	case "invite":

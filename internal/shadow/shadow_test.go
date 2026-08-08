@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/arthur-lonfils/cardinal/internal/shadow"
+	"go.londer.be/cardinal/internal/shadow"
 )
 
 // fakeSystem is a machine with whatever NSS is currently telling it.

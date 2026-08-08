@@ -10,15 +10,16 @@ import (
 	"strings"
 	"sync/atomic"
 
-	"github.com/arthur-lonfils/cardinal/internal/auth"
-	"github.com/arthur-lonfils/cardinal/internal/claims"
-	"github.com/arthur-lonfils/cardinal/internal/config"
-	"github.com/arthur-lonfils/cardinal/internal/directory"
-	"github.com/arthur-lonfils/cardinal/internal/oidcprovider"
-	"github.com/arthur-lonfils/cardinal/internal/policy"
-	"github.com/arthur-lonfils/cardinal/internal/sshca"
-	"github.com/arthur-lonfils/cardinal/internal/store"
-	"github.com/arthur-lonfils/cardinal/internal/x509ca"
+	"go.londer.be/cardinal/internal/auth"
+	"go.londer.be/cardinal/internal/claims"
+	"go.londer.be/cardinal/internal/config"
+	"go.londer.be/cardinal/internal/directory"
+	"go.londer.be/cardinal/internal/oidcprovider"
+	"go.londer.be/cardinal/internal/policy"
+	"go.londer.be/cardinal/internal/sshca"
+	"go.londer.be/cardinal/internal/store"
+	"go.londer.be/cardinal/internal/version"
+	"go.londer.be/cardinal/internal/x509ca"
 )
 
 // Server holds the HTTP surface.
@@ -507,7 +508,15 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusServiceUnavailable, "database unreachable")
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+	// The version goes here rather than only in a CLI, because health is the
+	// one endpoint every deployment already polls: a load balancer, a probe, a
+	// person with curl. "Which build is that node running" is otherwise a
+	// question you can only answer by getting a shell on it, which is exactly
+	// what you cannot do during a rolling deploy that went wrong.
+	writeJSON(w, http.StatusOK, map[string]string{
+		"status":  "ok",
+		"version": version.String(),
+	})
 }
 
 // ── helpers ────────────────────────────────────────────────────────────────

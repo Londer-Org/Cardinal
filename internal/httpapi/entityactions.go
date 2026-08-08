@@ -6,8 +6,8 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/arthur-lonfils/cardinal/internal/directory"
-	"github.com/arthur-lonfils/cardinal/internal/store"
+	"go.londer.be/cardinal/internal/directory"
+	"go.londer.be/cardinal/internal/store"
 )
 
 // Actions on things the console could already show but not change.
