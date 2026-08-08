@@ -13,7 +13,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"go.londer.be/cardinal/internal/directory"
-	"go.londer.be/cardinal/internal/event"
+	"go.londer.be/cardinal/internal/directory/event"
 	"golang.org/x/crypto/argon2"
 )
 

@@ -14,7 +14,7 @@ import (
 	"strings"
 
 	"go.londer.be/cardinal/internal/directory"
-	"go.londer.be/cardinal/internal/shadow"
+	"go.londer.be/cardinal/internal/host/shadow"
 	"go.londer.be/cardinal/internal/store"
 )
 

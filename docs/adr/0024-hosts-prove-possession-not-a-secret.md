@@ -103,7 +103,7 @@ request forever, and what it buys is one minute of protection on requests that
 are almost all reads. Revisit if a host endpoint is ever added where replaying a
 *write* would be harmful.
 
-**Signing is implemented twice** — in the server, and in `internal/hostclient`
+**Signing is implemented twice** — in the server, and in `internal/host/machine`
 for `cardinal host join`, `cardinal host whoami` and eventually the agent. That
 duplication is deliberate: the server must never trust a string a client hands
 it. The end-to-end tests are where the two meet, and are the only thing keeping

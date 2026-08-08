@@ -10,9 +10,9 @@ import (
 	"time"
 
 	"go.londer.be/cardinal/internal/directory"
-	"go.londer.be/cardinal/internal/policy"
+	"go.londer.be/cardinal/internal/directory/temporal"
+	"go.londer.be/cardinal/internal/server/policy"
 	"go.londer.be/cardinal/internal/store"
-	"go.londer.be/cardinal/internal/temporal"
 )
 
 // runInit performs first-run setup.

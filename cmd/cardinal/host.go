@@ -13,7 +13,7 @@ import (
 	"time"
 
 	"go.londer.be/cardinal/internal/directory"
-	"go.londer.be/cardinal/internal/hostclient"
+	"go.londer.be/cardinal/internal/host/machine"
 	"go.londer.be/cardinal/internal/store"
 	"golang.org/x/crypto/ssh"
 )
@@ -197,7 +197,7 @@ func runHostJoin(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("host join", flag.ContinueOnError)
 	server := fs.String("server", "", "base URL of the Cardinal server")
 	token := fs.String("token", "", "enrollment token from `cardinal host enroll`")
-	keyPath := fs.String("key", hostclient.DefaultKeyPath, "where to write this host's key")
+	keyPath := fs.String("key", machine.DefaultKeyPath, "where to write this host's key")
 
 	if _, err := parse(fs, args); err != nil {
 		return errUsage
@@ -209,12 +209,12 @@ func runHostJoin(ctx context.Context, args []string) error {
 	// Generated before the request, not after: the token is spent by the server
 	// the instant it is accepted, so a key created afterwards could not be
 	// registered without issuing another one.
-	signer, err := hostclient.GenerateKey(*keyPath)
+	signer, err := machine.GenerateKey(*keyPath)
 	if err != nil {
 		return err
 	}
 
-	name, err := hostclient.Enroll(ctx, http.DefaultClient, *server, *token, signer.PublicKey())
+	name, err := machine.Enroll(ctx, http.DefaultClient, *server, *token, signer.PublicKey())
 	if err != nil {
 		// The key is useless now — it was never registered, and leaving it
 		// behind would make the next attempt fail on O_EXCL with a confusing
@@ -240,7 +240,7 @@ func runHostJoin(ctx context.Context, args []string) error {
 func runHostWhoami(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("host whoami", flag.ContinueOnError)
 	server := fs.String("server", "", "base URL of the Cardinal server")
-	keyPath := fs.String("key", hostclient.DefaultKeyPath, "this host's key")
+	keyPath := fs.String("key", machine.DefaultKeyPath, "this host's key")
 
 	if _, err := parse(fs, args); err != nil {
 		return errUsage
@@ -249,11 +249,11 @@ func runHostWhoami(ctx context.Context, args []string) error {
 		return fmt.Errorf("%w: cardinal host whoami -server <url>", errUsage)
 	}
 
-	signer, err := hostclient.LoadKey(*keyPath)
+	signer, err := machine.LoadKey(*keyPath)
 	if err != nil {
 		return err
 	}
-	identity := &hostclient.Identity{Server: *server, Signer: signer}
+	identity := &machine.Identity{Server: *server, Signer: signer}
 
 	resp, err := identity.Do(ctx, http.DefaultClient, http.MethodGet, "/api/hosts/me", nil)
 	if err != nil {

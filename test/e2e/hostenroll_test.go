@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"go.londer.be/cardinal/internal/hostclient"
+	"go.londer.be/cardinal/internal/host/machine"
 	"golang.org/x/crypto/ssh"
 )
 
@@ -30,7 +30,7 @@ import (
 
 // enrolledHost creates a host, redeems a token for it, and returns the identity
 // it authenticates with.
-func enrolledHost(t *testing.T, name string) *hostclient.Identity {
+func enrolledHost(t *testing.T, name string) *machine.Identity {
 	t.Helper()
 
 	// Idempotent by tolerance rather than by check: the suite may have run
@@ -55,7 +55,7 @@ func enrolledHost(t *testing.T, name string) *hostclient.Identity {
 // The keypair is generated here rather than passed in, which is the whole
 // design: Cardinal never holds a host's private key, so the only thing that can
 // produce one is the machine itself.
-func redeemEnrollment(t *testing.T, token string) *hostclient.Identity {
+func redeemEnrollment(t *testing.T, token string) *machine.Identity {
 	t.Helper()
 
 	public, private, err := ed25519.GenerateKey(rand.Reader)
@@ -91,7 +91,7 @@ func redeemEnrollment(t *testing.T, token string) *hostclient.Identity {
 	}
 	drain(resp)
 
-	identity := &hostclient.Identity{Server: origin(hostCardinal), Signer: signer}
+	identity := &machine.Identity{Server: origin(hostCardinal), Signer: signer}
 
 	// A control, before any test uses this identity to prove something cannot be
 	// done. Every refusal below would pass just as happily if signing were
@@ -111,7 +111,7 @@ func redeemEnrollment(t *testing.T, token string) *hostclient.Identity {
 
 // signedGET describes a host-signed request, and the ways to bend it.
 //
-// Written out longhand rather than calling hostclient.Sign, because that
+// Written out longhand rather than calling machine.Sign, because that
 // function is the *correct* client by construction and these tests need an
 // incorrect one. Each override below is empty for a well-formed request; every
 // test sets exactly one and asserts the server notices.

@@ -23,12 +23,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/BurntSushi/toml"
+	"go.londer.be/cardinal/internal/directory/posix"
 
+	"github.com/BurntSushi/toml"
 	// For the POSIX range constants only. They live in store because that is
 	// where the SQL constraint enforcing the floor lives, and two statements of
 	// the same number are how they come to disagree.
-	"go.londer.be/cardinal/internal/store"
 )
 
 // Config is the parsed contents of cardinal.toml.
@@ -126,13 +126,13 @@ type POSIX struct {
 // Same shape as Sessions.Effective, and for the same reason: a Config built in
 // code rather than parsed from a file must behave identically, or validation
 // rejects a configuration the server would have accepted.
-func (p POSIX) Effective() store.POSIXRange {
-	r := store.POSIXRange{Low: p.RangeLow, High: p.RangeHigh}
+func (p POSIX) Effective() posix.Range {
+	r := posix.Range{Low: p.RangeLow, High: p.RangeHigh}
 	if r.Low == 0 {
-		r.Low = store.DefaultPOSIXRange.Low
+		r.Low = posix.DefaultRange.Low
 	}
 	if r.High == 0 {
-		r.High = store.DefaultPOSIXRange.High
+		r.High = posix.DefaultRange.High
 	}
 	return r
 }
@@ -528,11 +528,11 @@ func (c *Config) validatePOSIX() []error {
 	// everywhere else, and writing only one end of the range is the common case.
 	r := c.POSIX.Effective()
 
-	if r.Low < store.POSIXAllocationFloor {
+	if r.Low < posix.AllocationFloor {
 		problems = append(problems, fmt.Errorf(
 			"%w: posix.range_low is %d — below %d belongs to the distribution's "+
 				"own accounts and to systemd's DynamicUser reservation",
-			ErrInvalid, r.Low, store.POSIXAllocationFloor))
+			ErrInvalid, r.Low, posix.AllocationFloor))
 	}
 	if r.High <= r.Low {
 		problems = append(problems, fmt.Errorf(

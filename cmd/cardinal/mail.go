@@ -10,7 +10,7 @@ import (
 	"text/tabwriter"
 	"time"
 
-	"go.londer.be/cardinal/internal/mail"
+	"go.londer.be/cardinal/internal/server/mail"
 	"go.londer.be/cardinal/internal/store"
 )
 

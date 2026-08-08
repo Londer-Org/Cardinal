@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"go.londer.be/cardinal/internal/directory/posix"
+
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -15,7 +17,7 @@ import (
 
 // testRange is deliberately not the default, so a test that accidentally
 // depended on the default's exact value would fail rather than pass.
-var testRange = store.POSIXRange{Low: 200000, High: 200005}
+var testRange = posix.Range{Low: 200000, High: 200005}
 
 // TestNumbersAreUniqueAcrossUsersAndGroups.
 //
@@ -129,7 +131,7 @@ func TestConcurrentAssignmentCannotCollide(t *testing.T) {
 	ctx := t.Context()
 
 	const racers = 6
-	wide := store.POSIXRange{Low: 300000, High: 399999}
+	wide := posix.Range{Low: 300000, High: 399999}
 
 	users := make([]*directory.Entity, racers)
 	for i := range users {
@@ -183,7 +185,7 @@ func TestExhaustedRangeIsDistinguishable(t *testing.T) {
 	s := newStore(t)
 	ctx := t.Context()
 
-	tiny := store.POSIXRange{Low: 400000, High: 400001}
+	tiny := posix.Range{Low: 400000, High: 400001}
 
 	for _, name := range []string{"one", "two"} {
 		e := mustCreate(t, s, directory.TypeUser, name)
@@ -207,7 +209,7 @@ func TestAllocationRangeBelowTheFloorIsRefused(t *testing.T) {
 	alice := mustCreate(t, s, directory.TypeUser, "alice")
 
 	_, err := s.AssignPOSIXIdentity(t.Context(), alice.ID,
-		store.POSIXRange{Low: 500, High: 600}, nil)
+		posix.Range{Low: 500, High: 600}, nil)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "system's own accounts")
 }
@@ -417,7 +419,7 @@ func TestAdoptingAReservedNumberIsRefused(t *testing.T) {
 
 			user := mustCreate(t, s, directory.TypeUser, "u"+strconv.Itoa(tc.number))
 			_, err := s.AssignPOSIXIdentity(ctx, user.ID,
-				store.POSIXRange{Low: 900000, High: 999999}, nil)
+				posix.Range{Low: 900000, High: 999999}, nil)
 			require.NoError(t, err)
 
 			err = s.AdoptPOSIXNumber(ctx, user.ID, tc.number, nil)
@@ -440,7 +442,7 @@ func TestAdoptedNumbersDoNotDisturbTheAllocator(t *testing.T) {
 	s := newStore(t)
 	ctx := t.Context()
 
-	wide := store.POSIXRange{Low: 500000, High: 599999}
+	wide := posix.Range{Low: 500000, High: 599999}
 
 	alice := mustCreate(t, s, directory.TypeUser, "alice")
 	_, err := s.AssignPOSIXIdentity(ctx, alice.ID, wide, nil)
@@ -468,7 +470,7 @@ func TestAssigningTwiceSaysSoPlainly(t *testing.T) {
 	s := newStore(t)
 	ctx := t.Context()
 
-	r := store.POSIXRange{Low: 100000, High: 199999}
+	r := posix.Range{Low: 100000, High: 199999}
 	alice := mustCreate(t, s, directory.TypeUser, "alice")
 
 	first, err := s.AssignPOSIXIdentity(ctx, alice.ID, r, nil)

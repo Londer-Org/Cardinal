@@ -9,7 +9,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	"go.londer.be/cardinal/internal/event"
+	"go.londer.be/cardinal/internal/directory/event"
 )
 
 // ErrConsentNotFound reports that the subject has not consented to this client.

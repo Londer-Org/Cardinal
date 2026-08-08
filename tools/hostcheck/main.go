@@ -23,11 +23,11 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"go.londer.be/cardinal/internal/agent"
-	"go.londer.be/cardinal/internal/shadow"
-	"go.londer.be/cardinal/internal/sshca"
-	"go.londer.be/cardinal/internal/sudoers"
-	"go.londer.be/cardinal/internal/userdb"
+	"go.londer.be/cardinal/internal/ca/sshca"
+	"go.londer.be/cardinal/internal/host/agent"
+	"go.londer.be/cardinal/internal/host/shadow"
+	"go.londer.be/cardinal/internal/host/sudoers"
+	"go.londer.be/cardinal/internal/host/userdb"
 	"golang.org/x/crypto/ssh"
 )
 

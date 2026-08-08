@@ -29,11 +29,11 @@ import (
 	"text/tabwriter"
 	"time"
 
-	"go.londer.be/cardinal/internal/agent"
-	"go.londer.be/cardinal/internal/hostclient"
-	"go.londer.be/cardinal/internal/shadow"
-	"go.londer.be/cardinal/internal/sudoers"
-	"go.londer.be/cardinal/internal/userdb"
+	"go.londer.be/cardinal/internal/host/agent"
+	"go.londer.be/cardinal/internal/host/machine"
+	"go.londer.be/cardinal/internal/host/shadow"
+	"go.londer.be/cardinal/internal/host/sudoers"
+	"go.londer.be/cardinal/internal/host/userdb"
 )
 
 var errUsage = errors.New("usage")
@@ -109,7 +109,7 @@ USAGE
                                         say what is missing. Changes nothing.
 
 FLAGS
-  -key <path>        this host's private key (default `+hostclient.DefaultKeyPath+`)
+  -key <path>        this host's private key (default `+machine.DefaultKeyPath+`)
   -cache <path>      cached assignment (default `+agent.DefaultCachePath+`)
   -interval <dur>    how often to refresh (default 5m)
   -socket-dir <path> where nss-systemd looks (default `+userdb.DefaultRunDir+`)
@@ -131,7 +131,7 @@ func runEnroll(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("enroll", flag.ContinueOnError)
 	server := fs.String("server", "", "base URL of the Cardinal server")
 	token := fs.String("token", "", "enrollment token from `cardinal host enroll`")
-	keyPath := fs.String("key", hostclient.DefaultKeyPath, "where to write this host's key")
+	keyPath := fs.String("key", machine.DefaultKeyPath, "where to write this host's key")
 	if err := fs.Parse(args); err != nil {
 		return errUsage
 	}
@@ -139,12 +139,12 @@ func runEnroll(ctx context.Context, args []string) error {
 		return errUsage
 	}
 
-	signer, err := hostclient.GenerateKey(*keyPath)
+	signer, err := machine.GenerateKey(*keyPath)
 	if err != nil {
 		return err
 	}
 
-	name, err := hostclient.Enroll(ctx, nil, *server, *token, signer.PublicKey())
+	name, err := machine.Enroll(ctx, nil, *server, *token, signer.PublicKey())
 	if err != nil {
 		// Never registered, so the key is useless — and leaving it behind would
 		// make the next attempt fail on O_EXCL, complaining about a key this
@@ -163,7 +163,7 @@ func runAgent(ctx context.Context, args []string) error {
 	configPath := fs.String("config", "",
 		"configuration file; every flag below overrides what it sets")
 	server := fs.String("server", "", "base URL of the Cardinal server")
-	keyPath := fs.String("key", hostclient.DefaultKeyPath, "this host's key")
+	keyPath := fs.String("key", machine.DefaultKeyPath, "this host's key")
 	cachePath := fs.String("cache", agent.DefaultCachePath, "cached assignment")
 	interval := fs.Duration("interval", agent.DefaultInterval, "how often to refresh")
 	socketDir := fs.String("socket-dir", userdb.DefaultRunDir, "where nss-systemd looks")
@@ -197,14 +197,14 @@ func runAgent(ctx context.Context, args []string) error {
 
 	log := slog.New(slog.NewTextHandler(os.Stderr, nil))
 
-	signer, err := hostclient.LoadKey(*keyPath)
+	signer, err := machine.LoadKey(*keyPath)
 	if err != nil {
 		return fmt.Errorf("%w\n\n  Enrol first: cardinal-agent enroll -server %s -token <token>",
 			err, *server)
 	}
 
 	a := &agent.Agent{
-		Identity:    &hostclient.Identity{Server: *server, Signer: signer},
+		Identity:    &machine.Identity{Server: *server, Signer: signer},
 		CachePath:   *cachePath,
 		Interval:    *interval,
 		SudoersPath: *sudoersPath,
@@ -462,7 +462,7 @@ func runHostCert(args []string) error {
 func runShadow(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("shadow", flag.ContinueOnError)
 	server := fs.String("server", "", "base URL of the Cardinal server")
-	keyPath := fs.String("key", hostclient.DefaultKeyPath, "this host's key")
+	keyPath := fs.String("key", machine.DefaultKeyPath, "this host's key")
 	asJSON := fs.Bool("json", false, "emit the report as JSON, for collecting across a fleet")
 	extra := fs.String("users", "",
 		"comma-separated names to check that Cardinal does not know about")
@@ -473,7 +473,7 @@ func runShadow(ctx context.Context, args []string) error {
 		return errUsage
 	}
 
-	signer, err := hostclient.LoadKey(*keyPath)
+	signer, err := machine.LoadKey(*keyPath)
 	if err != nil {
 		return err
 	}
@@ -482,7 +482,7 @@ func runShadow(ctx context.Context, args []string) error {
 	// socket directory. An Agent with none of those cannot write anything, so
 	// shadow mode is read-only by construction rather than by discipline.
 	a := &agent.Agent{
-		Identity: &hostclient.Identity{Server: *server, Signer: signer},
+		Identity: &machine.Identity{Server: *server, Signer: signer},
 	}
 
 	// Fetch, not Refresh. Refresh writes the cache, renders sudoers and renews

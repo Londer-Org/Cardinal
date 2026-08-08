@@ -8,6 +8,8 @@ import (
 	"os"
 	"text/tabwriter"
 
+	"go.londer.be/cardinal/internal/directory/posix"
+
 	"go.londer.be/cardinal/internal/directory"
 	"go.londer.be/cardinal/internal/store"
 )
@@ -38,14 +40,14 @@ func runPOSIX(ctx context.Context, args []string) error {
 // operators running `assign` with different flags would produce numbers from
 // two ranges in one directory, and the damage would not be visible until
 // something collided.
-func posixRange(configPath string) store.POSIXRange {
+func posixRange(configPath string) posix.Range {
 	cfg, err := loadConfigForCheck(configPath)
 	if err != nil {
 		// Unreadable configuration is not an error here. It is the normal case
 		// for a CLI run against a development database, and Effective() would
 		// return the same default the server uses, so the numbers agree either
 		// way.
-		return store.DefaultPOSIXRange
+		return posix.DefaultRange
 	}
 	return cfg.POSIX.Effective()
 }

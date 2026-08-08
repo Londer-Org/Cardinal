@@ -10,7 +10,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"go.londer.be/cardinal/internal/directory"
-	"go.londer.be/cardinal/internal/event"
+	"go.londer.be/cardinal/internal/directory/event"
 )
 
 const entityColumns = `id, type, name, coalesce(display_name, ''), attrs,

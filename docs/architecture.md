@@ -41,25 +41,64 @@ additional moving part is another way for nobody to be able to log in.
 
 ## The packages, and why the seams are where they are
 
+Six groups, and the grouping is the dependency graph rather than a filing
+preference. `go list` will confirm every arrow below.
+
+### `internal/directory` — the model, and nothing else
+
+Depends on nothing. Everything else depends on some of it.
+
 | Package | Responsibility | The rule it obeys |
 |---|---|---|
-| `internal/store` | Every SQL statement in the product | Nothing above it writes SQL, so validity and revocation are enforced in one place |
-| `internal/directory` | Entity types and the schema registry | Knows nothing about HTTP |
-| `internal/auth` | WebAuthn registration and login ceremonies | The only package that understands a credential |
-| `internal/claims` | Turns a session into a *subject* — attributes plus transitive groups | **Imports no protocol package.** Enforced by a test |
-| `internal/policy` | Cedar: entity projection, evaluation, named decisions | Fails closed if no policy is loaded |
-| `internal/oidcprovider` | The OpenID Connect provider, over `zitadel/oidc` | Adapts Cardinal's storage to the library's interfaces |
-| `internal/sshca` | Signs SSH certificates | Holds no key; is handed one per call |
-| `internal/x509ca` | Holds the X.509 authority's encryption key | A small surface around the one secret that can issue for any name |
-| `internal/acme` | JWS, JWK thumbprints and external account binding | Refuses `none` and the HMAC family everywhere but the binding |
-| `internal/hostclient` | The *machine's* half of host authentication | Shared by the CLI and the agent, so the signing rules exist once |
-| `internal/userdb` | POSIX identity over systemd's varlink interface | Standard library only — no varlink dependency, no cgo |
-| `internal/agent` | The host's assignment, its cache, and the lookup index | Never blocks on Cardinal being reachable |
-| `internal/sudoers` | Renders and installs `/etc/sudoers.d/50-cardinal` | Writes one file, reads none — it cannot remove local root |
-| `internal/shadow` | Compares a cutover against what the machine does today | Asks the system through `getent` and `sudo`; writes nothing |
-| `internal/httpapi` | Routing, middleware, handlers | The only package that knows what a request is |
-| `internal/event` | The hash-chained journal and its payload allowlist | Refuses anything that could carry personal data |
-| `web` | React admin UI, embedded at build time | Talks only to the same public API |
+| `directory` | Entity types and the schema registry | Knows nothing about HTTP |
+| `directory/temporal` | Validity periods | The shape of every grant, not a feature of one |
+| `directory/event` | The hash-chained journal and its payload allowlist | Refuses anything that could carry personal data |
+| `directory/posix` | The uid and gid numbers this deployment hands out | A fact about Unix, not about storage — which is why `config` can read it without depending on the database |
+
+### `internal/store` — every SQL statement in the product
+
+Depends only on the model. Nothing above it writes SQL, so validity and
+revocation are enforced in one place.
+
+### `internal/server` — the thing that answers requests
+
+| Package | Responsibility | The rule it obeys |
+|---|---|---|
+| `server/httpapi` | Routing, middleware, handlers | The only package that knows what a request is |
+| `server/auth` | WebAuthn registration and login ceremonies | The only package that understands a credential |
+| `server/claims` | Turns a session into a *subject* — attributes plus transitive groups | **Imports no protocol package.** Enforced by a test |
+| `server/policy` | Cedar: entity projection, evaluation, named decisions | Fails closed if no policy is loaded |
+| `server/oidcprovider` | The OpenID Connect provider, over `zitadel/oidc` | Adapts Cardinal's storage to the library's interfaces |
+| `server/acme` | JWS, JWK thumbprints and external account binding | Refuses `none` and the HMAC family everywhere but the binding |
+| `server/mail` | Notification email: templates, outbox, delivery | Sends news. Nothing it sends authorises anything (ADR 0009) |
+
+### `internal/host` — what runs on a managed machine
+
+**This group imports nothing from the rest of the tree.** That is not a
+convention being observed; it is what `go list` reports, and it is why
+`cardinal-agent` can be a separate binary with a separate release cadence.
+
+| Package | Responsibility | The rule it obeys |
+|---|---|---|
+| `host/agent` | The host's assignment, its cache, and the lookup index | Never blocks on Cardinal being reachable |
+| `host/machine` | The *machine's* half of host authentication — its keypair, enrollment and request signing | Shared by the CLI and the agent, so the signing rules exist once |
+| `host/userdb` | POSIX identity over systemd's varlink interface | Standard library only — no varlink dependency, no cgo |
+| `host/sudoers` | Renders and installs `/etc/sudoers.d/50-cardinal` | Writes one file, reads none — it cannot remove local root |
+| `host/shadow` | Compares a cutover against what the machine does today | Asks the system through `getent` and `sudo`; writes nothing |
+
+### `internal/ca` — the two certificate authorities
+
+| Package | Responsibility | The rule it obeys |
+|---|---|---|
+| `ca/sshca` | Signs SSH certificates | Holds no key; is handed one per call |
+| `ca/x509ca` | Holds the X.509 authority's encryption key | A small surface around the one secret that can issue for any name |
+
+### The rest
+
+`internal/config` reads and validates the file, and depends on nothing but
+`directory/posix`. `internal/version` reports which build this is. `web` is the
+React admin console, embedded at build time, talking only to the same public
+API.
 
 The seam that matters most is `claims`. It answers *"who is this subject, and
 what are they a member of"* once, and four consumers serialise that answer

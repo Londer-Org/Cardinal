@@ -14,7 +14,7 @@ import (
 	"testing"
 	"time"
 
-	"go.londer.be/cardinal/internal/hostclient"
+	"go.londer.be/cardinal/internal/host/machine"
 	"golang.org/x/crypto/ssh"
 )
 
@@ -33,7 +33,7 @@ type certificateResponse struct {
 }
 
 // requestCertificate signs a POST the way the agent does.
-func requestCertificate(t *testing.T, identity *hostclient.Identity, body []byte) (int, certificateResponse) {
+func requestCertificate(t *testing.T, identity *machine.Identity, body []byte) (int, certificateResponse) {
 	t.Helper()
 
 	const path = "/api/hosts/certificate"

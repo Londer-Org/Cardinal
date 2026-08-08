@@ -7,8 +7,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	"go.londer.be/cardinal/internal/event"
-	"go.londer.be/cardinal/internal/temporal"
+	"go.londer.be/cardinal/internal/directory/event"
+	"go.londer.be/cardinal/internal/directory/temporal"
 )
 
 // Grant records a time-bounded membership.

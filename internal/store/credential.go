@@ -10,7 +10,7 @@ import (
 	"github.com/go-webauthn/webauthn/webauthn"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	"go.londer.be/cardinal/internal/event"
+	"go.londer.be/cardinal/internal/directory/event"
 )
 
 // MinCredentialsForFullEnrollment is why lockout is rare rather than merely

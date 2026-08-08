@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.londer.be/cardinal/internal/directory"
-	"go.londer.be/cardinal/internal/temporal"
+	"go.londer.be/cardinal/internal/directory/temporal"
 )
 
 // TestRedactionErasesPersonalDataAndKeepsChainValid is the resolution of the

@@ -40,7 +40,7 @@ longer attributable to anyone and the residual data is effectively anonymous.
 
 ### What may appear in a payload
 
-Enforced in code, not by convention (`internal/event/payload.go`):
+Enforced in code, not by convention (`internal/directory/event/payload.go`):
 
 | Permitted | Rationale |
 |---|---|

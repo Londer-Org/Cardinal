@@ -9,9 +9,9 @@ import (
 	"testing"
 	"time"
 
-	"go.londer.be/cardinal/internal/agent"
-	"go.londer.be/cardinal/internal/hostclient"
-	"go.londer.be/cardinal/internal/sudoers"
+	"go.londer.be/cardinal/internal/host/agent"
+	"go.londer.be/cardinal/internal/host/machine"
+	"go.londer.be/cardinal/internal/host/sudoers"
 )
 
 // What a host is allowed to know.
@@ -108,7 +108,7 @@ func hostAccessFixture(t *testing.T) (restore func()) {
 }
 
 // enrolledHostInGroup enrols a machine and puts it in the group the policy names.
-func enrolledHostInGroup(t *testing.T, name string) *hostclient.Identity {
+func enrolledHostInGroup(t *testing.T, name string) *machine.Identity {
 	t.Helper()
 
 	tryCardinalCLI(t, "host", "create", name)
@@ -117,7 +117,7 @@ func enrolledHostInGroup(t *testing.T, name string) *hostclient.Identity {
 	return enrolledHost(t, name)
 }
 
-func fetchAssignment(t *testing.T, identity *hostclient.Identity) assignmentBody {
+func fetchAssignment(t *testing.T, identity *machine.Identity) assignmentBody {
 	t.Helper()
 
 	resp := signedGET{signer: identity.Signer, path: "/api/hosts/assignment"}.send(t)

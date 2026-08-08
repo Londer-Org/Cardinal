@@ -7,11 +7,13 @@ import (
 	"strings"
 	"time"
 
+	"go.londer.be/cardinal/internal/directory/posix"
+
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"go.londer.be/cardinal/internal/directory"
-	"go.londer.be/cardinal/internal/event"
+	"go.londer.be/cardinal/internal/directory/event"
 )
 
 var (
@@ -43,16 +45,7 @@ var (
 // adoption refuse uid 1234 — a person on a machine using the distribution's own
 // UID_MIN, which is the ordinary case a migration exists for.
 const (
-	// POSIXAllocationFloor is the lowest number Cardinal will hand out itself.
-	//
-	// Above the distribution's accounts and above systemd's DynamicUser
-	// reservation, so a freshly allocated number never lands on either. Only a
-	// floor: where allocation actually starts is configuration.
-	POSIXAllocationFloor = 65536
-
-	// POSIXSystemCeiling is the top of the distribution's own range. Below it
-	// are root, daemon, and whatever the package manager created.
-	POSIXSystemCeiling = 1000
+	POSIXSystemCeiling = posix.SystemCeiling
 
 	// systemd hands numbers in this range to transient services and reuses
 	// them, so an account holding one is periodically impersonated by whatever
@@ -117,21 +110,6 @@ func (p POSIXIdentity) PrimaryGroup() (name string, gid int) {
 	return p.Name, p.Number
 }
 
-// POSIXRange bounds allocation.
-type POSIXRange struct {
-	Low, High int
-}
-
-// DefaultPOSIXRange is where numbers come from when configuration is silent.
-//
-// Starts well above systemd's DynamicUser reservation (61184–65519) and far
-// above the distribution's own accounts, and is large enough that nobody will
-// reach the end of it. Deliberately not randomised per deployment the way
-// FreeIPA does: that exists to make merging two directories safer, and Cardinal
-// has no merge story to protect yet. Choosing a range per deployment is a
-// setting rather than a surprise.
-var DefaultPOSIXRange = POSIXRange{Low: 100000, High: 999999}
-
 // posixAllocationLock serialises number allocation.
 //
 // An arbitrary constant; only its uniqueness within this database matters. The
@@ -157,12 +135,12 @@ const posixAllocationLock int64 = 7079736978
 // out a uid happens when a person joins, so there is nothing here to contend
 // over.
 func (s *Store) AssignPOSIXIdentity(
-	ctx context.Context, entityID uuid.UUID, r POSIXRange, actorID *uuid.UUID,
+	ctx context.Context, entityID uuid.UUID, r posix.Range, actorID *uuid.UUID,
 ) (*POSIXIdentity, error) {
-	if r.Low < POSIXAllocationFloor {
+	if r.Low < posix.AllocationFloor {
 		return nil, fmt.Errorf(
 			"store: a POSIX range starting at %d would collide with the system's "+
-				"own accounts; the lowest allowed is %d", r.Low, POSIXAllocationFloor)
+				"own accounts; the lowest allowed is %d", r.Low, posix.AllocationFloor)
 	}
 
 	entity, err := s.GetEntity(ctx, entityID)
