@@ -60,11 +60,29 @@ builds:
       - -X go.londer.be/cardinal/internal/version.Commit={{.FullCommit}}
       - -X go.londer.be/cardinal/internal/version.Date={{.Date}}
 
+# One archive per binary, rather than one archive holding whatever was built for
+# that platform.
+#
+# A single globbing archive puts two binaries in the linux tarballs and one in
+# the darwin tarballs, because the agent is linux-only — goreleaser refuses that
+# outright, and it is right to: `cardinal_0.1.0_darwin_arm64.tar.gz` and
+# `cardinal_0.1.0_linux_arm64.tar.gz` would contain different things under
+# names that promise the same thing.
 archives:
-  - id: default
+  - id: cardinal
+    ids: [cardinal]
     formats: [tar.gz]
     name_template: >-
-      {{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}
+      cardinal_{{ .Version }}_{{ .Os }}_{{ .Arch }}
+
+  # Linux only, and mostly a fallback: the agent writes to /etc/sudoers.d and
+  # needs a systemd unit, so the .deb and .rpm below are how it is meant to be
+  # installed. The tarball is for distributions neither of those covers.
+  - id: cardinal-agent
+    ids: [cardinal-agent]
+    formats: [tar.gz]
+    name_template: >-
+      cardinal-agent_{{ .Version }}_{{ .Os }}_{{ .Arch }}
 
 nfpms:
   - id: cardinal-agent
@@ -154,9 +172,19 @@ dockers_v2:
       org.opencontainers.image.licenses: Apache-2.0
 
 release:
-  # No repository to publish to yet. Building the artefacts is the useful half
-  # and works without one; turn this off when there is somewhere to release to.
-  disable: true
+  github:
+    owner: Londer-Org
+    name: Cardinal
+
+  # Pre-1.0 and not production ready, which the README and ROADMAP say and a
+  # release page should not quietly contradict by looking finished.
+  prerelease: auto
+  header: |
+    Cardinal {{ .Tag }} — **pre-1.0, not production ready.** There is no stable
+    API, no upgrade path between versions, and no security audit.
+
+    Container image: `docker pull londerbe/cardinal:{{ trimprefix .Tag "v" }}`
+    Documentation: https://londer-org.github.io/Cardinal/
 
 checksum:
   name_template: checksums.txt

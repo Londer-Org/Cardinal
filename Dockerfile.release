@@ -7,9 +7,15 @@
 # artifact that is not the one being released.
 FROM gcr.io/distroless/static-debian12:nonroot
 
+# One image manifest covers amd64 and arm64, and buildx runs this file once per
+# platform. goreleaser stages the binaries in per-platform directories, so the
+# copy has to name which one — a bare `COPY cardinal` finds nothing, which is
+# how the first release attempt failed.
+ARG TARGETPLATFORM
+
 # Named in the OCI labels goreleaser passes at build time, so `docker inspect`
 # answers what this is without anybody reading a tag.
-COPY cardinal /usr/local/bin/cardinal
+COPY ${TARGETPLATFORM}/cardinal /usr/local/bin/cardinal
 
 USER nonroot:nonroot
 EXPOSE 8080
