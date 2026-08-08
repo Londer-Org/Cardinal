@@ -122,6 +122,19 @@ a special mode: it runs without `-dev`, with `Secure` cookies and the full CSP.
 `mkcert -uninstall` removes the CA again. `.test` is reserved by IANA for
 exactly this, so the hostnames resolve nowhere but your machine.
 
+**If something else already uses port 8443**, move the whole stack:
+
+```sh
+make e2e-up CARDINAL_PORT=8643
+make e2e     CARDINAL_PORT=8643
+```
+
+Everything that dials the stack reads that variable, including the end-to-end
+suite — which matters more than it sounds. Two containers can both claim a
+published port and the last one to start wins, silently, leaving the other
+running and unreachable. `make e2e-up` now fails and names the container holding
+the port rather than reporting success against a stack nothing can reach.
+
 > This is worth knowing because Cardinal got it wrong. The stack ran on
 > `http://*.localhost` with `cookie_domain = "localhost"` for months: every
 > browser silently threw the session cookie away, so nobody could sign in and no

@@ -11,7 +11,7 @@ cd "$(dirname "$0")/../.."
 COMPOSE="docker compose -f examples/compose.yml"
 PSQL="$COMPOSE exec -T postgres psql -U cardinal -d cardinal"
 TOKEN="uishot-session-token-with-plenty-of-entropy-0123456789"
-BASE="${BASE:-https://id.cardinal.test:8443}"
+BASE="${BASE:-https://id.cardinal.test:${CARDINAL_PORT:-8443}}"
 
 PYTHON="${PYTHON:-python3}"
 if ! "$PYTHON" -c "import websocket" 2>/dev/null; then

@@ -24,6 +24,7 @@ ceremony failed, 2 when the browser could not be driven at all.
 
 import argparse
 import json
+import os
 import sys
 import time
 
@@ -39,7 +40,9 @@ def step(message: str) -> None:
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--invite", required=True, help="a single-use enrollment URL")
-    ap.add_argument("--base", default="https://id.cardinal.test:8443")
+    ap.add_argument("--base",
+                    default="https://id.cardinal.test:"
+                            + os.environ.get("CARDINAL_PORT", "8443"))
     ap.add_argument("--login", required=True, help="the account the invite is for")
     ap.add_argument("--port", type=int, default=9820)
     args = ap.parse_args()

@@ -3,8 +3,10 @@ package store
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/arthur-lonfils/cardinal/internal/event"
 	"github.com/google/uuid"
@@ -189,6 +191,117 @@ func (s *Store) EventsForEntity(ctx context.Context, entityID uuid.UUID, limit i
 			return nil, fmt.Errorf("store: scanning event: %w", err)
 		}
 		out = append(out, &ev)
+	}
+	return out, rows.Err()
+}
+
+// EventFilter narrows an audit listing.
+//
+// Every field is optional and they combine with AND. Deliberately no free-text
+// search: the journal holds no free text to search (ADR 0010's payload
+// allowlist refuses it), so a search box would be a box that never matched
+// anything and taught people the log was empty.
+type EventFilter struct {
+	Action string
+
+	// Subject is either side of an event: what it was about, or who caused it.
+	//
+	// One field rather than two because the question is "what touched this
+	// account", and answering it needs both — an administrator disabling
+	// somebody appears as the actor on that person's event, and as the subject
+	// of their own session events. Two filters would make the common question
+	// take two queries and a mental union.
+	Subject *uuid.UUID
+
+	Since *time.Time
+	Until *time.Time
+
+	// Before pages backwards by sequence rather than by offset.
+	//
+	// The journal is append-only and grows forever, so OFFSET means reading and
+	// discarding every row before the page — and a total count means a full
+	// scan on every request. A cursor costs neither and cannot skip or repeat a
+	// row when something is appended mid-read, which OFFSET does by
+	// construction on a table that only ever gains rows at one end.
+	Before int64
+}
+
+// EventRecord is a journal entry with its identifiers resolved.
+//
+// The journal stores only opaque IDs, which is the point: it is the one place
+// erasure cannot reach (ADR 0010), so it must hold nothing that would need
+// erasing. Names come from the entities table at read time — and when an
+// account has been redacted, what comes back is its tombstone, which is the
+// design working rather than a gap.
+type EventRecord struct {
+	event.Event
+
+	SubjectName string
+	SubjectType string
+
+	ActorName string
+	ActorType string
+
+	// Redacted when the named entity's personal data has been erased. The name
+	// is then a tombstone, and saying so beats rendering "redacted-1a2b3c4d" as
+	// though somebody chose it.
+	SubjectRedacted bool
+	ActorRedacted   bool
+}
+
+// ListEvents returns journal entries, newest first.
+func (s *Store) ListEvents(ctx context.Context, filter EventFilter, limit int) ([]EventRecord, error) {
+	if limit <= 0 || limit > 200 {
+		limit = 100
+	}
+
+	rows, err := s.pool.Query(ctx, `
+		SELECT e.seq, e.id, e.occurred_at, e.action, e.entity_id, e.actor_id,
+		       e.payload,
+		       subject.name, subject.type, subject.redacted_at IS NOT NULL,
+		       actor.name,   actor.type,   actor.redacted_at   IS NOT NULL
+		  FROM events e
+		  LEFT JOIN entities subject ON subject.id = e.entity_id
+		  LEFT JOIN entities actor   ON actor.id   = e.actor_id
+		 WHERE ($1 = '' OR e.action = $1)
+		   AND ($2::uuid IS NULL OR e.entity_id = $2 OR e.actor_id = $2)
+		   AND ($3::timestamptz IS NULL OR e.occurred_at >= $3)
+		   AND ($4::timestamptz IS NULL OR e.occurred_at <  $4)
+		   AND ($5 = 0 OR e.seq < $5)
+		 ORDER BY e.seq DESC
+		 LIMIT $6`,
+		filter.Action, filter.Subject, filter.Since, filter.Until,
+		filter.Before, limit)
+	if err != nil {
+		return nil, fmt.Errorf("store: listing events: %w", err)
+	}
+	defer rows.Close()
+
+	out := make([]EventRecord, 0, limit)
+	for rows.Next() {
+		var record EventRecord
+		var payload []byte
+		var subjectName, subjectType, actorName, actorType *string
+
+		if err := rows.Scan(&record.Seq, &record.ID, &record.OccurredAt,
+			&record.Action, &record.EntityID, &record.ActorID, &payload,
+			&subjectName, &subjectType, &record.SubjectRedacted,
+			&actorName, &actorType, &record.ActorRedacted); err != nil {
+			return nil, fmt.Errorf("store: scanning event: %w", err)
+		}
+
+		if len(payload) > 0 {
+			if err := json.Unmarshal(payload, &record.Payload); err != nil {
+				return nil, fmt.Errorf("store: decoding event payload: %w", err)
+			}
+		}
+		if subjectName != nil {
+			record.SubjectName, record.SubjectType = *subjectName, *subjectType
+		}
+		if actorName != nil {
+			record.ActorName, record.ActorType = *actorName, *actorType
+		}
+		out = append(out, record)
 	}
 	return out, rows.Err()
 }

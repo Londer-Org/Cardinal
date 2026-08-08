@@ -360,6 +360,12 @@ func (s *Server) Handler() http.Handler {
 	admin := func(h http.HandlerFunc) http.Handler {
 		return s.requireAuth(s.requirePermission(policy.ActionAdministerData, h))
 	}
+	// The audit journal. Behind the broad tier: it is the record of everything
+	// anybody did, including who read it, and is not something to hold by
+	// virtue of managing accounts.
+	mux.Handle("GET /api/audit/events", admin(s.handleListAuditEvents))
+	mux.Handle("POST /api/audit/verify", admin(s.handleVerifyAuditChain))
+
 	mux.Handle("GET /api/policy/versions", admin(s.handleListPolicyVersions))
 	mux.Handle("GET /api/policy/versions/{version}", admin(s.handleGetPolicyVersion))
 	mux.Handle("POST /api/policy/versions/{version}/activate",

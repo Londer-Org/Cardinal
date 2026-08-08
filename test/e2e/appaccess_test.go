@@ -279,7 +279,7 @@ func authorizationID(t *testing.T, c *http.Client, clientID, scope string) strin
 		"client_id":             {clientID},
 		"response_type":         {"code"},
 		"scope":                 {scope},
-		"redirect_uri":          {"https://client.cardinal.test:8443/callback"},
+		"redirect_uri":          {origin(hostRP) + "/callback"},
 		"state":                 {"access-test"},
 		"nonce":                 {"access-test-nonce"},
 		"code_challenge":        {s256(pkceVerifier)},

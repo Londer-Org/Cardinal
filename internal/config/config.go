@@ -305,10 +305,49 @@ func Load(path string) (*Config, error) {
 		c.Database.DSN = dsn
 	}
 
+	// Where this deployment is reached, from the environment.
+	//
+	// These two are the only settings that embed a scheme, host and port, and
+	// they are the ones a container image cannot know: the same image runs
+	// behind a load balancer on one host and on a laptop on another. Baking
+	// them into a config file means a per-deployment file, or an example that
+	// only works on the port its author happened to pick.
+	//
+	// They also have to agree. public_url is the OIDC issuer, which every token
+	// carries and every client compares literally; origins is what WebAuthn
+	// checks an assertion against. Overriding one and not the other produces a
+	// deployment where sign-in works and tokens are rejected, or the reverse —
+	// so Validate() checks the pair whichever way they arrived.
+	if publicURL := os.Getenv("CARDINAL_PUBLIC_URL"); publicURL != "" {
+		c.Server.PublicURL = publicURL
+	}
+	if origins := os.Getenv("CARDINAL_WEBAUTHN_ORIGINS"); origins != "" {
+		c.WebAuthn.Origins = splitAndTrim(origins)
+	}
+	if acme := os.Getenv("CARDINAL_X509_PUBLIC_URL"); acme != "" {
+		c.X509.PublicURL = acme
+	}
+
 	if err := c.Validate(); err != nil {
 		return nil, err
 	}
 	return &c, nil
+}
+
+// splitAndTrim reads a comma-separated environment value.
+//
+// Empty entries are dropped rather than kept as empty origins: a trailing comma
+// is a typo, and an empty string in the origins list would be compared against
+// a real origin and never match, which reads as WebAuthn being broken.
+func splitAndTrim(value string) []string {
+	parts := strings.Split(value, ",")
+	out := make([]string, 0, len(parts))
+	for _, part := range parts {
+		if trimmed := strings.TrimSpace(part); trimmed != "" {
+			out = append(out, trimmed)
+		}
+	}
+	return out
 }
 
 // Validate reports every problem it can find, not just the first.

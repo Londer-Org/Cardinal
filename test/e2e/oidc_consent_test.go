@@ -275,7 +275,7 @@ func handoff(t *testing.T, c *http.Client, clientID, scope string) string {
 		"client_id":             {clientID},
 		"response_type":         {"code"},
 		"scope":                 {scope},
-		"redirect_uri":          {"https://client.cardinal.test:8443/callback"},
+		"redirect_uri":          {origin(hostRP) + "/callback"},
 		"state":                 {"consent-test"},
 		"nonce":                 {"consent-test-nonce"},
 		"code_challenge":        {s256(pkceVerifier)},
@@ -303,7 +303,7 @@ func registerConsentClient(t *testing.T) string {
 	if !strings.Contains(cardinalCLI(t, "app", "list"), name) {
 		out, err := exec.Command("docker", "compose", "-f", "../../examples/compose.yml",
 			"exec", "-T", "cardinal", "cardinal", "app", "register", name,
-			"-redirect", "https://client.cardinal.test:8443/callback",
+			"-redirect", origin(hostRP)+"/callback",
 			"-dev-mode",
 			"-consent",
 			"-scopes", "openid,profile,email",
@@ -312,6 +312,8 @@ func registerConsentClient(t *testing.T) string {
 			t.Fatalf("registering consent client: %v\n%s", err, out)
 		}
 	}
+
+	repointClient(t, name)
 
 	out, err := exec.Command("docker", "compose", "-f", "../../examples/compose.yml",
 		"exec", "-T", "postgres", "psql", "-U", "cardinal", "-d", "cardinal", "-tAc",

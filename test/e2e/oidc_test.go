@@ -59,7 +59,7 @@ func TestAuthorizationRequestIsWellFormed(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if target.Host != hostCardinal+":8443" || target.Path != "/oidc/authorize" {
+	if target.Host != hostCardinal+":"+port() || target.Path != "/oidc/authorize" {
 		t.Fatalf("redirected to %s, want the issuer's authorize endpoint", target)
 	}
 

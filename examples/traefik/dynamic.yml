@@ -10,7 +10,7 @@ http:
     https-redirect:
       redirectScheme:
         scheme: https
-        port: "8443"
+        port: "{{ env "CARDINAL_PORT" }}"
         permanent: true
 
     cardinal-auth:

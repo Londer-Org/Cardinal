@@ -63,6 +63,15 @@ services:
     # could not have worked in a browser anyway: the parent-domain cookie SSO
     # depends on was being discarded, silently, on every response.
     command: ["serve", "-config", "/etc/cardinal/cardinal.toml"]
+    environment:
+      # The published port ends up inside two settings the config file cannot
+      # know: the OIDC issuer, which every token carries and every client
+      # compares literally, and the WebAuthn origin, which an assertion is
+      # checked against. Both come from the environment so overriding
+      # CARDINAL_PORT moves the whole stack rather than half of it.
+      CARDINAL_PUBLIC_URL: "https://id.cardinal.test:${CARDINAL_PORT:-8443}"
+      CARDINAL_WEBAUTHN_ORIGINS: "https://id.cardinal.test:${CARDINAL_PORT:-8443}"
+      CARDINAL_X509_PUBLIC_URL: "https://id.cardinal.test:${CARDINAL_PORT:-8443}"
     healthcheck:
       test: ["CMD", "/usr/local/bin/cardinal", "audit", "verify",
              "-dsn", "postgres://cardinal:cardinal@postgres:5432/cardinal?sslmode=disable"]
@@ -98,18 +107,31 @@ services:
       # value in the token has to match what the client discovered, and papering
       # over a difference with a separate internal URL is how "issuer mismatch"
       # reaches production.
-      - --entrypoints.web.address=:8100
+      - --entrypoints.web.address=:${CARDINAL_HTTP_PORT:-8100}
       # TLS, for ACME. Its own port so nothing already using 8100 changes.
-      - --entrypoints.websecure.address=:8443
+      - --entrypoints.websecure.address=:${CARDINAL_PORT:-8443}
       - --api.dashboard=false
       - --log.level=INFO
       # Access logs make it visible which requests were admitted and which the
       # middleware turned away — the first thing anyone debugging forwardAuth
       # wants to see.
       - --accesslog=true
+    environment:
+      # Read by the redirect in dynamic.yml, which has to name the port a
+      # browser can reach rather than the one inside the container — those
+      # differ whenever CARDINAL_PORT is overridden.
+      CARDINAL_PORT: "${CARDINAL_PORT:-8443}"
     ports:
-      - "8100:8100"
-      - "8443:8443"
+      # Same port inside and out, deliberately.
+      #
+      # An OIDC issuer must be one identifier everywhere: the value in a token
+      # has to match what the client discovered, and the relying party in this
+      # stack discovers it from *inside* the network. Publishing 8643:8443
+      # would give the browser one URL and that container another, which is
+      # exactly the "issuer mismatch" this file warns about below — so
+      # overriding the port moves the entrypoint too.
+      - "${CARDINAL_HTTP_PORT:-8100}:${CARDINAL_HTTP_PORT:-8100}"
+      - "${CARDINAL_PORT:-8443}:${CARDINAL_PORT:-8443}"
     volumes:
       - ./traefik/dynamic.yml:/etc/traefik/dynamic.yml:ro
       - ./traefik/tls:/etc/traefik/tls:ro
@@ -126,8 +148,8 @@ services:
       cardinal:
         condition: service_started
     environment:
-      OIDC_ISSUER: "https://id.cardinal.test:8443"
-      OIDC_REDIRECT_URL: "https://client.cardinal.test:8443/callback"
+      OIDC_ISSUER: "https://id.cardinal.test:${CARDINAL_PORT:-8443}"
+      OIDC_REDIRECT_URL: "https://client.cardinal.test:${CARDINAL_PORT:-8443}/callback"
       LISTEN: "0.0.0.0:8000"
       # Set by `make e2e-seed`, which registers the client and writes the id
       # into examples/.oidc-client-id.

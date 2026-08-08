@@ -250,7 +250,7 @@ func extraSession(t *testing.T, login, token string) *http.Client {
 	              FROM entities e WHERE e.name = '`+login+`'`)
 
 	c := client(t)
-	c.Jar.SetCookies(&url.URL{Scheme: "https", Host: hostCardinal + ":8443"},
+	c.Jar.SetCookies(&url.URL{Scheme: "https", Host: hostCardinal + ":" + port()},
 		[]*http.Cookie{{Name: "cardinal_session", Value: token, Path: "/"}})
 	return c
 }

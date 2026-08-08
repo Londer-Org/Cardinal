@@ -306,7 +306,9 @@ def split_fill(pair: str) -> tuple[str, str]:
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--base", default="https://id.cardinal.test:8443")
+    ap.add_argument("--base",
+                    default="https://id.cardinal.test:"
+                            + os.environ.get("CARDINAL_PORT", "8443"))
     ap.add_argument("--path", default="/")
     ap.add_argument("--out", help="write a PNG here")
     ap.add_argument("--theme", choices=["light", "dark"], default="light")

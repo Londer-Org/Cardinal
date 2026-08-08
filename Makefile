@@ -1,6 +1,21 @@
 SHELL := /bin/bash
 PSQL  := docker exec -i cardinal-postgres psql -U cardinal -d cardinal -v ON_ERROR_STOP=1
 PYTHON ?= python3
+
+# Where the example stack listens.
+#
+# Overridable because 8443 is a popular port and a laptop running anything else
+# on it silently loses the race — whichever binds last wins, and the loser keeps
+# running unreachable. Everything that dials the stack reads this, including the
+# end-to-end suite, so overriding it moves the whole thing rather than half.
+#
+#     make e2e-up CARDINAL_PORT=8643
+CARDINAL_PORT      ?= 8443
+CARDINAL_HTTP_PORT ?= 8100
+export CARDINAL_PORT
+export CARDINAL_HTTP_PORT
+
+CARDINAL_URL = https://id.cardinal.test:$(CARDINAL_PORT)
 DSN   ?= postgres://cardinal:cardinal@localhost:5433/cardinal?sslmode=disable
 
 .PHONY: help
@@ -223,14 +238,43 @@ e2e-up: e2e-check ## Build and start the end-to-end stack (Traefik + a protected
 	@# internal CA, and the part `cardinal x509 ca init` warns takes the time.
 	@cp -f "$$(mkcert -CAROOT)/rootCA.pem" examples/traefik/tls/local-ca.pem
 	docker compose -f examples/compose.yml up -d --build
+	@# Loudly, and only when it is Cardinal answering.
+	@#
+	@# This loop used to fall through after ninety attempts and carry on to
+	@# seeding, so a stack that never came up reported success and the failure
+	@# surfaced much later as something else. Worse on a machine running other
+	@# things: whatever binds :8443 last wins it, so the readiness probe can be
+	@# answered by an unrelated service — and the end-to-end suite dials the
+	@# same port, which would make it test that service instead.
+	@#
+	@# Checking the health endpoint specifically is what distinguishes "Cardinal
+	@# is up" from "something is listening".
 	@printf 'waiting for the stack'
-	@for i in $$(seq 1 90); do \
-		if curl -sf --resolve id.cardinal.test:8443:127.0.0.1 \
-			https://id.cardinal.test:8443/api/health >/dev/null 2>&1; then \
-			echo ' ready'; break; fi; printf '.'; sleep 1; done
+	@ready=0; \
+	for i in $$(seq 1 90); do \
+		if curl -sf --resolve id.cardinal.test:$(CARDINAL_PORT):127.0.0.1 \
+			$(CARDINAL_URL)/api/health >/dev/null 2>&1; then \
+			echo ' ready'; ready=1; break; fi; printf '.'; sleep 1; done; \
+	if [ "$$ready" = 0 ]; then \
+		echo; \
+		echo 'the stack never answered on $(CARDINAL_URL)'; \
+		echo; \
+		holder=$$(docker ps --format '{{.Names}}\t{{.Ports}}' | grep ':$(CARDINAL_PORT)->' \
+			| grep -v cardinal-e2e | cut -f1); \
+		if [ -n "$$holder" ]; then \
+			echo "  $$holder is bound to port $(CARDINAL_PORT)."; \
+			echo '  Whatever binds it last wins, so Cardinal may be running and'; \
+			echo '  unreachable — and `make e2e` dials the same port, which would'; \
+			echo '  point the whole suite at that container instead.'; \
+		else \
+			echo '  docker compose -f examples/compose.yml logs cardinal traefik'; \
+			echo '  and check `make e2e-check` for the one-time setup.'; \
+		fi; \
+		exit 1; \
+	fi
 	@$(MAKE) --no-print-directory e2e-seed
-	@echo '==> https://app.cardinal.test:8443 (forwardAuth)  ·  https://client.cardinal.test:8443 (OIDC)'
-	@echo '    https://id.cardinal.test:8443 (Cardinal)'
+	@echo '==> https://app.cardinal.test:$(CARDINAL_PORT) (forwardAuth)  ·  https://client.cardinal.test:$(CARDINAL_PORT) (OIDC)'
+	@echo '    $(CARDINAL_URL) (Cardinal)'
 
 COMPOSE_E2E := docker compose -f examples/compose.yml
 
@@ -278,13 +322,33 @@ e2e-seed-oidc: ## Register the relying party and start it with its client id
 	@# The client id is generated, so the relying party cannot be configured
 	@# until Cardinal has issued one. Registering first and starting the client
 	@# after is the only ordering that works.
-	@if ! $(COMPOSE_E2E) exec -T cardinal cardinal app list 2>/dev/null | grep -q e2e-client; then \
+	@# Re-registered when the redirect URI no longer matches, not merely when
+	@# the client is absent.
+	@#
+	@# The registration is persistent state that embeds the port, so overriding
+	@# CARDINAL_PORT against an existing database left a client whose registered
+	@# URI pointed at the old one. Every authorization then failed with a
+	@# redirect-URI mismatch — correctly, and looking nothing like a stale
+	@# fixture.
+	@want='https://client.cardinal.test:$(CARDINAL_PORT)/callback'; \
+	have=$$($(COMPOSE_E2E) exec -T postgres psql -U cardinal -d cardinal -tAc \
+		"SELECT coalesce(array_to_string(c.redirect_uris, ','), '') \
+		   FROM oidc_clients c JOIN entities e ON e.id = c.entity_id \
+		  WHERE e.name = 'e2e-client'" 2>/dev/null | tr -d ' \r\n'); \
+	if [ -z "$$have" ]; then \
 		$(COMPOSE_E2E) exec -T cardinal cardinal app register e2e-client \
 			-display 'End-to-end relying party' \
-			-redirect 'https://client.cardinal.test:8443/callback' \
+			-redirect "$$want" \
 			-dev-mode \
 			-scopes 'openid,profile,email,groups,offline_access' \
 			-config /etc/cardinal/cardinal.toml >/dev/null; \
+	elif [ "$$have" != "$$want" ]; then \
+		echo "  redirect URI was $$have — pointing it at $(CARDINAL_PORT)"; \
+		$(COMPOSE_E2E) exec -T postgres psql -U cardinal -d cardinal -q -c \
+			"UPDATE oidc_clients SET redirect_uris = ARRAY['$$want'] \
+			  WHERE entity_id = (SELECT id FROM entities \
+			                      WHERE type = 'application' AND name = 'e2e-client')" \
+			>/dev/null; \
 	fi
 	@# Named explicitly. Tests register clients of their own, so `LIMIT 1` would
 	@# hand the relying party whichever client the planner happened to return —

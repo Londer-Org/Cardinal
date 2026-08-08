@@ -27,14 +27,28 @@ import (
 )
 
 const (
-	// Everything reaches the stack through Traefik on this port. Nothing else
-	// is published, which is what makes trusting the identity headers sound.
-	gateway = "127.0.0.1:8443"
-
 	hostCardinal    = "id.cardinal.test"
 	hostProtected   = "app.cardinal.test"
 	hostUnprotected = "open.cardinal.test"
 )
+
+// port is where the example stack is published.
+//
+// Read from the environment with the same default the Makefile uses, so a
+// machine that already has something on 8443 can move the whole stack with
+// CARDINAL_PORT and have the suite follow. Hardcoding it meant the suite could
+// silently dial whatever else held the port — which is not hypothetical, and is
+// the sort of failure that looks like Cardinal being broken.
+func port() string {
+	if p := os.Getenv("CARDINAL_PORT"); p != "" {
+		return p
+	}
+	return "8443"
+}
+
+// gateway is the address everything dials. Nothing else is published, which is
+// what makes trusting the identity headers sound.
+func gateway() string { return "127.0.0.1:" + port() }
 
 // origin is where a hostname actually lives.
 //
@@ -42,7 +56,7 @@ const (
 // still work in a browser: WebAuthn needs a secure context, forwardAuth SSO
 // needs a parent-domain cookie, and no http origin gives both. Testing against
 // http would be testing an arrangement that cannot exist.
-func origin(host string) string { return "https://" + host + ":8443" }
+func origin(host string) string { return "https://" + host + ":" + port() }
 
 // sessionCookie is established once and reused.
 //
@@ -61,10 +75,10 @@ func TestMain(m *testing.M) {
 	// Fail with an instruction rather than a connection error. Someone running
 	// `go test ./...` for the first time should be told what to do, not handed
 	// a dial timeout.
-	conn, err := net.DialTimeout("tcp", gateway, 2*time.Second)
+	conn, err := net.DialTimeout("tcp", gateway(), 2*time.Second)
 	if err != nil {
 		fmt.Fprintf(os.Stderr,
-			"end-to-end stack is not running on %s.\n  Start it with: make e2e-up\n", gateway)
+			"end-to-end stack is not running on %s.\n  Start it with: make e2e-up\n", gateway())
 		os.Exit(1)
 	}
 	_ = conn.Close()
@@ -108,7 +122,7 @@ func client(t *testing.T) *http.Client {
 		Transport: &http.Transport{
 			DialContext: func(ctx context.Context, network, _ string) (net.Conn, error) {
 				var dialer net.Dialer
-				return dialer.DialContext(ctx, network, gateway)
+				return dialer.DialContext(ctx, network, gateway())
 			},
 		},
 		// Redirects are the thing under test in places, so they are never
@@ -169,6 +183,26 @@ func tryCardinalCLI(t *testing.T, args ...string) {
 		"exec", "-T", "cardinal", "cardinal",
 	}, args...)
 	_, _ = exec.Command("docker", full...).CombinedOutput()
+}
+
+// repointClient makes a registered client's redirect URI match the current port.
+//
+// A registration embeds the port and the stack outlives a run, so a client left
+// over from a run on a different CARDINAL_PORT points at the old one — and
+// every authorization then fails with a redirect-URI mismatch, correctly, and
+// looking nothing like a stale fixture. The registering helpers all tolerate
+// "already exists" by design, which is what lets the stale row survive.
+//
+// Direct SQL because this is fixture maintenance, not a product operation:
+// there is no "change a client's redirect URI" command, and adding one to make
+// a test tidy would be the tail wagging the dog.
+func repointClient(t *testing.T, name string) {
+	t.Helper()
+
+	seedSQL(t, `UPDATE oidc_clients
+	               SET redirect_uris = ARRAY['`+origin(hostRP)+`/callback']
+	             WHERE entity_id = (SELECT id FROM entities
+	                                 WHERE type = 'application' AND name = '`+name+`')`)
 }
 
 // TestUnauthenticatedBrowserIsRedirected.

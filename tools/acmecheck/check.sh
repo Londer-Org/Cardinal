@@ -15,7 +15,7 @@ cd "$(dirname "$0")/../.."
 COMPOSE="docker compose -f examples/compose.yml"
 CARDINAL="$COMPOSE exec -T cardinal cardinal"
 CONF="-config /etc/cardinal/cardinal.toml"
-DIRECTORY="${DIRECTORY:-https://id.cardinal.test:8443/acme/directory}"
+DIRECTORY="${DIRECTORY:-https://id.cardinal.test:${CARDINAL_PORT:-8443}/acme/directory}"
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
