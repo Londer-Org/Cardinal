@@ -51,6 +51,7 @@ import {
   decisionsSchema,
   meSchema,
   cliAuthorizationSchema,
+  configReportSchema,
   pendingAuthorizationSchema,
   approvedRecoverySchema,
   pendingInvitationsSchema,
@@ -74,6 +75,13 @@ import {
  * something it should not have to reach for is visible in review.
  */
 export const api = {
+  /**
+   * What this deployment is configured to do.
+   *
+   * Read-only, and no secret is ever in the response — only whether one is set.
+   */
+  config: () => request('/api/config', configReportSchema),
+
   auth: {
     me: () => request('/api/auth/me', meSchema),
 
@@ -566,6 +574,7 @@ export { ApiError, onStepUpNeeded } from './client'
 export * from './requests'
 export type {
   ApprovedRecovery,
+  Setting,
   Application,
   ApplicationDetail,
   Consent,
@@ -607,6 +616,7 @@ export type {
 
 /** Query keys, centralised so invalidation cannot drift from fetching. */
 export const queryKeys = {
+  config: () => ['config'] as const,
   me: ['me'] as const,
   applications: ['applications'] as const,
   application: (clientID: string) => ['applications', clientID] as const,

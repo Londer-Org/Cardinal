@@ -550,3 +550,24 @@ export const cliAuthorizationSchema = z.object({
   expiresIn: z.number(),
 })
 export type CLIAuthorization = z.infer<typeof cliAuthorizationSchema>
+
+/**
+ * One configured value as the running server sees it.
+ *
+ * `ignored` is the reason this page exists: a setting parsed, validated and read
+ * by nothing reads as supported, and somebody tunes it believing the tuning
+ * happened.
+ */
+export const settingSchema = z.object({
+  section: z.string(),
+  name: z.string(),
+  value: z.string(),
+  source: z.enum(['file', 'environment', 'default']),
+  secret: z.boolean(),
+  ignored: z.string().optional(),
+})
+export type Setting = z.infer<typeof settingSchema>
+
+export const configReportSchema = z.object({
+  settings: z.array(settingSchema),
+})

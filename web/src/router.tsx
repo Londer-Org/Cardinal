@@ -32,6 +32,15 @@ const cliLoginRoute = createRoute({
   component: lazyRouteComponent(() => import('@/views/cli-login'), 'CLILoginView'),
 })
 
+const configurationRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/admin/configuration',
+  component: lazyRouteComponent(
+    () => import('@/views/configuration'),
+    'ConfigurationView',
+  ),
+})
+
 const accountRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/account',
@@ -131,6 +140,7 @@ const recoveryRoute = createRoute({
 const routeTree = rootRoute.addChildren([
   homeRoute,
   cliLoginRoute,
+  configurationRoute,
   accountRoute,
   passkeysRoute,
   tokensRoute,

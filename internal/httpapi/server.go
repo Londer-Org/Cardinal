@@ -300,6 +300,14 @@ func (s *Server) Handler() http.Handler {
 		// Approving a terminal is behind requireDeviceBound for the same reason
 		// managing credentials is: it hands out something a passkey proved, so
 		// an access token must not be able to bootstrap one.
+		// Behind the same tier as the rest of the directory's administration.
+		// It shows no secret, and it still says where this deployment is
+		// reached, which database it holds and how long a session lives —
+		// enough of a map that it is not for everybody.
+		mux.Handle("GET /api/config",
+			s.requireAuth(s.requirePermission(policy.ActionAdministerData,
+				http.HandlerFunc(s.handleConfigReport))))
+
 		mux.Handle("POST /api/cli/authorize",
 			s.requireAuth(s.requireDeviceBound(http.HandlerFunc(s.handleCLIAuthorize))))
 

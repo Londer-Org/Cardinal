@@ -6,6 +6,7 @@ import {
   LayersIcon,
   LifeBuoyIcon,
   ScaleIcon,
+  SlidersHorizontalIcon,
   ScrollTextIcon,
   ShieldCheckIcon,
   ServerIcon,
@@ -88,6 +89,10 @@ export const NAV: NavSection[] = [
       // Here rather than under Directory: what machines trust is a property of
       // the deployment, not of any entity in it.
       { label: 'Authorities', to: '/authorities', icon: BadgeCheckIcon },
+      // Alongside them for the same reason: what this server is configured to
+      // do is a property of the deployment. Read-only, and its most useful
+      // column is the one saying which settings nothing reads.
+      { label: 'Configuration', to: '/admin/configuration', icon: SlidersHorizontalIcon },
     ],
   },
   {

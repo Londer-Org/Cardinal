@@ -33,6 +33,10 @@ import (
 
 // Config is the parsed contents of cardinal.toml.
 type Config struct {
+	// defined reports whether a key was present in the file, for Report. Not a
+	// setting itself, and unexported so it cannot be serialised into one.
+	defined func(section, name string) bool
+
 	Server   Server   `toml:"server"`
 	Database Database `toml:"database"`
 	WebAuthn WebAuthn `toml:"webauthn"`
@@ -301,9 +305,15 @@ func Load(path string) (*Config, error) {
 	c.Sessions.Absolute = Duration(DefaultAbsoluteSession)
 	c.Database.ConnMaxLifetime = time.Hour
 
-	if _, err := toml.DecodeFile(path, &c); err != nil {
+	// The metadata, not just the values. It records which keys the file
+	// actually contained, which is the only way to tell a value somebody chose
+	// from a default that happens to equal it — and that distinction is the
+	// point of the configuration report.
+	meta, err := toml.DecodeFile(path, &c)
+	if err != nil {
 		return nil, fmt.Errorf("config: reading %s: %w", path, err)
 	}
+	c.defined = func(section, name string) bool { return meta.IsDefined(section, name) }
 
 	// The DSN may come from the environment so that a secret need not be
 	// written to a file that gets committed, copied, or backed up.
