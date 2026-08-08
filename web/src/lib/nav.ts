@@ -5,6 +5,7 @@ import {
   KeyRoundIcon,
   LayersIcon,
   LifeBuoyIcon,
+  MailIcon,
   ScaleIcon,
   SlidersHorizontalIcon,
   ScrollTextIcon,
@@ -93,6 +94,10 @@ export const NAV: NavSection[] = [
       // do is a property of the deployment. Read-only, and its most useful
       // column is the one saying which settings nothing reads.
       { label: 'Configuration', to: '/admin/configuration', icon: SlidersHorizontalIcon },
+      // Beside it because it is the other half of the same question: what this
+      // deployment is set up to do. Editable, unlike configuration, because
+      // none of it is a trust root.
+      { label: 'Notifications', to: '/admin/notifications', icon: MailIcon },
     ],
   },
   {

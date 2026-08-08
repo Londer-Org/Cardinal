@@ -52,6 +52,9 @@ import {
   meSchema,
   cliAuthorizationSchema,
   configReportSchema,
+  mailSettingsSchema,
+  mailTemplatesSchema,
+  mailTestResultSchema,
   redeemedRecoverySchema,
   pendingAuthorizationSchema,
   approvedRecoverySchema,
@@ -82,6 +85,40 @@ export const api = {
    * Read-only, and no secret is ever in the response — only whether one is set.
    */
   config: () => request('/api/config', configReportSchema),
+
+  /**
+   * Notification email.
+   *
+   * The settings live in the database rather than the configuration file, so a
+   * deployment running the published image can change them without rebuilding
+   * a container. Nothing sent authorises anything (ADR 0009).
+   */
+  mail: {
+    settings: () => request('/api/mail/settings', mailSettingsSchema),
+
+    save: (input: unknown) =>
+      request('/api/mail/settings', z.undefined(), { method: 'PUT', body: input }),
+
+    /** Sends one and returns what the relay said, rather than only whether. */
+    test: (to: string) =>
+      request('/api/mail/test', mailTestResultSchema, {
+        method: 'POST',
+        body: { to },
+      }),
+
+    templates: () => request('/api/mail/templates', mailTemplatesSchema),
+
+    saveTemplate: (kind: string, subject: string, body: string) =>
+      request(`/api/mail/templates/${encodeURIComponent(kind)}`, z.undefined(), {
+        method: 'PUT',
+        body: { subject, body },
+      }),
+
+    resetTemplate: (kind: string) =>
+      request(`/api/mail/templates/${encodeURIComponent(kind)}`, z.undefined(), {
+        method: 'DELETE',
+      }),
+  },
 
   auth: {
     me: () => request('/api/auth/me', meSchema),
@@ -589,6 +626,8 @@ export * from './requests'
 export type {
   ApprovedRecovery,
   Setting,
+  MailSettings,
+  MailTemplate,
   Application,
   ApplicationDetail,
   Consent,
@@ -630,6 +669,8 @@ export type {
 
 /** Query keys, centralised so invalidation cannot drift from fetching. */
 export const queryKeys = {
+  mail: () => ['mail'] as const,
+  mailTemplates: () => ['mail', 'templates'] as const,
   config: () => ['config'] as const,
   me: ['me'] as const,
   applications: ['applications'] as const,

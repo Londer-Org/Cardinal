@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"go.londer.be/cardinal/internal/directory"
+	"go.londer.be/cardinal/internal/mail"
 	"go.londer.be/cardinal/internal/store"
 )
 
@@ -171,6 +172,12 @@ func (s *Server) handleApproveRecovery(w http.ResponseWriter, r *http.Request) {
 
 		s.log.WarnContext(ctx, "recovery approved and link issued",
 			"subject", subject.Name, "approvers", approved.Approvers)
+
+		// The link is deliberately not in the message. It is shown to the
+		// administrator who approved, who hands it over out of band — mailing
+		// it would make anyone reading the mailbox able to complete a recovery
+		// two people were careful about.
+		s.notify(ctx, subject.ID, mail.KindRecoveryApproved, "")
 	}
 
 	writeJSON(w, http.StatusOK, out)

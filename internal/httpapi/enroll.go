@@ -10,6 +10,7 @@ import (
 
 	"github.com/go-webauthn/webauthn/protocol"
 	"github.com/google/uuid"
+	"go.londer.be/cardinal/internal/mail"
 	"go.londer.be/cardinal/internal/store"
 )
 
@@ -326,6 +327,13 @@ func (s *Server) handleIssueInvitation(w http.ResponseWriter, r *http.Request) {
 
 	s.log.InfoContext(ctx, "invitation issued",
 		"subject", entity.ID, "login", entity.Name, "actor", actorID)
+
+	// This message does carry the link, unlike the recovery one. An invitation
+	// is how somebody who has nothing gets their first credential, and there is
+	// no out-of-band channel to hand it over on — the administrator issuing it
+	// may never speak to them. It is single-use and short-lived for that reason.
+	invitationURL := s.cfg.Server.PublicURL + "/enroll?token=" + issued.Token
+	s.notify(ctx, entity.ID, mail.KindInvitationIssued, invitationURL)
 
 	writeJSON(w, http.StatusCreated, issuedInvitationResponse{
 		Login:     entity.Name,

@@ -41,6 +41,15 @@ const configurationRoute = createRoute({
   ),
 })
 
+const notificationsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/admin/notifications',
+  component: lazyRouteComponent(
+    () => import('@/views/notifications'),
+    'NotificationsView',
+  ),
+})
+
 const accountRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/account',
@@ -141,6 +150,7 @@ const routeTree = rootRoute.addChildren([
   homeRoute,
   cliLoginRoute,
   configurationRoute,
+  notificationsRoute,
   accountRoute,
   passkeysRoute,
   tokensRoute,

@@ -324,6 +324,29 @@ func (s *Server) Handler() http.Handler {
 		// It shows no secret, and it still says where this deployment is
 		// reached, which database it holds and how long a session lives —
 		// enough of a map that it is not for everybody.
+		// Notification email. Behind the same tier as the rest of the
+		// deployment's administration: the settings name a relay and a
+		// credential, and whoever can change them can redirect or silence every
+		// notice an account owner would otherwise receive.
+		mux.Handle("GET /api/mail/settings",
+			s.requireAuth(s.requirePermission(policy.ActionAdministerData,
+				http.HandlerFunc(s.handleGetMailSettings))))
+		mux.Handle("PUT /api/mail/settings",
+			s.requireAuth(s.requirePermission(policy.ActionAdministerData,
+				http.HandlerFunc(s.handleSaveMailSettings))))
+		mux.Handle("POST /api/mail/test",
+			s.requireAuth(s.requirePermission(policy.ActionAdministerData,
+				http.HandlerFunc(s.handleSendTestMail))))
+		mux.Handle("GET /api/mail/templates",
+			s.requireAuth(s.requirePermission(policy.ActionAdministerData,
+				http.HandlerFunc(s.handleListMailTemplates))))
+		mux.Handle("PUT /api/mail/templates/{kind}",
+			s.requireAuth(s.requirePermission(policy.ActionAdministerData,
+				http.HandlerFunc(s.handleSaveMailTemplate))))
+		mux.Handle("DELETE /api/mail/templates/{kind}",
+			s.requireAuth(s.requirePermission(policy.ActionAdministerData,
+				http.HandlerFunc(s.handleResetMailTemplate))))
+
 		mux.Handle("GET /api/config",
 			s.requireAuth(s.requirePermission(policy.ActionAdministerData,
 				http.HandlerFunc(s.handleConfigReport))))

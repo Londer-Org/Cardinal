@@ -577,3 +577,43 @@ export const redeemedRecoverySchema = z.object({
   token: z.string(),
   expiresAt: z.string(),
 })
+
+/**
+ * How this deployment sends notification email.
+ *
+ * No password comes back — only whether one is set. A settings page that could
+ * show it is one that hands it to whoever is behind the reader.
+ */
+export const mailSettingsSchema = z.object({
+  enabled: z.boolean(),
+  host: z.string(),
+  port: z.number(),
+  username: z.string(),
+  fromAddress: z.string(),
+  fromName: z.string(),
+  replyTo: z.string(),
+  tlsMode: z.enum(['starttls', 'tls', 'none']),
+  passwordSet: z.boolean(),
+  queued: z.number(),
+  failing: z.number(),
+})
+export type MailSettings = z.infer<typeof mailSettingsSchema>
+
+export const mailTestResultSchema = z.object({
+  sent: z.boolean(),
+  error: z.string().optional(),
+})
+
+export const mailTemplateSchema = z.object({
+  kind: z.string(),
+  subject: z.string(),
+  body: z.string(),
+  overridden: z.boolean(),
+  builtInSubject: z.string(),
+  builtInBody: z.string(),
+})
+export type MailTemplate = z.infer<typeof mailTemplateSchema>
+
+export const mailTemplatesSchema = z.object({
+  templates: z.array(mailTemplateSchema),
+})
