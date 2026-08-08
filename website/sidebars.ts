@@ -13,6 +13,7 @@ const sidebars: SidebarsConfig = {
     'architecture',
     'integration',
     'certificate-authorities',
+    'upgrading',
     'threat-model',
     'comparison',
     'schema',
