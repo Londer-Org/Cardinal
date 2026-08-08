@@ -36,7 +36,12 @@ const (
 	ActionMembershipRevoked = "membership.revoked"
 
 	ActionSessionCreated = "session.created"
-	ActionSessionRevoked = "session.revoked"
+
+	// ActionCLISessionIssued records a terminal borrowing a console session's
+	// ceremony. Its own action because "somebody signed in" and "a terminal was
+	// handed device-bound authority" are different things to read in a journal.
+	ActionCLISessionIssued = "session.cli_issued"
+	ActionSessionRevoked   = "session.revoked"
 
 	// ActionSessionReauthenticated is a step-up: an existing session re-proved
 	// its credential to satisfy a freshness rule. Distinct from session.created

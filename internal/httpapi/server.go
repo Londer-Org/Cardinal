@@ -297,6 +297,17 @@ func (s *Server) Handler() http.Handler {
 	// whatever this returns is what a host will believe for the certificate's
 	// lifetime.
 	if s.sshCA != nil {
+		// Approving a terminal is behind requireDeviceBound for the same reason
+		// managing credentials is: it hands out something a passkey proved, so
+		// an access token must not be able to bootstrap one.
+		mux.Handle("POST /api/cli/authorize",
+			s.requireAuth(s.requireDeviceBound(http.HandlerFunc(s.handleCLIAuthorize))))
+
+		// Unauthenticated, necessarily: the caller is a terminal holding nothing
+		// yet. The code is single-use, expires in ninety seconds, and is
+		// worthless without a verifier that never left the process.
+		mux.HandleFunc("POST /api/cli/exchange", s.handleCLIExchange)
+
 		mux.Handle("POST /api/ssh/certificate",
 			s.requireAuth(http.HandlerFunc(s.handleIssueSSHCertificate)))
 	}

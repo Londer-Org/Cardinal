@@ -138,6 +138,16 @@ type SessionSpec struct {
 	DeviceBound  bool
 	CredentialID *uuid.UUID
 
+	// AuthAt is when the ceremony behind this session actually happened.
+	//
+	// Zero means now, which is right for a session created by a ceremony. It is
+	// set only when a session inherits one — a terminal borrowing the console's
+	// passkey — because a policy asking `authAgeSeconds <= 300` must get the age
+	// of the ceremony and not the age of the exchange. Resetting the clock here
+	// would let a sign-in from this morning satisfy a rule that exists to demand
+	// one from this minute.
+	AuthAt time.Time
+
 	// ClientIP and UserAgent are what let somebody recognise a session as
 	// theirs, or fail to.
 	//
@@ -202,13 +212,18 @@ func createSessionTx(ctx context.Context, tx pgx.Tx, subjectID uuid.UUID, spec S
 		idle = limits.Idle
 	}
 
+	authAt := spec.AuthAt
+	if authAt.IsZero() {
+		authAt = now
+	}
+
 	s := &Session{
 		SubjectID:    subjectID,
 		Token:        token,
 		ValidFrom:    now,
 		ValidUntil:   now.Add(idle),
 		AuthMethod:   spec.AuthMethod,
-		AuthAt:       now,
+		AuthAt:       authAt,
 		DeviceBound:  spec.DeviceBound,
 		CredentialID: spec.CredentialID,
 	}
@@ -554,4 +569,30 @@ func (s *Store) RevokeOtherSessions(ctx context.Context, subjectID, keep uuid.UU
 		return s.AppendEvent(ctx, tx, ev)
 	})
 	return count, err
+}
+
+// lookupSessionByIDTx reads a session by its id, inside a transaction.
+//
+// By id rather than by token, because the caller here holds a reference to a
+// session it is deriving from and never sees that session's token — which is
+// the point: approving a terminal must not hand the terminal the browser's
+// credential.
+func lookupSessionByIDTx(ctx context.Context, tx pgx.Tx, id uuid.UUID) (*Session, error) {
+	var s Session
+	err := tx.QueryRow(ctx, `
+		SELECT id, subject_id, lower(valid_period), upper(valid_period),
+		       auth_method, auth_at, device_bound, credential_id, absolute_expiry
+		  FROM sessions
+		 WHERE id = $1
+		   AND valid_period @> now()
+		   AND absolute_expiry > now()`, id).
+		Scan(&s.ID, &s.SubjectID, &s.ValidFrom, &s.ValidUntil,
+			&s.AuthMethod, &s.AuthAt, &s.DeviceBound, &s.CredentialID, &s.AbsoluteExpiry)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrSessionInvalid
+	}
+	if err != nil {
+		return nil, fmt.Errorf("store: reading session: %w", err)
+	}
+	return &s, nil
 }
