@@ -201,6 +201,10 @@ k8s-status: ## What is running, across all three namespaces
 k8s-seed: ## Policy, authorities, a user and a relying party
 	@K8S_CONTEXT=$(K8S_CONTEXT) KUBECTL=$(KUBECTL) ./k8s/seed.sh
 
+.PHONY: k8s-host
+k8s-host: ## Join a Linux machine to the Cardinal running in the cluster
+	@K8S_CONTEXT=$(K8S_CONTEXT) KUBECTL=$(KUBECTL) ./k8s/host.sh
+
 .PHONY: k8s-verify
 k8s-verify: ## Prove the stack works
 	@K8S_CONTEXT=$(K8S_CONTEXT) KUBECTL=$(KUBECTL) ./k8s/verify.sh

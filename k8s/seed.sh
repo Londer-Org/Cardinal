@@ -104,12 +104,13 @@ k -n example create configmap oidc-client-registration \
 	--dry-run=client -o yaml | k apply -f -
 
 say "Restarting what reads this at startup"
-# Cardinal loads policy once, at startup, so activating a version does not take
-# effect until it restarts. The relying party reads its client id from the
-# environment, so it needs one too.
-k -n cardinal rollout restart deployment/cardinal
+# Only the relying party, which takes its client id from the environment.
+#
+# Cardinal is deliberately not restarted. It polls for an activated policy every
+# ten seconds and swaps it in — the same mechanism the rollback button relies on
+# — so restarting it here would buy nothing and briefly race Traefik's endpoint
+# list, which is exactly how the host enrollment first failed with a 504.
 k -n example rollout restart deployment/oidc-client
-k -n cardinal rollout status deployment/cardinal --timeout=120s
 k -n example rollout status deployment/oidc-client --timeout=120s
 
 say "Seeded"

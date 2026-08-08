@@ -24,6 +24,15 @@ var (
 
 	// ErrPOSIXRangeExhausted means the configured range has no numbers left.
 	ErrPOSIXRangeExhausted = errors.New("store: the POSIX id range is exhausted")
+
+	// ErrPOSIXAlreadyAssigned reports that the entity already holds a number.
+	//
+	// Its own error because assigning twice is the ordinary result of running a
+	// setup script a second time, and the raw unique violation that surfaced
+	// before — "duplicate key value violates unique constraint
+	// posix_identities_pkey (SQLSTATE 23505)" — reads like a bug in Cardinal
+	// rather than like nothing needing to be done.
+	ErrPOSIXAlreadyAssigned = errors.New("store: entity already has a POSIX identity")
 )
 
 // Two different floors, for two different questions.
@@ -204,6 +213,10 @@ func (s *Store) AssignPOSIXIdentity(
 		// different: one is a configuration change, the other is an incident.
 		if errors.Is(queryErr, pgx.ErrNoRows) {
 			return fmt.Errorf("%w: %d–%d", ErrPOSIXRangeExhausted, r.Low, r.High)
+		}
+		var pgErr *pgconn.PgError
+		if errors.As(queryErr, &pgErr) && pgErr.Code == "23505" {
+			return fmt.Errorf("%w: %s", ErrPOSIXAlreadyAssigned, entity.Name)
 		}
 		if queryErr != nil {
 			return fmt.Errorf("store: assigning POSIX identity: %w", queryErr)

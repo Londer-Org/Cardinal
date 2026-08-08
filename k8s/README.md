@@ -109,10 +109,38 @@ That last one passes by failing to connect, which is how a check that tests
 nothing also looks. `make k8s-verify-sabotage` deletes the policies and expects
 it to fail — and it does, which is the only reason to believe it when it passes.
 
-## Not covered here
+## A Linux machine, joined to the cluster
 
-`cardinal-agent` is absent, and deliberately. It writes `/etc/sudoers.d`, serves
-a varlink socket `nss-systemd` must reach, and has to survive a reboot before any
-container runtime starts. Containerising it needs host PID and network
-namespaces plus a pile of bind mounts — all the operational cost and none of the
-isolation. Host access is rehearsed with `make verify-host` instead.
+`cardinal-agent` is deliberately not in the cluster. It writes `/etc/sudoers.d`,
+serves a varlink socket `nss-systemd` must reach, and has to survive a reboot
+before any container runtime starts — it belongs on a machine, not in the
+cluster it talks to.
+
+So `make k8s-host` joins one. The machine is a container, but nothing about how
+it reaches Cardinal is simulated: it resolves the same hostname a browser does,
+verifies the same certificate against the same local CA, enrolls over the
+network with a single-use token, and runs the agent that a `.deb` installed.
+
+This is distinct from `make verify-host`, which runs the userdb server
+in-process and never speaks to a Cardinal at all. That one checks the host-side
+components agree with `nss-systemd` and `sudo`. This one checks they agree with
+a *server*: enrollment over the network, an assignment fetched from it, and a
+host certificate signed by its SSH authority.
+
+Fourteen checks, and the three accounts are what make them mean anything:
+
+| Account | In the directory | On this machine |
+|---|---|---|
+| `k8s-user` | login group + admins | resolves, and may `sudo` |
+| `k8s-nonroot` | login group only | resolves, and may **not** `sudo` |
+| `k8s-outsider` | has a uid, no grant | **does not resolve at all** |
+
+The last row is the headline claim of the design and the whole difference from
+an LDAP-bound machine: a host learns the names of people who may log into it and
+nobody else, so compromising the least important machine in a fleet does not
+yield every name and uid in the company.
+
+The final check stops the agent and asks again. Everything before it is
+consistent with the names having been in `/etc/passwd` all along; the identity
+disappearing with the agent is what shows the directory was the source. Local
+root survives, which the agent is structurally incapable of removing.

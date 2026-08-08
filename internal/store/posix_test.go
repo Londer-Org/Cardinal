@@ -456,3 +456,34 @@ func TestAdoptedNumbersDoNotDisturbTheAllocator(t *testing.T) {
 		"an adopted number outside the range must not drag the allocator out of it")
 	assert.NotEqual(t, 70010, bobs.Number)
 }
+
+// TestAssigningTwiceSaysSoPlainly.
+//
+// Running a setup script a second time is the most ordinary thing there is, and
+// this used to answer it with "duplicate key value violates unique constraint
+// posix_identities_pkey (SQLSTATE 23505)" — which reads like a bug in Cardinal
+// rather than like nothing needing to be done. Found while writing the
+// Kubernetes host join, where re-running the script was fatal for that reason.
+func TestAssigningTwiceSaysSoPlainly(t *testing.T) {
+	s := newStore(t)
+	ctx := t.Context()
+
+	r := store.POSIXRange{Low: 100000, High: 199999}
+	alice := mustCreate(t, s, directory.TypeUser, "alice")
+
+	first, err := s.AssignPOSIXIdentity(ctx, alice.ID, r, nil)
+	require.NoError(t, err)
+
+	_, err = s.AssignPOSIXIdentity(ctx, alice.ID, r, nil)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, store.ErrPOSIXAlreadyAssigned)
+	assert.Contains(t, err.Error(), "alice",
+		"the message should name who it is talking about")
+	assert.NotContains(t, err.Error(), "SQLSTATE",
+		"a constraint name is not something to show whoever ran the command")
+
+	// And the number it already had is untouched.
+	still, err := s.POSIXIdentityFor(ctx, alice.ID)
+	require.NoError(t, err)
+	assert.Equal(t, first.Number, still.Number)
+}
