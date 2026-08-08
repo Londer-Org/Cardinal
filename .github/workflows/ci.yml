@@ -88,9 +88,15 @@ jobs:
       - uses: actions/setup-go@v6
         with:
           go-version: '1.25'
+      # Pinned, like the PostgreSQL image and for the same reason: `latest`
+      # means CI and a developer's machine run different linters, and the
+      # difference shows up as a red build nobody can reproduce. This project
+      # found that on its first CI run — the config had `settings` and
+      # `exclusions` at the root, which 2.11 silently ignored and 2.12 rejects,
+      # so the rules had never actually applied.
       - uses: golangci/golangci-lint-action@v9
         with:
-          version: latest
+          version: v2.12.2
 
   vulncheck:
     name: Vulnerability scan

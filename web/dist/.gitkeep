@@ -1,0 +1,8 @@
+Keeps web/dist in the repository so //go:embed all:dist has something to match.
+
+Without it a fresh checkout cannot compile at all: the directive fails with
+"pattern all:dist: no matching files found", which is what happened on this
+project's first CI run. Locally it never showed, because anyone who has run
+`make ui` once has a populated dist.
+
+A real build overwrites everything here. This file is only ever the floor.

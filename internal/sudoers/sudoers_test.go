@@ -37,7 +37,7 @@ func TestRenderedFileIsAcceptedByVisudo(t *testing.T) {
 	}
 
 	path := filepath.Join(t.TempDir(), "50-cardinal")
-	if err := os.WriteFile(path, content, 0o440); err != nil { //nolint:gosec // the mode sudo requires
+	if err := os.WriteFile(path, content, 0o440); err != nil {
 		t.Fatal(err)
 	}
 	if err := sudoers.Validate(t.Context(), path); err != nil {
@@ -62,7 +62,7 @@ func TestEmptyRenderIsStillValid(t *testing.T) {
 	}
 
 	path := filepath.Join(t.TempDir(), "50-cardinal")
-	if err := os.WriteFile(path, content, 0o440); err != nil { //nolint:gosec // the mode sudo requires
+	if err := os.WriteFile(path, content, 0o440); err != nil {
 		t.Fatal(err)
 	}
 	if err := sudoers.Validate(t.Context(), path); err != nil {
@@ -159,7 +159,7 @@ func TestInstallRefusesAnInvalidFileAndKeepsTheOldOne(t *testing.T) {
 		t.Fatal("an invalid file was installed")
 	}
 
-	after, err := os.ReadFile(path) //nolint:gosec // a path from t.TempDir
+	after, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -248,7 +248,7 @@ func TestNothingOutsideTheDropInIsTouched(t *testing.T) {
 	dir := t.TempDir()
 	neighbour := filepath.Join(dir, "10-local-admins")
 	local := "localadmin ALL=(ALL:ALL) ALL\n"
-	if err := os.WriteFile(neighbour, []byte(local), 0o440); err != nil { //nolint:gosec // the mode sudo requires
+	if err := os.WriteFile(neighbour, []byte(local), 0o440); err != nil {
 		t.Fatal(err)
 	}
 
@@ -260,7 +260,7 @@ func TestNothingOutsideTheDropInIsTouched(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	after, err := os.ReadFile(neighbour) //nolint:gosec // a path from t.TempDir
+	after, err := os.ReadFile(neighbour)
 	if err != nil {
 		t.Fatalf("the neighbouring drop-in is gone: %v", err)
 	}

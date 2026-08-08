@@ -26,41 +26,41 @@ linters:
     - usestdlibvars
     - wastedassign
 
-settings:
-  errcheck:
-    check-type-assertions: true
-    check-blank: true
+  settings:
+    errcheck:
+      check-type-assertions: true
+      check-blank: true
 
-  gosec:
-    excludes:
-      # G404 (weak RNG) is not applicable yet; when crypto lands, remove this
-      # exclusion rather than adding nolint comments at call sites.
-      - G404
+    gosec:
+      excludes:
+        # G404 (weak RNG) is not applicable yet; when crypto lands, remove this
+        # exclusion rather than adding nolint comments at call sites.
+        - G404
 
-  govet:
-    enable-all: true
-    disable:
-      - fieldalignment  # readability wins over struct packing at this scale
+    govet:
+      enable-all: true
+      disable:
+        - fieldalignment  # readability wins over struct packing at this scale
 
-  nolintlint:
-    require-explanation: true
-    require-specific: true
+    nolintlint:
+      require-explanation: true
+      require-specific: true
 
-  revive:
+    revive:
+      rules:
+        - name: exported
+          arguments: [checkPrivateReceivers]
+        - name: context-as-argument
+        - name: error-strings
+        - name: error-naming
+        - name: indent-error-flow
+
+  exclusions:
     rules:
-      - name: exported
-        arguments: [checkPrivateReceivers]
-      - name: context-as-argument
-      - name: error-strings
-      - name: error-naming
-      - name: indent-error-flow
-
-exclusions:
-  rules:
-    # Tests deliberately do things production code must not: raw SQL to
-    # simulate tampering, disabled rules, fixed credentials.
-    - path: _test\.go
-      linters: [gosec, unparam, contextcheck]
+      # Tests deliberately do things production code must not: raw SQL to
+      # simulate tampering, disabled rules, fixed credentials.
+      - path: _test\.go
+        linters: [gosec, unparam, contextcheck]
 
 formatters:
   enable:

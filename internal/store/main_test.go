@@ -115,7 +115,7 @@ func applyMigrations(ctx context.Context, dsn string) error {
 	}
 
 	for _, path := range paths {
-		sql, err := os.ReadFile(path) //nolint:gosec // fixed repo-relative path
+		sql, err := os.ReadFile(path)
 		if err != nil {
 			return fmt.Errorf("reading %s: %w", path, err)
 		}
