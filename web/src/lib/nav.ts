@@ -1,5 +1,6 @@
 import {
   AppWindowIcon,
+  BadgeCheckIcon,
   HouseIcon,
   KeyRoundIcon,
   LayersIcon,
@@ -84,6 +85,9 @@ export const NAV: NavSection[] = [
       // happened, which is the other half of the same question as what is
       // allowed to happen.
       { label: 'Audit journal', to: '/audit', icon: ShieldCheckIcon },
+      // Here rather than under Directory: what machines trust is a property of
+      // the deployment, not of any entity in it.
+      { label: 'Authorities', to: '/authorities', icon: BadgeCheckIcon },
     ],
   },
   {

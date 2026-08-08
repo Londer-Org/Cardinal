@@ -363,6 +363,12 @@ func (s *Server) Handler() http.Handler {
 	// The audit journal. Behind the broad tier: it is the record of everything
 	// anybody did, including who read it, and is not something to hold by
 	// virtue of managing accounts.
+	// The certificate authorities and their trust bundles. Read-only: a bundle
+	// is public by construction — it is what every machine has to hold — but
+	// knowing which key is signing and when it expires is operational detail
+	// worth the same tier as the rest.
+	mux.Handle("GET /api/authorities", admin(s.handleAuthorities))
+
 	mux.Handle("GET /api/audit/events", admin(s.handleListAuditEvents))
 	mux.Handle("POST /api/audit/verify", admin(s.handleVerifyAuditChain))
 

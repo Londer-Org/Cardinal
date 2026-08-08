@@ -485,3 +485,34 @@ export const chainReportSchema = z.object({
   reason: z.string(),
 })
 export type ChainReport = z.infer<typeof chainReportSchema>
+
+/** One key of a certificate authority. */
+export const authorityKeySchema = z.object({
+  id: z.string(),
+  fingerprint: z.string(),
+  algorithm: z.string(),
+  // signing | published | retired. Three rather than a boolean because
+  // "published" is the operationally interesting one: trusted, not yet signing,
+  // which is a rotation waiting on its distribution step.
+  state: z.string(),
+  createdAt: z.string(),
+  activeAt: z.string().nullable(),
+  retiredAt: z.string().nullable(),
+  expiresAt: z.string().nullable(),
+  subject: z.string(),
+})
+export type AuthorityKey = z.infer<typeof authorityKeySchema>
+
+export const authoritySchema = z.object({
+  enabled: z.boolean(),
+  keys: z.array(authorityKeySchema),
+  // Every trusted key, signing or not. A machine trusting only the signing key
+  // rejects certificates issued in the minutes before a rotation.
+  bundle: z.string(),
+})
+export type Authority = z.infer<typeof authoritySchema>
+
+export const authoritiesSchema = z.object({
+  ssh: authoritySchema,
+  x509: authoritySchema,
+})

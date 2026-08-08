@@ -51,6 +51,7 @@ import {
   recoveryRequestsSchema,
   recoveryRequestSchema,
   auditEventsSchema,
+  authoritiesSchema,
   chainReportSchema,
   policySchema,
   policyVersionsSchema,
@@ -401,6 +402,11 @@ export const api = {
       ),
   },
 
+  /** The certificate authorities, and the bundles machines have to trust. */
+  authorities: {
+    get: () => request('/api/authorities', authoritiesSchema),
+  },
+
   /** The hash-chained journal of everything that happened. Admin-only. */
   audit: {
     events: (filter: { action?: string; subject?: string; before?: number }) => {
@@ -514,6 +520,8 @@ export type {
   PendingAuthorization,
   Policy,
   AuditEvent,
+  Authority,
+  AuthorityKey,
   AuditParty,
   ChainReport,
   PolicyVersion,
@@ -547,6 +555,7 @@ export const queryKeys = {
   tokens: ['tokens'] as const,
   decisions: (deniedOnly: boolean) => ['decisions', deniedOnly] as const,
   policy: ['policy'] as const,
+  authorities: ['authorities'] as const,
   auditEvents: (filter: { action: string; subject: string; before: number }) =>
     ['audit', 'events', filter] as const,
   policyVersions: ['policy', 'versions'] as const,

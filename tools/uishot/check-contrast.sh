@@ -101,6 +101,7 @@ PAGES=(
   # The chain report, which only exists after somebody asks for it — and is the
   # one alert on the page that turns destructive when it has bad news.
   "/audit|button[data-action=\"verify\"]"
+  /authorities
   /policy
   # The confirmation before making a version live: a destructive button and the
   # alert explaining that this decides everything, neither of which is on the
