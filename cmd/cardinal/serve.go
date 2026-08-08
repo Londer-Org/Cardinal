@@ -86,6 +86,33 @@ func runServe(ctx context.Context, args []string) error {
 		return store.ErrSchemaAhead
 	}
 
+	// And refuse a database that has not caught up with this binary.
+	//
+	// The other direction, and the one an upgrade walks into. Kubernetes made it
+	// concrete: a Job's pod template is immutable, so `kubectl apply` with a new
+	// image tag updates the Deployment and *rejects* the migration Job — the new
+	// server rolls out and the migration never runs. Nothing noticed, because
+	// "some migration has been applied" is true and was all anything checked.
+	//
+	// Enforced here rather than in the manifests because it then holds for every
+	// deployment shape: a container, a Job, a systemd unit, somebody's laptop.
+	behind, err := st.SchemaBehind(ctx)
+	if err != nil {
+		return err
+	}
+	if len(behind) > 0 {
+		fmt.Fprintf(os.Stderr,
+			"\n  This database is missing %d migration(s) this build needs:\n"+
+				"    %s\n\n"+
+				"  Apply them first:\n\n"+
+				"      cardinal migrate\n\n"+
+				"  Migrations are a separate step on purpose — applying one while other\n"+
+				"  replicas still serve the old schema is how rolling deploys break — so\n"+
+				"  this will not do it for you.\n\n",
+			len(behind), strings.Join(behind, "\n    "))
+		return store.ErrSchemaBehind
+	}
+
 	idle, absolute := cfg.Sessions.Effective()
 	st.SetSessionLimits(store.SessionLimits{Idle: idle, Absolute: absolute})
 	// Strings, not durations: slog renders a time.Duration as nanoseconds, and

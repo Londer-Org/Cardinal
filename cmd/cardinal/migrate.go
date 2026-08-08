@@ -29,8 +29,19 @@ func runMigrate(ctx context.Context, args []string) error {
 	skipBackup := fs.Bool("skip-backup", false,
 		"proceed without a backup — refused for -to unless set")
 	dsnFlag := fs.String("dsn", "", "PostgreSQL connection string")
+	// Accepted for the same reason `serve` accepts it, and because not accepting
+	// it answered `cardinal migrate -config /etc/cardinal/cardinal.toml` — the
+	// obvious thing to type in a container — with a usage error listing every
+	// other flag. The DSN is already found at that path by convention; this just
+	// lets it be said out loud, or pointed somewhere else.
+	configPath := fs.String("config", "", "configuration file, for the connection string")
 	if _, err := parse(fs, args); err != nil {
 		return errUsage
+	}
+	if *configPath != "" && *dsnFlag == "" {
+		if err := os.Setenv("CARDINAL_CONFIG", *configPath); err != nil {
+			return err
+		}
 	}
 
 	s, err := open(ctx, *dsnFlag)

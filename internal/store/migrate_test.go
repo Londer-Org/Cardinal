@@ -216,3 +216,43 @@ func newStoreOnOwnDatabase(t *testing.T) *store.Store {
 	})
 	return s
 }
+
+// TestADatabaseBehindTheBinaryIsRefused.
+//
+// The upgrade case, and the one Kubernetes made concrete: a Job's pod template
+// is immutable, so `kubectl apply` with a new image tag updates the Deployment
+// and rejects the migration Job. The new server rolls out, the migration never
+// runs, and nothing notices — "some migration has been applied" is true and was
+// all anything checked.
+func TestADatabaseBehindTheBinaryIsRefused(t *testing.T) {
+	s := newStoreOnOwnDatabase(t)
+	ctx := t.Context()
+
+	// A database nobody has migrated is behind by everything, which is what a
+	// fresh install looks like and what the message has to say.
+	behind, err := s.SchemaBehind(ctx)
+	require.NoError(t, err)
+	known, err := migrations.Up()
+	require.NoError(t, err)
+	assert.Equal(t, known, behind, "an empty database is missing every migration")
+
+	// Migrated, and now behind by nothing. Without this the test would pass on
+	// an implementation that always claimed everything was missing.
+	_, err = s.Migrate(ctx)
+	require.NoError(t, err)
+	behind, err = s.SchemaBehind(ctx)
+	require.NoError(t, err)
+	assert.Empty(t, behind, "a fully migrated database is not behind")
+
+	// Now the upgrade: the binary gained a migration the database has not seen.
+	// Reversing one is the closest thing to shipping a new build.
+	applied, err := s.AppliedMigrations(ctx)
+	require.NoError(t, err)
+	newest := applied[len(applied)-1].Name
+	_, err = s.MigrateDownTo(ctx, applied[len(applied)-2].Name)
+	require.NoError(t, err)
+
+	behind, err = s.SchemaBehind(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, []string{newest}, behind)
+}

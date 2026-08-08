@@ -29,18 +29,82 @@ cardinal migrate -backup /var/backups/cardinal-pre-upgrade.dump
 # then roll the servers
 ```
 
-**Downgrading.** The server first, then the schema — and only if you must.
+**Downgrading.** The schema first, using the version you are leaving — then the
+older server.
+
+That ordering is not a preference. Reversals are embedded in the binary, so the
+build that introduced migration N is the only one that contains N's reversal:
+undo it *before* the older build is the one you have.
 
 ```sh
-# deploy the previous image; it refuses to start if the schema is too new
+# still running the newer version, and this must run from it
 cardinal migrate -to 0022_posix_adoption_range.sql -backup /var/backups/pre-downgrade.dump
+# only now install and start the older one
 ```
 
-The server refuses to start against a database holding migrations it does not
-contain, naming them. That check exists because the alternative was silent: an
-older binary started happily and then failed one request at a time, wherever a
-code path first touched a column it did not know about, which reads like a bug
-in whichever feature was unlucky rather than like the wrong version running.
+Doing it the other way round is not dangerous — the older server refuses to
+start against a schema holding migrations it does not contain, naming them — but
+it is a dead end, because the binary you now have cannot perform the reversal
+you need.
+
+Both directions are refused rather than attempted. That check exists because the
+alternative was silent: a mismatched binary started happily and then failed one
+request at a time, wherever a code path first touched a column it did not know
+about, which reads like a bug in whichever feature was unlucky rather than like
+the wrong version running.
+
+## Container images
+
+The same three steps, but nothing is a shell command on the host — and two
+things about it are not obvious.
+
+**Migrating is its own container run, not something the server does.** The image
+contains the CLI as well as the server, so it is the same image with a different
+argument:
+
+```sh
+docker pull londerbe/cardinal:0.2.0
+docker run --rm --network=... -v /etc/cardinal:/etc/cardinal:ro \
+    londerbe/cardinal:0.2.0 migrate
+docker compose up -d          # or roll the deployment
+```
+
+`migrate` finds its connection string at `/etc/cardinal/cardinal.toml` by
+convention, so a deployment that already mounts its configuration needs nothing
+else. `CARDINAL_DSN` and `-dsn` still work, and `-config` points elsewhere.
+
+The server refuses to start if that middle step did not happen, naming what is
+missing. That check is in the binary rather than in a manifest so it holds
+however the thing is deployed — which matters, because the manifest is exactly
+what got it wrong here first: a Kubernetes Job's pod template is immutable, so
+`kubectl apply` with a new image tag updates the Deployment and *rejects* the
+migration Job. The new server rolled out and the migration never ran, and
+nothing noticed.
+
+**Only the newer image can undo its own migrations.** Reversals are embedded in
+the binary, so the image that introduced migration N is the only one that
+contains N's reversal. A downgrade therefore runs the reversal *before* the old
+image is deployed, using the image being left behind:
+
+```sh
+# still on 0.2.0, and this must run from 0.2.0
+docker run --rm --network=... -v /etc/cardinal:/etc/cardinal:ro \
+    londerbe/cardinal:0.2.0 migrate -to 0023_x509_ca.sql -skip-backup
+# only now
+docker compose up -d          # with 0.1.0
+```
+
+Deploying the old image first is not dangerous — it refuses to start — but it is
+a dead end: the running image no longer contains the reversal you need, and you
+have to pull the newer one back to get out of it.
+
+**`-backup` does not work in the container.** It shells out to `pg_dump`, and the
+image is distroless — no shell, no `pg_dump`, deliberately. The error says so
+rather than failing obscurely. In a container deployment the backup is taken by
+whatever already backs the database up, and `-skip-backup` is how you say it has
+been. That is a weaker guarantee than the flag on a host, and it is the honest
+one: a backup taken by a tool whose restore path nobody exercises is a file
+somebody discovers does not restore at the moment they need it.
 
 ## What a reversal actually does
 

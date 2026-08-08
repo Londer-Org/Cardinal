@@ -203,6 +203,63 @@ func (s *Store) SchemaAhead(ctx context.Context) ([]string, error) {
 	return ahead, rows.Err()
 }
 
+// ErrSchemaBehind reports a database missing migrations this binary contains.
+//
+// The other half of ErrSchemaAhead, and the one an upgrade walks into. Nothing
+// detected it: the server started against a schema missing the very columns the
+// new code was written for and failed later, one request at a time.
+var ErrSchemaBehind = errors.New("store: the database is missing migrations this binary contains")
+
+// SchemaBehind names migrations this binary contains and the database has not
+// applied.
+//
+// Deliberately not the same as "is anything pending" asked of the migrator: this
+// runs at startup, in every deployment shape, so the ordering — migrate, then
+// deploy — is enforced by the binary rather than by whatever applied the
+// manifests remembering to.
+func (s *Store) SchemaBehind(ctx context.Context) ([]string, error) {
+	known, err := migrations.Up()
+	if err != nil {
+		return nil, fmt.Errorf("store: listing migrations: %w", err)
+	}
+
+	var exists bool
+	if scanErr := s.pool.QueryRow(ctx,
+		`SELECT to_regclass('public.schema_migrations') IS NOT NULL`).Scan(&exists); scanErr != nil {
+		return nil, fmt.Errorf("store: looking for the migration table: %w", scanErr)
+	}
+	if !exists {
+		// Nothing has ever been applied, so everything is pending. A fresh
+		// install, and the message the caller prints tells them so.
+		return known, nil
+	}
+
+	applied := map[string]struct{}{}
+	rows, err := s.pool.Query(ctx, `SELECT name FROM schema_migrations`)
+	if err != nil {
+		return nil, fmt.Errorf("store: reading applied migrations: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return nil, err
+		}
+		applied[name] = struct{}{}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	var behind []string
+	for _, name := range known {
+		if _, ok := applied[name]; !ok {
+			behind = append(behind, name)
+		}
+	}
+	return behind, nil
+}
+
 // ErrIrreversible reports a migration that must be undone before one that
 // cannot be.
 var ErrIrreversible = errors.New("store: migration has no reversal")
