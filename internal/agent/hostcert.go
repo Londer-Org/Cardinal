@@ -273,12 +273,29 @@ func validateSSHDConfig(ctx context.Context, path string) error {
 	}
 
 	// -T rather than -t: -t validates the *system* configuration including the
-	// candidate's neighbours, which is what actually matters, but it also needs
-	// host keys to exist. -T extends it with "print the effective config", which
-	// fails the same way and works in a container.
+	// candidate's neighbours, which is what actually matters, and -T extends it
+	// with "print the effective config".
+	//
+	// It needs host keys, which the comment here used to deny. Measured on
+	// alpine with /etc/ssh/ssh_host_* removed:
+	//
+	//   valid config,   no host keys -> exit 1,   "no hostkeys available"
+	//   invalid config, no host keys -> exit 255, names the bad option
+	//
+	// So a machine with no host keys — a container, a CI runner — failed this
+	// check for a reason that has nothing to do with the drop-in, and the agent
+	// reported it as "sshd rejected the drop-in". That is worse than a wrong
+	// message: it sends whoever is debugging to the wrong file.
 	//nolint:gosec // sshd comes from LookPath and the path is one we just wrote
 	cmd := exec.CommandContext(ctx, sshd, "-T", "-f", path)
 	if output, err := cmd.CombinedOutput(); err != nil {
+		// sshd loads host keys only after accepting the configuration, so
+		// reaching this message is proof the drop-in parsed. Treating it as a
+		// pass is not leniency — it is the only outcome that means what this
+		// check is asking.
+		if bytes.Contains(output, []byte("no hostkeys available")) {
+			return nil
+		}
 		return fmt.Errorf("agent: sshd rejected the drop-in, so it was not installed: %w\n%s",
 			err, strings.TrimSpace(string(output)))
 	}
