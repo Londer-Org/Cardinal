@@ -19,9 +19,15 @@ import (
 const AuthRequestTTL = 15 * time.Minute
 
 var (
+	// ErrAuthRequestNotFound reports that the authorization request is unknown or
+	// has expired.
 	ErrAuthRequestNotFound = errors.New("store: authorization request not found or expired")
-	ErrAuthCodeReplayed    = errors.New("store: authorization code already redeemed")
-	ErrTokenNotFound       = errors.New("store: token not found")
+	// ErrAuthCodeReplayed reports that an authorization code was presented twice.
+	// Codes are single-use, and a replay means the first use may not have been the
+	// legitimate one.
+	ErrAuthCodeReplayed = errors.New("store: authorization code already redeemed")
+	// ErrTokenNotFound reports that no such token exists.
+	ErrTokenNotFound = errors.New("store: token not found")
 )
 
 // AuthRequest is one in-flight authorization code flow.

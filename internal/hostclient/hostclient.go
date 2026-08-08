@@ -64,8 +64,8 @@ func GenerateKey(path string) (ssh.Signer, error) {
 		return nil, fmt.Errorf("hostclient: encoding host key: %w", err)
 	}
 
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-		return nil, fmt.Errorf("hostclient: creating key directory: %w", err)
+	if mkdirErr := os.MkdirAll(filepath.Dir(path), 0o700); mkdirErr != nil {
+		return nil, fmt.Errorf("hostclient: creating key directory: %w", mkdirErr)
 	}
 
 	// O_EXCL, so enrolling twice cannot silently overwrite the key the machine
@@ -80,10 +80,10 @@ func GenerateKey(path string) (ssh.Signer, error) {
 		}
 		return nil, fmt.Errorf("hostclient: creating host key file: %w", err)
 	}
-	defer func() { _ = f.Close() }()
+	defer func() { _ = f.Close() }() //nolint:errcheck // best effort; the meaningful error is the one being returned
 
-	if err := pem.Encode(f, block); err != nil {
-		return nil, fmt.Errorf("hostclient: writing host key: %w", err)
+	if encodeErr := pem.Encode(f, block); encodeErr != nil {
+		return nil, fmt.Errorf("hostclient: writing host key: %w", encodeErr)
 	}
 
 	signer, err := ssh.NewSignerFromKey(private)
@@ -135,7 +135,7 @@ func Enroll(ctx context.Context, client *http.Client, server, token string, publ
 	if err != nil {
 		return "", fmt.Errorf("hostclient: reaching %s: %w", server, err)
 	}
-	defer func() { _ = resp.Body.Close() }()
+	defer func() { _ = resp.Body.Close() }() //nolint:errcheck // nothing actionable remains once the body is read
 
 	if resp.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("hostclient: enrollment refused: %s", readError(resp))

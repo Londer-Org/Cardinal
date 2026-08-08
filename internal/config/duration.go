@@ -13,6 +13,7 @@ import (
 // says what it means.
 type Duration time.Duration
 
+// Duration returns the value as a time.Duration.
 func (d Duration) Duration() time.Duration { return time.Duration(d) }
 
 func (d Duration) String() string { return time.Duration(d).String() }

@@ -307,6 +307,7 @@ func (e *Engine) name(id cedar.PolicyID) string {
 	return string(id)
 }
 
+// Version reports which policy version is currently loaded.
 func (e *Engine) Version() int64 { return e.version }
 
 // Evaluate answers a request.

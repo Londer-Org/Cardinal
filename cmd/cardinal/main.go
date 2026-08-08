@@ -10,34 +10,48 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"go.londer.be/cardinal/internal/version"
 	"os"
 	"os/signal"
 	"syscall"
 
+	"go.londer.be/cardinal/internal/version"
+
 	"github.com/BurntSushi/toml"
 )
 
-const defaultDSN = "postgres://cardinal:cardinal@localhost:5433/cardinal?sslmode=disable"
+const defaultDSN = "postgres://cardinal:cardinal@localhost:5433/cardinal?sslmode=disable" //nolint:gosec // the local development database, whose password is in the Makefile and README already
 
 func main() {
+	// os.Exit is the last thing that happens, and nothing is deferred in this
+	// frame. Exiting from inside main while a `defer stop()` was pending meant
+	// the signal handler was never unregistered — harmless at process death,
+	// but it is the same mistake that silently skips a flush or a rollback, so
+	// the shape is worth not having.
+	os.Exit(cardinal())
+}
+
+// cardinal runs the CLI and returns the process exit code.
+func cardinal() int {
 	// Cancel on SIGINT/SIGTERM so an interrupted command rolls its transaction
 	// back rather than leaving one open until the connection is reaped.
 	ctx, stop := signal.NotifyContext(context.Background(),
 		os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	if err := run(ctx, os.Args[1:]); err != nil {
-		// A bare errUsage means usage() was already printed; anything wrapping
-		// it carries a specific message that must still reach the user.
-		if !errors.Is(err, errBareUsage) {
-			fmt.Fprintf(os.Stderr, "cardinal: %v\n", err)
-		}
-		if errors.Is(err, errUsage) {
-			os.Exit(2)
-		}
-		os.Exit(1)
+	err := run(ctx, os.Args[1:])
+	if err == nil {
+		return 0
 	}
+
+	// A bare errUsage means usage() was already printed; anything wrapping
+	// it carries a specific message that must still reach the user.
+	if !errors.Is(err, errBareUsage) {
+		fmt.Fprintf(os.Stderr, "cardinal: %v\n", err)
+	}
+	if errors.Is(err, errUsage) {
+		return 2
+	}
+	return 1
 }
 
 var (

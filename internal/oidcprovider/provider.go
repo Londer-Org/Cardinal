@@ -3,6 +3,7 @@ package oidcprovider
 import (
 	"context"
 	"crypto/sha256"
+	"errors"
 	"fmt"
 	"net/http"
 	"time"
@@ -32,7 +33,7 @@ type Provider struct {
 // every authorization with an error nobody could act on.
 func New(ctx context.Context, s *store.Store, resolver *claims.Resolver, cfg *config.Config) (*Provider, error) {
 	if cfg.OIDC.SigningKeyEncryptionKey == "" {
-		return nil, fmt.Errorf(
+		return nil, errors.New(
 			"oidcprovider: oidc.signing_key_encryption_key is required — the " +
 				"signing key can forge tokens for every application, so it is not " +
 				"stored in the clear")
@@ -44,7 +45,7 @@ func New(ctx context.Context, s *store.Store, resolver *claims.Resolver, cfg *co
 
 	issuer := cfg.Server.PublicURL
 	if issuer == "" {
-		return nil, fmt.Errorf(
+		return nil, errors.New(
 			"oidcprovider: server.public_url is required — it is the issuer " +
 				"identifier, and every token carries it")
 	}

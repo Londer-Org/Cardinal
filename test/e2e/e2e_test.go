@@ -75,13 +75,13 @@ func TestMain(m *testing.M) {
 	// Fail with an instruction rather than a connection error. Someone running
 	// `go test ./...` for the first time should be told what to do, not handed
 	// a dial timeout.
-	conn, err := net.DialTimeout("tcp", gateway(), 2*time.Second)
+	conn, err := (&net.Dialer{Timeout: 2 * time.Second}).DialContext(context.Background(), "tcp", gateway())
 	if err != nil {
 		fmt.Fprintf(os.Stderr,
 			"end-to-end stack is not running on %s.\n  Start it with: make e2e-up\n", gateway())
 		os.Exit(1)
 	}
-	_ = conn.Close()
+	_ = conn.Close() //nolint:errcheck // best effort; the meaningful error is the one being returned
 
 	// And separately: the stack can be up while its certificate is not trusted,
 	// which produces a handshake failure in every test and looks like the whole
@@ -161,7 +161,7 @@ func cardinalCLI(t *testing.T, args ...string) string {
 		"compose", "-f", "../../examples/compose.yml",
 		"exec", "-T", "cardinal", "cardinal",
 	}, args...)
-	out, err := exec.Command("docker", full...).CombinedOutput()
+	out, err := exec.CommandContext(t.Context(), "docker", full...).CombinedOutput()
 	if err != nil {
 		t.Fatalf("cardinal %s: %v\n%s", strings.Join(args, " "), err, out)
 	}
@@ -182,7 +182,7 @@ func tryCardinalCLI(t *testing.T, args ...string) {
 		"compose", "-f", "../../examples/compose.yml",
 		"exec", "-T", "cardinal", "cardinal",
 	}, args...)
-	_, _ = exec.Command("docker", full...).CombinedOutput()
+	_, _ = exec.CommandContext(t.Context(), "docker", full...).CombinedOutput() //nolint:errcheck // best-effort teardown; the test has already reported its result
 }
 
 // repointClient makes a registered client's redirect URI match the current port.
@@ -211,7 +211,7 @@ func repointClient(t *testing.T, name string) {
 // to the browser rather than treating it as a failed sub-request.
 func TestUnauthenticatedBrowserIsRedirected(t *testing.T) {
 	resp := request(t, client(t), http.MethodGet, hostProtected, "/", "text/html")
-	defer resp.Body.Close()
+	defer resp.Body.Close() //nolint:errcheck // nothing actionable remains once the body is read
 
 	if resp.StatusCode != http.StatusFound {
 		t.Fatalf("got %d, want 302 — Traefik should pass Cardinal's redirect through",
@@ -233,7 +233,7 @@ func TestUnauthenticatedBrowserIsRedirected(t *testing.T) {
 // redirect to an HTML login page produces a confusing error far from its cause.
 func TestUnauthenticatedAPIClientGetsUnauthorized(t *testing.T) {
 	resp := request(t, client(t), http.MethodGet, hostProtected, "/whoami.json", "application/json")
-	defer resp.Body.Close()
+	defer resp.Body.Close() //nolint:errcheck // nothing actionable remains once the body is read
 
 	if resp.StatusCode != http.StatusUnauthorized {
 		t.Fatalf("got %d, want 401 for a non-browser client", resp.StatusCode)
@@ -247,9 +247,9 @@ func TestUnauthenticatedAPIClientGetsUnauthorized(t *testing.T) {
 // application's unconditional trust in its headers becomes a vulnerability.
 func TestBackendNeverSeesUnauthenticatedRequests(t *testing.T) {
 	resp := request(t, client(t), http.MethodGet, hostProtected, "/whoami.json", "application/json")
-	defer resp.Body.Close()
+	defer resp.Body.Close() //nolint:errcheck // nothing actionable remains once the body is read
 
-	body, _ := io.ReadAll(resp.Body)
+	body, _ := io.ReadAll(resp.Body) //nolint:errcheck // a body that will not read is reported by the assertion that follows
 	if strings.Contains(string(body), "userId") {
 		t.Fatal("the backend responded to an unauthenticated request — " +
 			"the middleware is not in the path")
@@ -278,10 +278,10 @@ func TestForgedIdentityHeadersAreStripped(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer resp.Body.Close()
+	defer resp.Body.Close() //nolint:errcheck // nothing actionable remains once the body is read
 
 	if resp.StatusCode == http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
+		body, _ := io.ReadAll(resp.Body) //nolint:errcheck // a body that will not read is reported by the assertion that follows
 		t.Fatalf("forged identity headers were honoured — anyone could impersonate "+
 			"anyone. Response: %s", body)
 	}
@@ -297,7 +297,7 @@ func TestForgedIdentityHeadersAreStripped(t *testing.T) {
 // rather than because forwardAuth is doing its job.
 func TestUnprotectedRouteProvesTheMiddlewareIsWhatMatters(t *testing.T) {
 	resp := request(t, client(t), http.MethodGet, hostUnprotected, "/healthz", "")
-	defer resp.Body.Close()
+	defer resp.Body.Close() //nolint:errcheck // nothing actionable remains once the body is read
 
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("got %d — the application itself should be reachable without the "+
@@ -319,7 +319,7 @@ func TestSessionCookieIsScopedToTheParentDomain(t *testing.T) {
 	// still fails if cookie_domain is wrong — which is the thing worth
 	// catching.
 	c := client(t)
-	resp := request(t, c, http.MethodGet, hostCardinal, "/api/health", "")
+	resp := request(t, c, http.MethodGet, hostCardinal, "/api/health", "") //nolint:bodyclose // the helper drains and closes it; bodyclose cannot see through the call
 	defer drain(resp)
 
 	var domain string
@@ -359,10 +359,10 @@ func TestAuthenticatedRequestCarriesIdentity(t *testing.T) {
 	withSession(t, c)
 
 	resp := request(t, c, http.MethodGet, hostProtected, "/whoami.json", "application/json")
-	defer resp.Body.Close()
+	defer resp.Body.Close() //nolint:errcheck // nothing actionable remains once the body is read
 
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
+		body, _ := io.ReadAll(resp.Body) //nolint:errcheck // a body that will not read is reported by the assertion that follows
 		t.Fatalf("got %d after signing in: %s", resp.StatusCode, body)
 	}
 
@@ -406,7 +406,7 @@ func TestDecisionIsLogged(t *testing.T) {
 	withSession(t, c)
 
 	resp := request(t, c, http.MethodGet, hostProtected, "/whoami.json", "application/json")
-	resp.Body.Close()
+	resp.Body.Close() //nolint:errcheck // nothing actionable remains once the body is read
 
 	out := cardinalCLI(t, "audit", "verify")
 	if !strings.Contains(out, "intact") {
@@ -457,7 +457,6 @@ func establishSession(t *testing.T) *http.Cookie {
 		return sessionCookie
 	}
 
-	//nolint:gosec // a session token for a throwaway container, not a credential
 	const token = "e2e-session-token-with-plenty-of-entropy-0123456789abcdef"
 
 	seedSQL(t, `DELETE FROM sessions WHERE token_hash = sha256('`+token+`'::bytea)`)
@@ -477,7 +476,6 @@ func establishSession(t *testing.T) *http.Cookie {
 func seedQuery(t *testing.T, query string) string {
 	t.Helper()
 
-	//nolint:gosec // the query is written in this file, not taken from input
 	out, err := exec.CommandContext(t.Context(), "docker", "compose",
 		"-f", "../../examples/compose.yml",
 		"exec", "-T", "postgres", "psql", "-U", "cardinal", "-d", "cardinal",
@@ -492,7 +490,6 @@ func seedQuery(t *testing.T, query string) string {
 func seedSQL(t *testing.T, statement string) {
 	t.Helper()
 
-	//nolint:gosec // the statement is written in this file, not taken from input
 	out, err := exec.CommandContext(t.Context(), "docker", "compose",
 		"-f", "../../examples/compose.yml",
 		"exec", "-T", "postgres", "psql", "-U", "cardinal", "-d", "cardinal",
@@ -506,7 +503,7 @@ func csrfToken(t *testing.T, c *http.Client) string {
 	t.Helper()
 
 	resp := request(t, c, http.MethodGet, hostCardinal, "/api/health", "")
-	defer resp.Body.Close()
+	defer resp.Body.Close() //nolint:errcheck // nothing actionable remains once the body is read
 
 	for _, cookie := range resp.Cookies() {
 		if cookie.Name == "cardinal_csrf" {
@@ -541,10 +538,10 @@ func postJSON(t *testing.T, c *http.Client, path, csrf string, body, out any) *h
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer resp.Body.Close()
+	defer resp.Body.Close() //nolint:errcheck // nothing actionable remains once the body is read
 
 	if resp.StatusCode >= 300 {
-		responseBody, _ := io.ReadAll(resp.Body)
+		responseBody, _ := io.ReadAll(resp.Body) //nolint:errcheck // a body that will not read is reported by the assertion that follows
 		t.Fatalf("POST %s: %d %s", path, resp.StatusCode, responseBody)
 	}
 	if out != nil {

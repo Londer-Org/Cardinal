@@ -24,7 +24,7 @@ func TestUserAdminCannotTakeOverAnAdministrator(t *testing.T) {
 
 	resp := postRaw(t, c, csrf, "/api/invitations", `{"login":"e2e-admin"}`)
 	defer drain(resp)
-	body, _ := io.ReadAll(resp.Body)
+	body, _ := io.ReadAll(resp.Body) //nolint:errcheck // a body that will not read is reported by the assertion that follows
 
 	if resp.StatusCode < 400 {
 		t.Fatalf("a user-admin minted an enrollment link for a directory-admin "+
@@ -52,7 +52,7 @@ func TestOnboardingStaysSingleControl(t *testing.T) {
 	resp := postRaw(t, c, csrf, "/api/invitations", `{"login":"`+login+`"}`)
 	defer drain(resp)
 	if resp.StatusCode != http.StatusCreated {
-		body, _ := io.ReadAll(resp.Body)
+		body, _ := io.ReadAll(resp.Body) //nolint:errcheck // a body that will not read is reported by the assertion that follows
 		t.Fatalf("onboarding a fresh account was refused (%d): %s — requiring two "+
 			"people to add a colleague is how a control gets removed",
 			resp.StatusCode, body)
@@ -77,7 +77,7 @@ func TestRecoveryNeedsTwoDistinctAdministrators(t *testing.T) {
 			`{"login":"e2e-locked-out","reason":"lost both keys"}`)
 		defer drain(resp)
 		if resp.StatusCode != http.StatusCreated {
-			body, _ := io.ReadAll(resp.Body)
+			body, _ := io.ReadAll(resp.Body) //nolint:errcheck // a body that will not read is reported by the assertion that follows
 			t.Fatalf("opening a request returned %d: %s", resp.StatusCode, body)
 		}
 		var opened struct {
@@ -114,7 +114,7 @@ func TestRecoveryNeedsTwoDistinctAdministrators(t *testing.T) {
 			"/api/recoveries/e2e-locked-out/approve", "")
 		defer drain(resp)
 		if resp.StatusCode != http.StatusOK {
-			body, _ := io.ReadAll(resp.Body)
+			body, _ := io.ReadAll(resp.Body) //nolint:errcheck // a body that will not read is reported by the assertion that follows
 			t.Fatalf("the second approval returned %d: %s", resp.StatusCode, body)
 		}
 

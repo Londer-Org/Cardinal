@@ -29,15 +29,28 @@ type client struct {
 	loginURL func(authRequestID string) string
 }
 
-func (c *client) GetID() string          { return c.c.ClientID }
+// GetID returns the identifier the protocol uses for this object.
+func (c *client) GetID() string { return c.c.ClientID }
+
+// RedirectURIs lists the URIs this client may be sent back to.
 func (c *client) RedirectURIs() []string { return c.c.RedirectURIs }
+
+// PostLogoutRedirectURIs lists the URIs allowed after a logout.
 func (c *client) PostLogoutRedirectURIs() []string {
 	return c.c.PostLogoutRedirectURIs
 }
-func (c *client) LoginURL(id string) string { return c.loginURL(id) }
-func (c *client) DevMode() bool             { return c.c.DevMode }
-func (c *client) ClockSkew() time.Duration  { return 0 }
 
+// LoginURL is where the library sends a browser to authenticate.
+func (c *client) LoginURL(id string) string { return c.loginURL(id) }
+
+// DevMode relaxes redirect validation, and is never set in production.
+func (c *client) DevMode() bool { return c.c.DevMode }
+
+// ClockSkew is zero: hosts here run NTP, and a tolerance window is a
+// signature-validity extension nobody asked for.
+func (c *client) ClockSkew() time.Duration { return 0 }
+
+// ApplicationType distinguishes native from web clients.
 func (c *client) ApplicationType() op.ApplicationType {
 	// Native applications get loopback redirect URIs and cannot hold a secret;
 	// the distinction matters to the library's redirect validation.
@@ -47,6 +60,7 @@ func (c *client) ApplicationType() op.ApplicationType {
 	return op.ApplicationTypeWeb
 }
 
+// AuthMethod is how this client authenticates at the token endpoint.
 func (c *client) AuthMethod() oidc.AuthMethod {
 	switch c.c.AuthMethod {
 	case store.AuthClientSecretBasic:
@@ -74,6 +88,7 @@ func (c *client) ResponseTypes() []oidc.ResponseType {
 	return []oidc.ResponseType{oidc.ResponseTypeCode}
 }
 
+// GrantTypes lists the flows this client may use.
 func (c *client) GrantTypes() []oidc.GrantType {
 	grants := make([]oidc.GrantType, 0, len(c.c.GrantTypes))
 	for _, g := range c.c.GrantTypes {
@@ -87,6 +102,7 @@ func (c *client) GrantTypes() []oidc.GrantType {
 // outage from taking every downstream API with it.
 func (c *client) AccessTokenType() op.AccessTokenType { return op.AccessTokenTypeJWT }
 
+// IDTokenLifetime is how long an issued ID token stays valid.
 func (c *client) IDTokenLifetime() time.Duration { return c.c.IDTokenLifetime }
 
 // IDTokenUserinfoClaimsAssertion returns true: the ID token carries the claims
@@ -110,6 +126,7 @@ func (c *client) IDTokenLifetime() time.Duration { return c.c.IDTokenLifetime }
 // every client.
 func (c *client) IDTokenUserinfoClaimsAssertion() bool { return true }
 
+// IsScopeAllowed reports whether a scope may be requested by this client.
 func (c *client) IsScopeAllowed(scope string) bool {
 	for _, allowed := range c.c.Scopes {
 		if scope == allowed {
@@ -126,6 +143,7 @@ func (c *client) RestrictAdditionalIdTokenScopes() func([]string) []string {
 	return c.restrictScopes
 }
 
+// RestrictAdditionalAccessTokenScopes narrows scopes onto the access token.
 func (c *client) RestrictAdditionalAccessTokenScopes() func([]string) []string {
 	return c.restrictScopes
 }
@@ -147,15 +165,32 @@ type authRequest struct {
 	r *store.AuthRequest
 }
 
-func (a *authRequest) GetID() string          { return a.r.ID.String() }
-func (a *authRequest) GetClientID() string    { return a.r.ClientID }
-func (a *authRequest) GetRedirectURI() string { return a.r.RedirectURI }
-func (a *authRequest) GetState() string       { return a.r.State }
-func (a *authRequest) GetNonce() string       { return a.r.Nonce }
-func (a *authRequest) GetScopes() []string    { return a.r.Scopes }
-func (a *authRequest) GetAuthTime() time.Time { return a.r.AuthTime }
-func (a *authRequest) Done() bool             { return a.r.Done }
+// GetID returns the identifier the protocol uses for this object.
+func (a *authRequest) GetID() string { return a.r.ID.String() }
 
+// GetClientID returns the client this request belongs to.
+func (a *authRequest) GetClientID() string { return a.r.ClientID }
+
+// GetRedirectURI returns the URI the response goes back to.
+func (a *authRequest) GetRedirectURI() string { return a.r.RedirectURI }
+
+// GetState returns the opaque value the client sent, echoed back to it.
+func (a *authRequest) GetState() string { return a.r.State }
+
+// GetNonce returns the value binding an ID token to this request.
+func (a *authRequest) GetNonce() string { return a.r.Nonce }
+
+// GetScopes lists the scopes requested.
+func (a *authRequest) GetScopes() []string { return a.r.Scopes }
+
+// GetAuthTime is when the subject actually authenticated, which drives
+// max_age and step-up decisions.
+func (a *authRequest) GetAuthTime() time.Time { return a.r.AuthTime }
+
+// Done reports whether authentication has completed.
+func (a *authRequest) Done() bool { return a.r.Done }
+
+// GetSubject returns the authenticated subject, empty until it has one.
 func (a *authRequest) GetSubject() string {
 	if a.r.SubjectID == nil {
 		return ""
@@ -182,8 +217,10 @@ func (a *authRequest) GetACR() string { return "" }
 // that Cardinal's policy matched its own needs.
 func (a *authRequest) GetAMR() []string { return a.r.AMR }
 
+// GetAudience is the client itself; Cardinal issues no cross-client audiences.
 func (a *authRequest) GetAudience() []string { return []string{a.r.ClientID} }
 
+// GetResponseType returns the response type requested.
 func (a *authRequest) GetResponseType() oidc.ResponseType {
 	return oidc.ResponseType(a.r.ResponseType)
 }
@@ -192,6 +229,7 @@ func (a *authRequest) GetResponseType() oidc.ResponseType {
 // response type — `query` for the code flow.
 func (a *authRequest) GetResponseMode() oidc.ResponseMode { return "" }
 
+// GetCodeChallenge returns the PKCE challenge, if one was sent.
 func (a *authRequest) GetCodeChallenge() *oidc.CodeChallenge {
 	if a.r.CodeChallenge == "" {
 		return nil
@@ -217,10 +255,15 @@ type signingKey struct {
 	key *store.SigningKey
 }
 
+// SignatureAlgorithm is the algorithm this key signs with.
 func (k *signingKey) SignatureAlgorithm() jose.SignatureAlgorithm {
 	return jose.RS256
 }
-func (k *signingKey) Key() any   { return k.key.Private }
+
+// Key returns the underlying key material.
+func (k *signingKey) Key() any { return k.key.Private }
+
+// ID returns the key identifier published in the JWKS.
 func (k *signingKey) ID() string { return k.key.KeyID }
 
 // publicKey adapts a verification key to op.Key, for the JWKS endpoint.
@@ -228,9 +271,16 @@ type publicKey struct {
 	key *store.SigningKey
 }
 
-func (k *publicKey) ID() string                         { return k.key.KeyID }
+// ID returns the key identifier published in the JWKS.
+func (k *publicKey) ID() string { return k.key.KeyID }
+
+// Algorithm is the algorithm this public key verifies.
 func (k *publicKey) Algorithm() jose.SignatureAlgorithm { return jose.RS256 }
-func (k *publicKey) Use() string                        { return "sig" }
+
+// Use marks this key as a signing key in the JWKS.
+func (k *publicKey) Use() string { return "sig" }
+
+// Key returns the underlying key material.
 func (k *publicKey) Key() any {
 	pub, ok := k.key.Private.Public().(*rsa.PublicKey)
 	if !ok {

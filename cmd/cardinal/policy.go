@@ -144,7 +144,7 @@ func runPolicyActivate(ctx context.Context, args []string) error {
 	}
 
 	var version int64
-	if _, err := fmt.Sscanf(pos[0], "%d", &version); err != nil {
+	if _, sscanfErr := fmt.Sscanf(pos[0], "%d", &version); sscanfErr != nil {
 		return fmt.Errorf("%w: version must be a number", errUsage)
 	}
 
@@ -202,13 +202,13 @@ func runPolicyList(ctx context.Context, args []string) error {
 	}
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "VERSION\tLIVE\tPUBLISHED\tDIGEST\tDESCRIPTION")
+	fmt.Fprintln(w, "VERSION\tLIVE\tPUBLISHED\tDIGEST\tDESCRIPTION") //nolint:errcheck // the header is already written, so the status cannot be changed
 	for _, v := range versions {
 		live := ""
 		if v.Active() {
 			live = "→ live"
 		}
-		fmt.Fprintf(w, "%d\t%s\t%s\t%s\t%s\n",
+		fmt.Fprintf(w, "%d\t%s\t%s\t%s\t%s\n", //nolint:errcheck // the header is already written, so the status cannot be changed
 			v.Version, live, v.CreatedAt.Format(time.DateOnly),
 			hex.EncodeToString(v.Digest)[:12], v.Description)
 	}

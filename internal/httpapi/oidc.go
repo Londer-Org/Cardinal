@@ -69,14 +69,14 @@ func (s *Server) handleOIDCLogin(w http.ResponseWriter, r *http.Request) {
 	// an application they may not use would be a strange question, and agreeing
 	// would leave a consent record for access that never happened.
 	if authenticated {
-		client, err := s.store.OIDCClientByID(ctx, authReq.ClientID)
-		if err != nil {
+		client, oIDCClientByIDErr := s.store.OIDCClientByID(ctx, authReq.ClientID)
+		if oIDCClientByIDErr != nil {
 			writeError(w, http.StatusBadRequest, "unknown application")
 			return
 		}
-		access, err := s.canAccessApplication(ctx, session, client)
-		if err != nil {
-			s.log.ErrorContext(ctx, "application access check failed", "error", err)
+		access, oIDCClientByIDErr := s.canAccessApplication(ctx, session, client)
+		if oIDCClientByIDErr != nil {
+			s.log.ErrorContext(ctx, "application access check failed", "error", oIDCClientByIDErr)
 			writeError(w, http.StatusServiceUnavailable, "authorization unavailable")
 			return
 		}

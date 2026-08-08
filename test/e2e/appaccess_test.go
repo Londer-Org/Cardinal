@@ -66,7 +66,7 @@ func TestApplicationAccessIsEnforcedServerSide(t *testing.T) {
 		defer drain(resp)
 
 		if resp.StatusCode != http.StatusForbidden {
-			body, _ := io.ReadAll(resp.Body)
+			body, _ := io.ReadAll(resp.Body) //nolint:errcheck // a body that will not read is reported by the assertion that follows
 			t.Fatalf("resume returned %d for a refused application, want 403: %s — "+
 				"a check only the SPA performs is a check anything else skips",
 				resp.StatusCode, body)
@@ -185,7 +185,6 @@ func publishPolicy(t *testing.T, document string) func() {
 	t.Helper()
 
 	apply := func(path string) {
-		//nolint:gosec // paths are written in this file, not taken from input
 		out, err := exec.CommandContext(t.Context(), "docker", "compose",
 			"-f", "../../examples/compose.yml", "exec", "-T", "cardinal",
 			"cardinal", "policy", "publish", path,
@@ -215,12 +214,11 @@ func publishPolicy(t *testing.T, document string) func() {
 	// World-readable before copying: the container runs as nonroot, and docker
 	// cp preserves the mode, so a 0600 temp file lands unreadable inside. It is
 	// a test policy in a temp dir, not a secret.
-	//nolint:gosec // deliberately readable; see above
+
 	if err := os.Chmod(tmp.Name(), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
-	//nolint:gosec // path from t.TempDir
 	if out, err := exec.CommandContext(t.Context(), "docker", "cp", tmp.Name(),
 		containerID(t)+":/tmp/e2e-policy.cedar").CombinedOutput(); err != nil {
 		t.Fatalf("copying policy: %v\n%s", err, out)
@@ -228,7 +226,6 @@ func publishPolicy(t *testing.T, document string) func() {
 	apply("/tmp/e2e-policy.cedar")
 
 	return func() {
-		//nolint:gosec // fixed path
 		if out, err := exec.CommandContext(context.WithoutCancel(t.Context()), "docker", "cp",
 			"../../policies/cardinal.cedar",
 			containerID(t)+":/tmp/cardinal.cedar").CombinedOutput(); err != nil {

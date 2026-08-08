@@ -189,8 +189,8 @@ func TestMissingCacheIsDistinguishable(t *testing.T) {
 	}
 
 	corrupt := filepath.Join(t.TempDir(), "corrupt.json")
-	if err := os.WriteFile(corrupt, []byte("{\"host\": \"web-01"), 0o600); err != nil {
-		t.Fatal(err)
+	if writeFileErr := os.WriteFile(corrupt, []byte("{\"host\": \"web-01"), 0o600); writeFileErr != nil {
+		t.Fatal(writeFileErr)
 	}
 	b := &agent.Agent{CachePath: corrupt}
 	_, err = b.LoadCache()
@@ -215,7 +215,7 @@ func TestRefreshUpdatesCacheAndSnapshot(t *testing.T) {
 			if r.Header.Get("Authorization") == "" {
 				t.Error("the agent sent an unsigned request")
 			}
-			_ = json.NewEncoder(w).Encode(sample())
+			_ = json.NewEncoder(w).Encode(sample()) //nolint:errcheck // the header is already written, so the status cannot be changed
 		}))
 	defer server.Close()
 
@@ -262,10 +262,10 @@ func TestAnOutageDoesNotClearWhatIsServed(t *testing.T) {
 		func(w http.ResponseWriter, _ *http.Request) {
 			if !reachable {
 				w.WriteHeader(http.StatusServiceUnavailable)
-				_, _ = w.Write([]byte(`{"error":"authorization unavailable"}`))
+				_, _ = w.Write([]byte(`{"error":"authorization unavailable"}`)) //nolint:errcheck // the header is already written, so the status cannot be changed
 				return
 			}
-			_ = json.NewEncoder(w).Encode(sample())
+			_ = json.NewEncoder(w).Encode(sample()) //nolint:errcheck // the header is already written, so the status cannot be changed
 		}))
 	defer server.Close()
 
@@ -302,7 +302,7 @@ func TestARebootDuringAnOutageStillResolves(t *testing.T) {
 
 	server := httptest.NewServer(http.HandlerFunc(
 		func(w http.ResponseWriter, _ *http.Request) {
-			_ = json.NewEncoder(w).Encode(sample())
+			_ = json.NewEncoder(w).Encode(sample()) //nolint:errcheck // the header is already written, so the status cannot be changed
 		}))
 
 	before := &agent.Agent{Identity: testIdentity(t, server.URL), CachePath: path}
@@ -351,7 +351,7 @@ func TestRunKeepsGoingAfterAFailure(t *testing.T) {
 				w.WriteHeader(http.StatusInternalServerError)
 				return
 			}
-			_ = json.NewEncoder(w).Encode(sample())
+			_ = json.NewEncoder(w).Encode(sample()) //nolint:errcheck // the header is already written, so the status cannot be changed
 		}))
 	defer server.Close()
 
@@ -393,7 +393,7 @@ func TestRunKeepsGoingAfterAFailure(t *testing.T) {
 func TestFetchWritesNothing(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(
 		func(w http.ResponseWriter, _ *http.Request) {
-			_ = json.NewEncoder(w).Encode(sample())
+			_ = json.NewEncoder(w).Encode(sample()) //nolint:errcheck // the header is already written, so the status cannot be changed
 		}))
 	defer server.Close()
 

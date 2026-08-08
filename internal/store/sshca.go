@@ -96,7 +96,7 @@ func (s *Store) CreateSSHCAKey(ctx context.Context, encryptionKey string, actorI
 	if err != nil {
 		return nil, fmt.Errorf("store: beginning transaction: %w", err)
 	}
-	defer func() { _ = tx.Rollback(ctx) }()
+	defer func() { _ = tx.Rollback(ctx) }() //nolint:errcheck // a rollback after a successful commit returns ErrTxClosed
 
 	err = tx.QueryRow(ctx, `
 		INSERT INTO ssh_ca_keys (algorithm, private_key_sealed, public_key, fingerprint)
@@ -135,14 +135,14 @@ func (s *Store) ActivateSSHCAKey(
 	if err != nil {
 		return fmt.Errorf("store: beginning transaction: %w", err)
 	}
-	defer func() { _ = tx.Rollback(ctx) }()
+	defer func() { _ = tx.Rollback(ctx) }() //nolint:errcheck // a rollback after a successful commit returns ErrTxClosed
 
-	if _, err := tx.Exec(ctx, `
+	if _, execErr := tx.Exec(ctx, `
 		UPDATE ssh_ca_keys
 		   SET retired_at = now(), valid_until = now() + $1::interval
 		 WHERE active_at IS NOT NULL AND retired_at IS NULL AND id <> $2`,
-		grace, keyID); err != nil {
-		return fmt.Errorf("store: retiring previous SSH CA key: %w", err)
+		grace, keyID); execErr != nil {
+		return fmt.Errorf("store: retiring previous SSH CA key: %w", execErr)
 	}
 
 	tag, err := tx.Exec(ctx, `
@@ -257,16 +257,16 @@ func (s *Store) RecordSSHCertificate(ctx context.Context, r *SSHCertificateRecor
 	if err != nil {
 		return fmt.Errorf("store: beginning transaction: %w", err)
 	}
-	defer func() { _ = tx.Rollback(ctx) }()
+	defer func() { _ = tx.Rollback(ctx) }() //nolint:errcheck // a rollback after a successful commit returns ErrTxClosed
 
-	if _, err := tx.Exec(ctx, `
+	if _, execErr := tx.Exec(ctx, `
 		INSERT INTO ssh_certificates
 			(serial, subject_id, host_id, principals, ca_key_id, key_id, expires_at)
 		VALUES ($1, $2, $3, $4, $5, $6, $7)`,
 		//nolint:gosec // newSerial() shifts right by one, so this always fits
 		int64(r.Serial), r.SubjectID, r.HostID, orEmpty(r.Principals),
-		r.CAKeyID, r.KeyID, r.ExpiresAt); err != nil {
-		return fmt.Errorf("store: recording SSH certificate: %w", err)
+		r.CAKeyID, r.KeyID, r.ExpiresAt); execErr != nil {
+		return fmt.Errorf("store: recording SSH certificate: %w", execErr)
 	}
 
 	ev, err := event.New(event.ActionSSHCertificateIssued, &r.SubjectID, nil,

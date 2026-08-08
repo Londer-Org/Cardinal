@@ -37,7 +37,7 @@ func TestEnrollmentRequiresAnInvitation(t *testing.T) {
 			defer drain(resp)
 
 			if resp.StatusCode != tc.want {
-				body, _ := io.ReadAll(resp.Body)
+				body, _ := io.ReadAll(resp.Body) //nolint:errcheck // a body that will not read is reported by the assertion that follows
 				t.Fatalf("got %d, want %d: %s", resp.StatusCode, tc.want, body)
 			}
 		})
@@ -81,7 +81,7 @@ func TestInvitationDoesNotLeakWhetherAnAccountExists(t *testing.T) {
 	} {
 		resp := request(t, c, http.MethodGet, hostCardinal,
 			"/api/enroll?token="+token, "application/json")
-		body, _ := io.ReadAll(resp.Body)
+		body, _ := io.ReadAll(resp.Body) //nolint:errcheck // a body that will not read is reported by the assertion that follows
 		drain(resp)
 		bodies = append(bodies, string(body))
 	}
@@ -120,7 +120,7 @@ func TestIssuingAnInvitationIsAdministration(t *testing.T) {
 	defer drain(resp)
 
 	if resp.StatusCode != http.StatusForbidden {
-		payload, _ := io.ReadAll(resp.Body)
+		payload, _ := io.ReadAll(resp.Body) //nolint:errcheck // a body that will not read is reported by the assertion that follows
 		t.Fatalf("an ordinary user issued an invitation (%d): %s — any employee "+
 			"could then mint a credential on a colleague's account",
 			resp.StatusCode, payload)
@@ -160,7 +160,7 @@ func TestAdminCanIssueAndRevokeAnInvitation(t *testing.T) {
 	defer drain(resp)
 
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
+		body, _ := io.ReadAll(resp.Body) //nolint:errcheck // a body that will not read is reported by the assertion that follows
 		t.Fatalf("the issued invitation does not resolve (%d): %s", resp.StatusCode, body)
 	}
 	var details struct {

@@ -84,22 +84,22 @@ func main1() int {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
 	}
-	if err := sudoers.Install(ctx, sudoers.DefaultPath, content); err != nil {
-		fmt.Fprintln(os.Stderr, err)
+	if installErr := sudoers.Install(ctx, sudoers.DefaultPath, content); installErr != nil {
+		fmt.Fprintln(os.Stderr, installErr)
 		return 1
 	}
 
-	if err := writeHostCertificate(); err != nil {
-		fmt.Fprintln(os.Stderr, err)
+	if writeHostCertificateErr := writeHostCertificate(); writeHostCertificateErr != nil {
+		fmt.Fprintln(os.Stderr, writeHostCertificateErr)
 		return 1
 	}
 
-	if err := os.MkdirAll(userdb.DefaultRunDir, 0o755); err != nil { //nolint:gosec // matches systemd's own mode
-		fmt.Fprintln(os.Stderr, err)
+	if mkdirErr := os.MkdirAll(userdb.DefaultRunDir, 0o755); mkdirErr != nil { //nolint:gosec // matches systemd's own mode
+		fmt.Fprintln(os.Stderr, mkdirErr)
 		return 1
 	}
 	path := userdb.SocketPath(userdb.DefaultRunDir, userdb.ServiceName)
-	_ = os.Remove(path)
+	_ = os.Remove(path) //nolint:errcheck // cleanup of a file the success path has already renamed away
 
 	var config net.ListenConfig
 	listener, err := config.Listen(ctx, "unix", path)

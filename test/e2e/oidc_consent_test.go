@@ -29,10 +29,10 @@ func TestConsentIsEnforcedServerSide(t *testing.T) {
 
 	resp := request(t, c, http.MethodGet, hostCardinal,
 		"/api/oidc/resume?auth="+url.QueryEscape(authID), "application/json")
-	defer resp.Body.Close()
+	defer resp.Body.Close() //nolint:errcheck // nothing actionable remains once the body is read
 
 	if resp.StatusCode != http.StatusForbidden {
-		body, _ := io.ReadAll(resp.Body)
+		body, _ := io.ReadAll(resp.Body) //nolint:errcheck // a body that will not read is reported by the assertion that follows
 		t.Fatalf("resume returned %d for a client requiring consent, want 403: %s",
 			resp.StatusCode, body)
 	}
@@ -137,7 +137,7 @@ func TestRefusedConsentDiscardsTheRequest(t *testing.T) {
 
 	resp := request(t, c, http.MethodGet, hostCardinal,
 		"/api/oidc/resume?auth="+url.QueryEscape(authID), "application/json")
-	defer resp.Body.Close()
+	defer resp.Body.Close() //nolint:errcheck // nothing actionable remains once the body is read
 
 	if resp.StatusCode < 400 {
 		t.Fatalf("a refused authorization was still resumable (%d)", resp.StatusCode)
@@ -159,10 +159,10 @@ func fetchPending(t *testing.T, c *http.Client, authID string) pendingAuthorizat
 
 	resp := request(t, c, http.MethodGet, hostCardinal,
 		"/api/oidc/pending?auth="+url.QueryEscape(authID), "application/json")
-	defer resp.Body.Close()
+	defer resp.Body.Close() //nolint:errcheck // nothing actionable remains once the body is read
 
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
+		body, _ := io.ReadAll(resp.Body) //nolint:errcheck // a body that will not read is reported by the assertion that follows
 		t.Fatalf("pending returned %d: %s", resp.StatusCode, body)
 	}
 
@@ -182,10 +182,10 @@ func fetchConsents(t *testing.T, c *http.Client) []grantedConsent {
 	t.Helper()
 
 	resp := request(t, c, http.MethodGet, hostCardinal, "/api/consents", "application/json")
-	defer resp.Body.Close()
+	defer resp.Body.Close() //nolint:errcheck // nothing actionable remains once the body is read
 
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
+		body, _ := io.ReadAll(resp.Body) //nolint:errcheck // a body that will not read is reported by the assertion that follows
 		t.Fatalf("listing consents returned %d: %s", resp.StatusCode, body)
 	}
 
@@ -212,10 +212,10 @@ func revokeConsent(t *testing.T, c *http.Client, csrf, clientID string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer resp.Body.Close()
+	defer resp.Body.Close() //nolint:errcheck // nothing actionable remains once the body is read
 
 	if resp.StatusCode != http.StatusNoContent && resp.StatusCode != http.StatusNotFound {
-		body, _ := io.ReadAll(resp.Body)
+		body, _ := io.ReadAll(resp.Body) //nolint:errcheck // a body that will not read is reported by the assertion that follows
 		t.Fatalf("revoking consent returned %d: %s", resp.StatusCode, body)
 	}
 }
@@ -225,10 +225,10 @@ func resumeAuthorization(t *testing.T, c *http.Client, authID string) string {
 
 	resp := request(t, c, http.MethodGet, hostCardinal,
 		"/api/oidc/resume?auth="+url.QueryEscape(authID), "application/json")
-	defer resp.Body.Close()
+	defer resp.Body.Close() //nolint:errcheck // nothing actionable remains once the body is read
 
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
+		body, _ := io.ReadAll(resp.Body) //nolint:errcheck // a body that will not read is reported by the assertion that follows
 		t.Fatalf("resume returned %d: %s", resp.StatusCode, body)
 	}
 
@@ -284,11 +284,11 @@ func handoff(t *testing.T, c *http.Client, clientID, scope string) string {
 
 	resp := request(t, c, http.MethodGet, hostCardinal,
 		"/oidc/authorize?"+q.Encode(), "text/html")
-	resp.Body.Close()
+	resp.Body.Close() //nolint:errcheck // nothing actionable remains once the body is read
 	bridge := mustLocation(t, resp)
 
 	resp = request(t, c, http.MethodGet, hostCardinal, pathOf(t, bridge), "text/html")
-	resp.Body.Close()
+	resp.Body.Close() //nolint:errcheck // nothing actionable remains once the body is read
 
 	return mustLocation(t, resp)
 }
@@ -301,7 +301,7 @@ func registerConsentClient(t *testing.T) string {
 	const name = "consent-required-client"
 
 	if !strings.Contains(cardinalCLI(t, "app", "list"), name) {
-		out, err := exec.Command("docker", "compose", "-f", "../../examples/compose.yml",
+		out, err := exec.CommandContext(t.Context(), "docker", "compose", "-f", "../../examples/compose.yml",
 			"exec", "-T", "cardinal", "cardinal", "app", "register", name,
 			"-redirect", origin(hostRP)+"/callback",
 			"-dev-mode",
@@ -315,7 +315,7 @@ func registerConsentClient(t *testing.T) string {
 
 	repointClient(t, name)
 
-	out, err := exec.Command("docker", "compose", "-f", "../../examples/compose.yml",
+	out, err := exec.CommandContext(t.Context(), "docker", "compose", "-f", "../../examples/compose.yml",
 		"exec", "-T", "postgres", "psql", "-U", "cardinal", "-d", "cardinal", "-tAc",
 		"SELECT client_id FROM oidc_clients c JOIN entities e ON e.id = c.entity_id "+
 			"WHERE e.name = '"+name+"'").Output()

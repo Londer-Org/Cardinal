@@ -213,7 +213,7 @@ func (s *Server) handleEnrollFinish(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	from, _ := netip.ParseAddr(s.clientIP.resolve(r))
+	from, _ := netip.ParseAddr(s.clientIP.resolve(r)) //nolint:errcheck // an unparseable address records as the zero value, which is the honest record
 	if _, err := s.store.RedeemInvitation(ctx, req.Token, from); err != nil {
 		// The credential exists and works. Refusing now would be worse than
 		// leaving the invitation live, and it is single-use in SQL regardless.

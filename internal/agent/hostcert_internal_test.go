@@ -54,7 +54,7 @@ func TestAMachineWithNoHostKeysStillValidatesTheDropIn(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			dir := t.TempDir()
 			stub := filepath.Join(dir, "sshd")
-			if err := os.WriteFile(stub, []byte(tc.script), 0o755); err != nil { //nolint:gosec // a stub in a temp dir
+			if err := os.WriteFile(stub, []byte(tc.script), 0o755); err != nil {
 				t.Fatal(err)
 			}
 			t.Setenv("PATH", dir)

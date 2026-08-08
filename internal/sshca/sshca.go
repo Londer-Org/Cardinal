@@ -234,13 +234,13 @@ func New(s *store.Store, sealKey string) *CA {
 // it.
 func (c *CA) Issue(ctx context.Context, req Request) (*ssh.Certificate, error) {
 	if req.PublicKey == nil {
-		return nil, fmt.Errorf("sshca: no public key to sign")
+		return nil, errors.New("sshca: no public key to sign")
 	}
 	if len(req.Principals) == 0 {
 		// A certificate with no principals is valid and useless: OpenSSH treats
 		// an empty list as "any principal", which would turn a policy decision
 		// that produced nothing into unrestricted access.
-		return nil, fmt.Errorf("sshca: refusing to issue a certificate with no principals")
+		return nil, errors.New("sshca: refusing to issue a certificate with no principals")
 	}
 
 	key, err := c.store.ActiveSSHCAKey(ctx, c.seal)

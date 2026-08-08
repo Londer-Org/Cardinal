@@ -30,14 +30,17 @@ type Storage struct {
 	loginURL func(authRequestID string) string
 }
 
+// NewStorage adapts the directory to the op.Storage interface.
 func NewStorage(s *store.Store, resolver *claims.Resolver, sealKey string, loginURL func(string) string) *Storage {
 	return &Storage{store: s, claims: resolver, sealKey: sealKey, loginURL: loginURL}
 }
 
+// Health reports whether the database behind the provider is reachable.
 func (s *Storage) Health(ctx context.Context) error { return s.store.Ping(ctx) }
 
 // ── Clients ────────────────────────────────────────────────────────────────
 
+// GetClientByClientID looks up a registered relying party.
 func (s *Storage) GetClientByClientID(ctx context.Context, clientID string) (op.Client, error) {
 	c, err := s.store.OIDCClientByID(ctx, clientID)
 	if err != nil {
@@ -49,6 +52,7 @@ func (s *Storage) GetClientByClientID(ctx context.Context, clientID string) (op.
 	return &client{c: c, loginURL: s.loginURL}, nil
 }
 
+// AuthorizeClientIDSecret verifies a confidential client's secret.
 func (s *Storage) AuthorizeClientIDSecret(ctx context.Context, clientID, secret string) error {
 	if err := s.store.VerifyClientSecret(ctx, clientID, secret); err != nil {
 		// Deliberately identical for "no such client" and "wrong secret": the
@@ -60,6 +64,7 @@ func (s *Storage) AuthorizeClientIDSecret(ctx context.Context, clientID, secret 
 
 // ── Authorization requests ─────────────────────────────────────────────────
 
+// CreateAuthRequest records a new authorization request.
 func (s *Storage) CreateAuthRequest(ctx context.Context, req *oidc.AuthRequest, _ string) (op.AuthRequest, error) {
 	// Scopes are narrowed to what the client is registered for, here, before
 	// anything is recorded.
@@ -142,6 +147,7 @@ func (s *Storage) permittedScopes(ctx context.Context, clientID string, requeste
 	return kept
 }
 
+// AuthRequestByID retrieves a pending authorization request.
 func (s *Storage) AuthRequestByID(ctx context.Context, id string) (op.AuthRequest, error) {
 	parsed, err := uuid.Parse(id)
 	if err != nil {
@@ -155,6 +161,7 @@ func (s *Storage) AuthRequestByID(ctx context.Context, id string) (op.AuthReques
 	return &authRequest{r: stored}, nil
 }
 
+// AuthRequestByCode exchanges an authorization code for its request.
 func (s *Storage) AuthRequestByCode(ctx context.Context, code string) (op.AuthRequest, error) {
 	// Redeeming consumes the code. The library calls this exactly once per
 	// token exchange, and single use is enforced in the database rather than
@@ -171,6 +178,7 @@ func (s *Storage) AuthRequestByCode(ctx context.Context, code string) (op.AuthRe
 	return &authRequest{r: stored}, nil
 }
 
+// SaveAuthCode attaches an issued authorization code to its request.
 func (s *Storage) SaveAuthCode(ctx context.Context, id, code string) error {
 	parsed, err := uuid.Parse(id)
 	if err != nil {
@@ -179,10 +187,13 @@ func (s *Storage) SaveAuthCode(ctx context.Context, id, code string) error {
 	return s.store.SaveAuthCode(ctx, parsed, code)
 }
 
+// DeleteAuthRequest discards a request once it is spent.
 func (s *Storage) DeleteAuthRequest(ctx context.Context, id string) error {
 	parsed, err := uuid.Parse(id)
 	if err != nil {
-		return nil // Nothing to delete; not worth an error.
+		// Nothing to delete. An id that is not a UUID matches no auth request,
+		// so the caller's intent — that it be gone — already holds.
+		return nil //nolint:nilerr // absence is the requested state
 	}
 	return s.store.DeleteAuthRequest(ctx, parsed)
 }
@@ -211,6 +222,7 @@ func (s *Storage) CompleteAuthentication(ctx context.Context, requestID, subject
 
 // ── Tokens ─────────────────────────────────────────────────────────────────
 
+// CreateAccessToken issues an access token for a completed request.
 func (s *Storage) CreateAccessToken(ctx context.Context, req op.TokenRequest) (string, time.Time, error) {
 	token, err := s.createToken(ctx, req, "")
 	if err != nil {
@@ -219,6 +231,7 @@ func (s *Storage) CreateAccessToken(ctx context.Context, req op.TokenRequest) (s
 	return token.ID.String(), token.ExpiresAt, nil
 }
 
+// CreateAccessAndRefreshTokens issues both, rotating any refresh token given.
 func (s *Storage) CreateAccessAndRefreshTokens(ctx context.Context, req op.TokenRequest, currentRefreshToken string) (string, string, time.Time, error) {
 	refresh, err := newOpaqueToken()
 	if err != nil {
@@ -286,6 +299,7 @@ func (s *Storage) createToken(ctx context.Context, req op.TokenRequest, refresh 
 	return token, nil
 }
 
+// TokenRequestByRefreshToken resolves a refresh token to what it may renew.
 func (s *Storage) TokenRequestByRefreshToken(ctx context.Context, refreshToken string) (op.RefreshTokenRequest, error) {
 	token, err := s.store.TokenByRefresh(ctx, refreshToken)
 	if err != nil {
@@ -294,15 +308,19 @@ func (s *Storage) TokenRequestByRefreshToken(ctx context.Context, refreshToken s
 	return &refreshRequest{t: token}, nil
 }
 
+// TerminateSession ends a subject's sessions on back-channel logout.
 func (s *Storage) TerminateSession(ctx context.Context, userID, clientID string) error {
 	subjectID, err := uuid.Parse(userID)
 	if err != nil {
-		return nil
+		// Same reasoning as DeleteAuthRequest: sessions are keyed by UUID, so
+		// an unparseable subject owns none and there is nothing to terminate.
+		return nil //nolint:nilerr // absence is the requested state
 	}
 	_, err = s.store.RevokeAllSessions(ctx, subjectID, &subjectID)
 	return err
 }
 
+// RevokeToken invalidates an access or refresh token.
 func (s *Storage) RevokeToken(ctx context.Context, tokenOrTokenID, userID, clientID string) *oidc.Error {
 	// A refresh token arrives as the token itself; an access token as its ID.
 	if token, err := s.store.TokenByRefresh(ctx, tokenOrTokenID); err == nil {
@@ -323,6 +341,7 @@ func (s *Storage) RevokeToken(ctx context.Context, tokenOrTokenID, userID, clien
 	return nil
 }
 
+// GetRefreshTokenInfo resolves a refresh token to its subject and id.
 func (s *Storage) GetRefreshTokenInfo(ctx context.Context, clientID, token string) (string, string, error) {
 	stored, err := s.store.TokenByRefresh(ctx, token)
 	if err != nil {
@@ -353,12 +372,14 @@ func (s *Storage) SetUserinfoFromRequest(ctx context.Context, info *oidc.UserInf
 	return s.setUserinfo(ctx, info, request.GetSubject(), scopes)
 }
 
+// SetUserinfoFromToken fills the userinfo response for a token.
 func (s *Storage) SetUserinfoFromToken(ctx context.Context, info *oidc.UserInfo, tokenID, subject, _ string) error {
 	return s.setUserinfo(ctx, info, subject, []string{
 		oidc.ScopeOpenID, oidc.ScopeProfile, oidc.ScopeEmail, "groups",
 	})
 }
 
+// SetIntrospectionFromToken fills an introspection response.
 func (s *Storage) SetIntrospectionFromToken(ctx context.Context, info *oidc.IntrospectionResponse, tokenID, subject, clientID string) error {
 	userinfo := new(oidc.UserInfo)
 	if err := s.setUserinfo(ctx, userinfo, subject, []string{
@@ -422,6 +443,7 @@ func (s *Storage) setUserinfo(ctx context.Context, info *oidc.UserInfo, subject 
 	return nil
 }
 
+// GetPrivateClaimsFromScopes projects directory attributes into claims.
 func (s *Storage) GetPrivateClaimsFromScopes(ctx context.Context, userID, clientID string, scopes []string) (map[string]any, error) {
 	subjectID, err := uuid.Parse(userID)
 	if err != nil {
@@ -458,6 +480,7 @@ func (s *Storage) GetKeyByIDAndClientID(ctx context.Context, keyID, clientID str
 
 // ── Signing keys ───────────────────────────────────────────────────────────
 
+// SigningKey returns the key currently used to sign tokens.
 func (s *Storage) SigningKey(ctx context.Context) (op.SigningKey, error) {
 	key, err := s.store.ActiveSigningKey(ctx, s.sealKey)
 	if err != nil {
@@ -466,6 +489,7 @@ func (s *Storage) SigningKey(ctx context.Context) (op.SigningKey, error) {
 	return &signingKey{key: key}, nil
 }
 
+// SignatureAlgorithms lists what this provider will sign with.
 func (s *Storage) SignatureAlgorithms(context.Context) ([]jose.SignatureAlgorithm, error) {
 	return []jose.SignatureAlgorithm{jose.RS256}, nil
 }
@@ -494,12 +518,26 @@ type refreshRequest struct {
 	t *store.Token
 }
 
-func (r *refreshRequest) GetAMR() []string       { return r.t.AMR }
-func (r *refreshRequest) GetAudience() []string  { return r.t.Audience }
+// GetAMR lists how the subject authenticated.
+func (r *refreshRequest) GetAMR() []string { return r.t.AMR }
+
+// GetAudience is the client itself; Cardinal issues no cross-client audiences.
+func (r *refreshRequest) GetAudience() []string { return r.t.Audience }
+
+// GetAuthTime is when the subject actually authenticated, which drives
+// max_age and step-up decisions.
 func (r *refreshRequest) GetAuthTime() time.Time { return r.t.AuthTime }
-func (r *refreshRequest) GetClientID() string    { return r.t.ClientID }
-func (r *refreshRequest) GetScopes() []string    { return r.t.Scopes }
-func (r *refreshRequest) GetSubject() string     { return r.t.SubjectID.String() }
+
+// GetClientID returns the client this request belongs to.
+func (r *refreshRequest) GetClientID() string { return r.t.ClientID }
+
+// GetScopes lists the scopes requested.
+func (r *refreshRequest) GetScopes() []string { return r.t.Scopes }
+
+// GetSubject returns the authenticated subject, empty until it has one.
+func (r *refreshRequest) GetSubject() string { return r.t.SubjectID.String() }
+
+// SetCurrentScopes narrows the scopes carried by a refreshed token.
 func (r *refreshRequest) SetCurrentScopes(scopes []string) {
 	r.t.Scopes = scopes
 }

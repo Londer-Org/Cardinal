@@ -396,6 +396,6 @@ func sessionBody(s *store.Session) map[string]any {
 // Cardinal does not require one — so it lives in attrs, where the schema
 // registry governs it, and is absent rather than empty when unset.
 func entityEmail(e *directory.Entity) string {
-	email, _ := e.Attrs["email"].(string)
+	email, _ := e.Attrs["email"].(string) //nolint:errcheck // a missing or non-string attribute is the empty string
 	return email
 }

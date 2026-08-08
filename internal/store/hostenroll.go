@@ -81,7 +81,7 @@ func (s *Store) CreateHostEnrollment(
 	if err != nil {
 		return nil, fmt.Errorf("store: beginning transaction: %w", err)
 	}
-	defer func() { _ = tx.Rollback(ctx) }()
+	defer func() { _ = tx.Rollback(ctx) }() //nolint:errcheck // a rollback after a successful commit returns ErrTxClosed
 
 	err = tx.QueryRow(ctx, `
 		INSERT INTO host_enrollment_tokens (host_id, token_hash, issued_by, expires_at)
@@ -121,7 +121,7 @@ func (s *Store) RedeemHostEnrollment(
 	if err != nil {
 		return nil, fmt.Errorf("store: beginning transaction: %w", err)
 	}
-	defer func() { _ = tx.Rollback(ctx) }()
+	defer func() { _ = tx.Rollback(ctx) }() //nolint:errcheck // a rollback after a successful commit returns ErrTxClosed
 
 	var (
 		hostID   uuid.UUID
@@ -160,12 +160,12 @@ func (s *Store) RedeemHostEnrollment(
 	// with a new key should not leave its old one able to authenticate, and the
 	// row survives so that a request made with it last week is still
 	// explicable.
-	if _, err := tx.Exec(ctx, `
+	if _, execErr := tx.Exec(ctx, `
 		UPDATE host_credentials
 		   SET valid_period = tstzrange(lower(valid_period), now())
 		 WHERE host_id = $1 AND upper(valid_period) = 'infinity'::timestamptz`,
-		hostID); err != nil {
-		return nil, fmt.Errorf("store: retiring previous host credential: %w", err)
+		hostID); execErr != nil {
+		return nil, fmt.Errorf("store: retiring previous host credential: %w", execErr)
 	}
 
 	cred := &HostCredential{

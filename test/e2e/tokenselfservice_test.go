@@ -407,24 +407,42 @@ func TestATokenCannotTouchTheCredentialsThatAuthenticateItsOwner(t *testing.T) {
 	for _, tc := range []struct {
 		method, path, why string
 	}{
-		{http.MethodPost, "/api/recovery/codes",
-			"mint account-recovery credentials, and destroy its owner's"},
-		{http.MethodGet, "/api/recovery/codes/remaining",
-			"count how many ways back into the account remain"},
-		{http.MethodPost, "/api/credentials/register/begin",
-			"start attaching a passkey of the holder's choosing"},
-		{http.MethodPost, "/api/credentials/register/finish",
-			"finish attaching one"},
-		{http.MethodGet, "/api/credentials",
-			"enumerate the passkeys to know what to revoke"},
-		{http.MethodDelete, "/api/credentials/" + created.ID,
-			"lock the owner out of their own account"},
-		{http.MethodGet, "/api/tokens",
-			"see what other tokens exist to go after"},
-		{http.MethodPost, "/api/tokens",
-			"mint its own successor and outlive being revoked"},
-		{http.MethodDelete, "/api/tokens/" + created.ID,
-			"revoke tokens using only itself"},
+		{
+			http.MethodPost, "/api/recovery/codes",
+			"mint account-recovery credentials, and destroy its owner's",
+		},
+		{
+			http.MethodGet, "/api/recovery/codes/remaining",
+			"count how many ways back into the account remain",
+		},
+		{
+			http.MethodPost, "/api/credentials/register/begin",
+			"start attaching a passkey of the holder's choosing",
+		},
+		{
+			http.MethodPost, "/api/credentials/register/finish",
+			"finish attaching one",
+		},
+		{
+			http.MethodGet, "/api/credentials",
+			"enumerate the passkeys to know what to revoke",
+		},
+		{
+			http.MethodDelete, "/api/credentials/" + created.ID,
+			"lock the owner out of their own account",
+		},
+		{
+			http.MethodGet, "/api/tokens",
+			"see what other tokens exist to go after",
+		},
+		{
+			http.MethodPost, "/api/tokens",
+			"mint its own successor and outlive being revoked",
+		},
+		{
+			http.MethodDelete, "/api/tokens/" + created.ID,
+			"revoke tokens using only itself",
+		},
 	} {
 		t.Run(tc.method+" "+tc.path, func(t *testing.T) {
 			resp := bearerRequest(t, tc.method, tc.path, created.Token, nil)
@@ -465,7 +483,7 @@ func TestAPasskeySessionStillReachesAllOfIt(t *testing.T) {
 	var codes struct {
 		Codes []string `json:"codes"`
 	}
-	resp := postJSON(t, c, "/api/recovery/codes", csrf, map[string]any{}, &codes)
+	resp := postJSON(t, c, "/api/recovery/codes", csrf, map[string]any{}, &codes) //nolint:bodyclose // the helper drains and closes it; bodyclose cannot see through the call
 	if resp.StatusCode != http.StatusCreated {
 		t.Fatalf("generating recovery codes returned %d", resp.StatusCode)
 	}

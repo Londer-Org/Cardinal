@@ -100,7 +100,7 @@ func (s *Store) CreateAccessToken(
 	if err != nil {
 		return nil, fmt.Errorf("store: beginning transaction: %w", err)
 	}
-	defer func() { _ = tx.Rollback(ctx) }()
+	defer func() { _ = tx.Rollback(ctx) }() //nolint:errcheck // a rollback after a successful commit returns ErrTxClosed
 
 	err = tx.QueryRow(ctx, `
 		INSERT INTO access_tokens (subject_id, name, token_hash, prefix, valid_period, created_by)
@@ -225,7 +225,7 @@ func (s *Store) RevokeAccessToken(
 	if err != nil {
 		return fmt.Errorf("store: beginning transaction: %w", err)
 	}
-	defer func() { _ = tx.Rollback(ctx) }()
+	defer func() { _ = tx.Rollback(ctx) }() //nolint:errcheck // a rollback after a successful commit returns ErrTxClosed
 
 	tag, err := tx.Exec(ctx, `
 		UPDATE access_tokens

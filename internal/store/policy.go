@@ -12,7 +12,10 @@ import (
 )
 
 var (
-	ErrNoActivePolicy      = errors.New("store: no policy version is active")
+	// ErrNoActivePolicy reports that no policy version is active, so nothing can be
+	// authorized.
+	ErrNoActivePolicy = errors.New("store: no policy version is active")
+	// ErrNoSuchPolicyVersion reports that the requested policy version does not exist.
 	ErrNoSuchPolicyVersion = errors.New("store: no such policy version")
 )
 

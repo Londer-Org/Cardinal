@@ -141,21 +141,25 @@ func NewSnapshot(a *Assignment) *Snapshot {
 	return s
 }
 
+// UserByName finds a cached user by login name.
 func (s *Snapshot) UserByName(name string) (userdb.UserRecord, bool) {
 	r, ok := s.usersByName[name]
 	return r, ok
 }
 
+// UserByUID finds a cached user by its numeric uid.
 func (s *Snapshot) UserByUID(uid int) (userdb.UserRecord, bool) {
 	r, ok := s.usersByUID[uid]
 	return r, ok
 }
 
+// GroupByName finds a cached group by name.
 func (s *Snapshot) GroupByName(name string) (userdb.GroupRecord, bool) {
 	r, ok := s.groupsByName[name]
 	return r, ok
 }
 
+// GroupByGID finds a cached group by its numeric gid.
 func (s *Snapshot) GroupByGID(gid int) (userdb.GroupRecord, bool) {
 	r, ok := s.groupsByGID[gid]
 	return r, ok
@@ -215,16 +219,16 @@ func Save(path string, a *Assignment) error {
 	if err != nil {
 		return fmt.Errorf("agent: creating temporary cache: %w", err)
 	}
-	defer func() { _ = os.Remove(tmp.Name()) }()
+	defer func() { _ = os.Remove(tmp.Name()) }() //nolint:errcheck // cleanup of a file the success path has already renamed away
 
 	if _, err := tmp.Write(encoded); err != nil {
-		_ = tmp.Close()
+		_ = tmp.Close() //nolint:errcheck // best effort; the meaningful error is the one being returned
 		return fmt.Errorf("agent: writing cache: %w", err)
 	}
 	// Before the rename, not after. A rename is atomic with respect to
 	// visibility and says nothing about the data having reached the disk.
 	if err := tmp.Sync(); err != nil {
-		_ = tmp.Close()
+		_ = tmp.Close() //nolint:errcheck // best effort; the meaningful error is the one being returned
 		return fmt.Errorf("agent: syncing cache: %w", err)
 	}
 	if err := tmp.Close(); err != nil {

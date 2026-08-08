@@ -162,10 +162,10 @@ func (s *Store) EnableEntity(ctx context.Context, id uuid.UUID, actorID *uuid.UU
 		// and whose owner cannot be told it exists. If that person returns, they
 		// get a new account.
 		var redacted bool
-		if err := tx.QueryRow(ctx,
+		if queryErr := tx.QueryRow(ctx,
 			`SELECT redacted_at IS NOT NULL FROM entities WHERE id = $1`, id,
-		).Scan(&redacted); err != nil {
-			return fmt.Errorf("store: checking redaction: %w", err)
+		).Scan(&redacted); queryErr != nil {
+			return fmt.Errorf("store: checking redaction: %w", queryErr)
 		}
 		if redacted {
 			return fmt.Errorf("store: %s was erased under the right to be "+

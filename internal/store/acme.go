@@ -62,12 +62,12 @@ func (s *Store) CreateEABCredential(
 	// but it must be unguessable anyway: a predictable one lets somebody probe
 	// for which hosts exist.
 	idBytes := make([]byte, 16)
-	if _, err := rand.Read(idBytes); err != nil {
-		return nil, fmt.Errorf("store: generating an EAB key id: %w", err)
+	if _, readErr := rand.Read(idBytes); readErr != nil {
+		return nil, fmt.Errorf("store: generating an EAB key id: %w", readErr)
 	}
 	macKey := make([]byte, 32)
-	if _, err := rand.Read(macKey); err != nil {
-		return nil, fmt.Errorf("store: generating an EAB key: %w", err)
+	if _, readErr := rand.Read(macKey); readErr != nil {
+		return nil, fmt.Errorf("store: generating an EAB key: %w", readErr)
 	}
 
 	sealed, err := seal.seal(macKey)
@@ -82,19 +82,19 @@ func (s *Store) CreateEABCredential(
 	}
 
 	err = s.InTx(ctx, func(tx pgx.Tx) error {
-		if err := tx.QueryRow(ctx, `
+		if queryErr := tx.QueryRow(ctx, `
 			INSERT INTO acme_eab_credentials
 				(subject_id, key_id, hmac_sealed, issued_by, expires_at)
 			VALUES ($1, $2, $3, $4, now() + $5::interval)
 			RETURNING id, expires_at`,
 			subjectID, out.KeyID, sealed, actorID, EABCredentialTTL,
-		).Scan(&out.ID, &out.ExpiresAt); err != nil {
-			return fmt.Errorf("store: storing the EAB credential: %w", err)
+		).Scan(&out.ID, &out.ExpiresAt); queryErr != nil {
+			return fmt.Errorf("store: storing the EAB credential: %w", queryErr)
 		}
 
-		ev, err := event.New(event.ActionACMECredentialIssued, &subjectID, actorID, nil)
-		if err != nil {
-			return err
+		ev, buildErr := event.New(event.ActionACMECredentialIssued, &subjectID, actorID, nil)
+		if buildErr != nil {
+			return buildErr
 		}
 		return s.AppendEvent(ctx, tx, ev)
 	})

@@ -25,8 +25,15 @@ import (
 const signingKeyBits = 2048
 
 var (
-	ErrNoSigningKey    = errors.New("store: no active signing key")
-	ErrSealKeyMissing  = errors.New("store: signing key encryption key is not configured")
+	// ErrNoSigningKey reports that no active key is available to sign tokens.
+	ErrNoSigningKey = errors.New("store: no active signing key")
+	// ErrSealKeyMissing reports that oidc.signing_key_encryption_key is not set. The
+	// signing key can forge tokens for every application, so it is never stored in
+	// the clear.
+	ErrSealKeyMissing = errors.New("store: signing key encryption key is not configured")
+	// ErrSealKeyMismatch reports that the stored signing key cannot be decrypted with
+	// the configured key — usually a key rotated in configuration but not in the
+	// database.
 	ErrSealKeyMismatch = errors.New("store: signing key cannot be decrypted with the configured key")
 )
 

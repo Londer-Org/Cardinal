@@ -29,14 +29,14 @@ const hostRP = "client.cardinal.test"
 // /.well-known/openid-configuration and the JWKS at startup and accepted both.
 func TestRelyingPartyDiscoversTheProvider(t *testing.T) {
 	resp := request(t, client(t), http.MethodGet, hostRP, "/", "text/html")
-	defer resp.Body.Close()
+	defer resp.Body.Close() //nolint:errcheck // nothing actionable remains once the body is read
 
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("got %d — the relying party is not serving, which means go-oidc "+
 			"rejected Cardinal's discovery document or JWKS", resp.StatusCode)
 	}
 
-	body, _ := io.ReadAll(resp.Body)
+	body, _ := io.ReadAll(resp.Body) //nolint:errcheck // a body that will not read is reported by the assertion that follows
 	if !strings.Contains(string(body), "Sign in with Cardinal") {
 		t.Fatal("expected a signed-out home page")
 	}
@@ -48,7 +48,7 @@ func TestAuthorizationRequestIsWellFormed(t *testing.T) {
 	c := client(t)
 
 	resp := request(t, c, http.MethodGet, hostRP, "/login", "text/html")
-	defer resp.Body.Close()
+	defer resp.Body.Close() //nolint:errcheck // nothing actionable remains once the body is read
 
 	if resp.StatusCode != http.StatusFound {
 		t.Fatalf("got %d, want a redirect to the provider", resp.StatusCode)
@@ -90,10 +90,10 @@ func TestFullOIDCLogin(t *testing.T) {
 	completeOIDCLogin(t, c)
 
 	resp := request(t, c, http.MethodGet, hostRP, "/whoami.json", "application/json")
-	defer resp.Body.Close()
+	defer resp.Body.Close() //nolint:errcheck // nothing actionable remains once the body is read
 
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
+		body, _ := io.ReadAll(resp.Body) //nolint:errcheck // a body that will not read is reported by the assertion that follows
 		t.Fatalf("got %d after sign-in: %s", resp.StatusCode, body)
 	}
 
@@ -145,10 +145,10 @@ func TestRefreshTokenRotation(t *testing.T) {
 	completeOIDCLogin(t, c)
 
 	resp := request(t, c, http.MethodPost, hostRP, "/refresh", "application/json")
-	defer resp.Body.Close()
+	defer resp.Body.Close() //nolint:errcheck // nothing actionable remains once the body is read
 
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
+		body, _ := io.ReadAll(resp.Body) //nolint:errcheck // a body that will not read is reported by the assertion that follows
 		t.Fatalf("refresh failed with %d: %s", resp.StatusCode, body)
 	}
 
@@ -173,10 +173,10 @@ func TestRefreshTokenRotation(t *testing.T) {
 		// The second refresh uses the token issued by the first. If rotation
 		// revoked the wrong token, this is where it shows.
 		resp := request(t, c, http.MethodPost, hostRP, "/refresh", "application/json")
-		defer resp.Body.Close()
+		defer resp.Body.Close() //nolint:errcheck // nothing actionable remains once the body is read
 
 		if resp.StatusCode != http.StatusOK {
-			body, _ := io.ReadAll(resp.Body)
+			body, _ := io.ReadAll(resp.Body) //nolint:errcheck // a body that will not read is reported by the assertion that follows
 			t.Fatalf("second refresh failed with %d: %s — rotation revoked the "+
 				"token it had just issued", resp.StatusCode, body)
 		}
@@ -190,19 +190,19 @@ func completeOIDCLogin(t *testing.T, c *http.Client) {
 
 	// 1. The application sends the user to the provider.
 	resp := request(t, c, http.MethodGet, hostRP, "/login", "text/html")
-	resp.Body.Close()
+	resp.Body.Close() //nolint:errcheck // nothing actionable remains once the body is read
 	authorize := mustLocation(t, resp)
 
 	// 2. The provider parks the request and hands off to Cardinal's login
 	//    bridge.
 	resp = request(t, c, http.MethodGet, hostCardinal, pathOf(t, authorize), "text/html")
-	resp.Body.Close()
+	resp.Body.Close() //nolint:errcheck // nothing actionable remains once the body is read
 	bridge := mustLocation(t, resp)
 
 	// 3. With no session, the bridge sends the browser to the SPA, carrying the
 	//    authorization id so it can be resumed after sign-in.
 	resp = request(t, c, http.MethodGet, hostCardinal, pathOf(t, bridge), "text/html")
-	resp.Body.Close()
+	resp.Body.Close() //nolint:errcheck // nothing actionable remains once the body is read
 	authID := parkedAuthorizationID(t, mustLocation(t, resp))
 
 	// 4. Sign in. Break-glass stands in for a passkey, which needs a human.
@@ -215,9 +215,9 @@ func completeOIDCLogin(t *testing.T, c *http.Client) {
 	// 5. The SPA completes the parked authorization.
 	resp = request(t, c, http.MethodGet, hostCardinal,
 		"/api/oidc/resume?auth="+url.QueryEscape(authID), "application/json")
-	defer resp.Body.Close()
+	defer resp.Body.Close() //nolint:errcheck // nothing actionable remains once the body is read
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
+		body, _ := io.ReadAll(resp.Body) //nolint:errcheck // a body that will not read is reported by the assertion that follows
 		t.Fatalf("resume failed with %d: %s", resp.StatusCode, body)
 	}
 	var resume struct {
@@ -229,16 +229,16 @@ func completeOIDCLogin(t *testing.T, c *http.Client) {
 
 	// 6. Back to the provider, which mints the code and redirects to the app.
 	resp = request(t, c, http.MethodGet, hostCardinal, resume.Continue, "text/html")
-	resp.Body.Close()
+	resp.Body.Close() //nolint:errcheck // nothing actionable remains once the body is read
 	callback := mustLocation(t, resp)
 
 	// 7. The relying party exchanges the code and verifies the ID token. A
 	//    redirect here means it succeeded; anything else means go-oidc refused.
 	resp = request(t, c, http.MethodGet, hostRP, pathOf(t, callback), "text/html")
-	defer resp.Body.Close()
+	defer resp.Body.Close() //nolint:errcheck // nothing actionable remains once the body is read
 
 	if resp.StatusCode != http.StatusFound {
-		body, _ := io.ReadAll(resp.Body)
+		body, _ := io.ReadAll(resp.Body) //nolint:errcheck // a body that will not read is reported by the assertion that follows
 		t.Fatalf("the relying party rejected the token (%d): %s", resp.StatusCode, body)
 	}
 }

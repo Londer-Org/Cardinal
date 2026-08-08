@@ -284,7 +284,7 @@ func (j *JWK) Thumbprint() (string, error) {
 // is theirs" — which is how an anonymous ACME account acquires an identity here.
 func VerifyEAB(binding json.RawMessage, macKey []byte, expectedURL string) (keyID string, accountJWK []byte, err error) {
 	var jws JWS
-	if err := json.Unmarshal(binding, &jws); err != nil {
+	if decodeErr := json.Unmarshal(binding, &jws); decodeErr != nil {
 		return "", nil, errors.New("acme: external account binding is not a JWS")
 	}
 
@@ -293,7 +293,7 @@ func VerifyEAB(binding json.RawMessage, macKey []byte, expectedURL string) (keyI
 		return "", nil, errors.New("acme: binding header is not base64url")
 	}
 	var header Header
-	if err := json.Unmarshal(raw, &header); err != nil {
+	if decodeErr := json.Unmarshal(raw, &header); decodeErr != nil {
 		return "", nil, errors.New("acme: binding header is not JSON")
 	}
 

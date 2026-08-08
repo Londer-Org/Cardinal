@@ -68,19 +68,19 @@ func (s *Store) RedactEntity(ctx context.Context, id uuid.UUID, actorID *uuid.UU
 		// Grant justifications are free text and therefore personal data by
 		// default. Clear every one this entity was party to, as member or as
 		// grantor.
-		if _, err := tx.Exec(ctx, `
+		if _, execErr := tx.Exec(ctx, `
 			UPDATE group_members
 			   SET reason = NULL
-			 WHERE member_id = $1 OR granted_by = $1`, id); err != nil {
-			return fmt.Errorf("store: clearing grant justifications: %w", err)
+			 WHERE member_id = $1 OR granted_by = $1`, id); execErr != nil {
+			return fmt.Errorf("store: clearing grant justifications: %w", execErr)
 		}
 
 		// Sessions carry IP addresses and user agents — personal data with no
 		// audit value once the account is gone. Unlike the journal, this table
 		// has no append-only rule, so they are deleted outright.
-		if _, err := tx.Exec(ctx,
-			`DELETE FROM sessions WHERE subject_id = $1`, id); err != nil {
-			return fmt.Errorf("store: deleting sessions: %w", err)
+		if _, execErr := tx.Exec(ctx,
+			`DELETE FROM sessions WHERE subject_id = $1`, id); execErr != nil {
+			return fmt.Errorf("store: deleting sessions: %w", execErr)
 		}
 
 		// A home directory is /home/<login>, so it carries the name the
@@ -89,12 +89,12 @@ func (s *Store) RedactEntity(ctx context.Context, id uuid.UUID, actorID *uuid.UU
 		// makes those files unattributable rather than private. The path is
 		// rewritten rather than nulled because the column is NOT NULL in
 		// spirit — a POSIX user without a home is a login that lands in /.
-		if _, err := tx.Exec(ctx, `
+		if _, execErr := tx.Exec(ctx, `
 			UPDATE posix_identities
 			   SET home_directory = '/home/' || $2
 			 WHERE entity_id = $1 AND home_directory IS NOT NULL`,
-			id, tombstone); err != nil {
-			return fmt.Errorf("store: redacting home directory: %w", err)
+			id, tombstone); execErr != nil {
+			return fmt.Errorf("store: redacting home directory: %w", execErr)
 		}
 
 		// The redaction itself is auditable: the payload records that an entity

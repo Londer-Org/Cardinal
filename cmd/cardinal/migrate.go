@@ -28,18 +28,18 @@ func runMigrate(ctx context.Context, args []string) error {
 	defer s.Close()
 
 	if *status {
-		applied, err := s.AppliedMigrations(ctx)
-		if err != nil {
-			return err
+		applied, appliedMigrationsErr := s.AppliedMigrations(ctx)
+		if appliedMigrationsErr != nil {
+			return appliedMigrationsErr
 		}
 		if len(applied) == 0 {
 			fmt.Println("no migrations applied")
 			return nil
 		}
 		w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-		fmt.Fprintln(w, "MIGRATION\tDIGEST")
+		fmt.Fprintln(w, "MIGRATION\tDIGEST") //nolint:errcheck // the header is already written, so the status cannot be changed
 		for _, m := range applied {
-			fmt.Fprintf(w, "%s\t%s\n", m.Name, m.Digest[:12])
+			fmt.Fprintf(w, "%s\t%s\n", m.Name, m.Digest[:12]) //nolint:errcheck // the header is already written, so the status cannot be changed
 		}
 		return w.Flush()
 	}

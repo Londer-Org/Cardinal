@@ -49,8 +49,8 @@ func (s *Store) AppendEvent(ctx context.Context, tx pgx.Tx, ev *event.Event) err
 	// pgx.ErrNoRows leaves prevHash nil, which is exactly right: the first
 	// event is the genesis record and has no predecessor.
 
-	if err := ev.ComputeHash(prevHash); err != nil {
-		return err
+	if computeHashErr := ev.ComputeHash(prevHash); computeHashErr != nil {
+		return computeHashErr
 	}
 
 	err = tx.QueryRow(ctx, `

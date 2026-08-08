@@ -170,7 +170,7 @@ func runHostCredentials(ctx context.Context, args []string) error {
 	}
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "FINGERPRINT\tSTATE\tENROLLED\tLAST SEEN")
+	fmt.Fprintln(w, "FINGERPRINT\tSTATE\tENROLLED\tLAST SEEN") //nolint:errcheck // the header is already written, so the status cannot be changed
 	for _, c := range creds {
 		seen := "never"
 		if c.LastSeenAt != nil {
@@ -180,7 +180,7 @@ func runHostCredentials(ctx context.Context, args []string) error {
 		if c.Live {
 			state = "live"
 		}
-		fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", c.Fingerprint, state,
+		fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", c.Fingerprint, state, //nolint:errcheck // the header is already written, so the status cannot be changed
 			c.EnrolledAt.Local().Format(time.RFC3339), seen)
 	}
 	return w.Flush()
@@ -219,7 +219,7 @@ func runHostJoin(ctx context.Context, args []string) error {
 		// The key is useless now — it was never registered, and leaving it
 		// behind would make the next attempt fail on O_EXCL with a confusing
 		// message about a key this host does not really have.
-		_ = os.Remove(*keyPath)
+		_ = os.Remove(*keyPath) //nolint:errcheck // cleanup of a file the success path has already renamed away
 		return err
 	}
 
@@ -259,7 +259,7 @@ func runHostWhoami(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
-	defer func() { _ = resp.Body.Close() }()
+	defer func() { _ = resp.Body.Close() }() //nolint:errcheck // nothing actionable remains once the body is read
 
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("cardinal did not recognise this host: %s", resp.Status)

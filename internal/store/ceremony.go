@@ -11,7 +11,9 @@ import (
 )
 
 var (
+	// ErrCeremonyNotFound reports that the WebAuthn ceremony is unknown or expired.
 	ErrCeremonyNotFound = errors.New("store: ceremony not found or expired")
+	// ErrCeremonyConsumed reports that the WebAuthn ceremony has already completed.
 	ErrCeremonyConsumed = errors.New("store: ceremony already completed")
 )
 

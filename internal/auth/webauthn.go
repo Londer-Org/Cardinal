@@ -41,10 +41,14 @@ const CeremonyTTL = 5 * time.Minute
 // actions go unchallenged for a working day.
 
 var (
+	// ErrCeremonyNotFound reports that the WebAuthn ceremony is unknown or expired.
 	ErrCeremonyNotFound = errors.New("auth: ceremony not found or expired")
+	// ErrCeremonyConsumed reports that the WebAuthn ceremony has already completed.
 	ErrCeremonyConsumed = errors.New("auth: ceremony already completed")
-	ErrUnknownUser      = errors.New("auth: unknown user")
-	ErrNotEnrolled      = errors.New("auth: no credentials registered")
+	// ErrUnknownUser reports that the requested user is not in this directory.
+	ErrUnknownUser = errors.New("auth: unknown user")
+	// ErrNotEnrolled reports that the account has no credential and so cannot sign in.
+	ErrNotEnrolled = errors.New("auth: no credentials registered")
 )
 
 // Service performs registration and authentication ceremonies.
@@ -110,8 +114,10 @@ type user struct {
 // LDAP problem of an identifier that changes when a person is renamed.
 func (u *user) WebAuthnID() []byte { return u.entity.ID[:] }
 
+// WebAuthnName is the login shown by the authenticator.
 func (u *user) WebAuthnName() string { return u.entity.Name }
 
+// WebAuthnDisplayName is the human-readable name shown during a ceremony.
 func (u *user) WebAuthnDisplayName() string {
 	if u.entity.DisplayName != "" {
 		return u.entity.DisplayName
@@ -119,6 +125,7 @@ func (u *user) WebAuthnDisplayName() string {
 	return u.entity.Name
 }
 
+// WebAuthnCredentials lists the passkeys already registered to this account.
 func (u *user) WebAuthnCredentials() []webauthn.Credential { return u.creds }
 
 func (s *Service) loadUser(ctx context.Context, entityID uuid.UUID) (*user, error) {
@@ -265,13 +272,13 @@ func (s *Service) FinishLogin(
 	)
 
 	if entityID != nil {
-		u, err := s.loadUser(ctx, *entityID)
-		if err != nil {
-			return nil, err
+		u, loadUserErr := s.loadUser(ctx, *entityID)
+		if loadUserErr != nil {
+			return nil, loadUserErr
 		}
-		cred, err = s.wa.ValidateLogin(u, *sessionData, response)
-		if err != nil {
-			return nil, fmt.Errorf("auth: verifying login: %w", err)
+		cred, loadUserErr = s.wa.ValidateLogin(u, *sessionData, response)
+		if loadUserErr != nil {
+			return nil, fmt.Errorf("auth: verifying login: %w", loadUserErr)
 		}
 		subject = *entityID
 	} else {
@@ -279,8 +286,8 @@ func (s *Service) FinishLogin(
 		// used, and the user handle identifies the account.
 		cred, err = s.wa.ValidateDiscoverableLogin(
 			func(rawID, userHandle []byte) (webauthn.User, error) {
-				id, err := uuid.FromBytes(userHandle)
-				if err != nil {
+				id, parseErr := uuid.FromBytes(userHandle)
+				if parseErr != nil {
 					return nil, fmt.Errorf("%w: malformed user handle", ErrUnknownUser)
 				}
 				subject = id
@@ -294,8 +301,8 @@ func (s *Service) FinishLogin(
 	// Clone detection. A regression here means two authenticators are
 	// presenting the same credential, so the login is refused even though the
 	// signature was valid.
-	if err := s.store.UpdateSignCount(ctx, cred.ID, cred.Authenticator.SignCount); err != nil {
-		return nil, err
+	if updateSignCountErr := s.store.UpdateSignCount(ctx, cred.ID, cred.Authenticator.SignCount); updateSignCountErr != nil {
+		return nil, updateSignCountErr
 	}
 
 	stored, err := s.store.CredentialByID(ctx, cred.ID)
@@ -374,8 +381,8 @@ func (s *Service) ReAuthenticate(
 
 	// Clone detection applies here exactly as it does at login: a sign-count
 	// regression means two authenticators are presenting one credential.
-	if err := s.store.UpdateSignCount(ctx, cred.ID, cred.Authenticator.SignCount); err != nil {
-		return false, err
+	if updateSignCountErr := s.store.UpdateSignCount(ctx, cred.ID, cred.Authenticator.SignCount); updateSignCountErr != nil {
+		return false, updateSignCountErr
 	}
 
 	stored, err := s.store.CredentialByID(ctx, cred.ID)

@@ -45,21 +45,21 @@ func (s *Store) Migrate(ctx context.Context) ([]string, error) {
 	}
 	defer conn.Release()
 
-	if _, err := conn.Exec(ctx, `SELECT pg_advisory_lock($1)`, migrationLock); err != nil {
-		return nil, fmt.Errorf("store: taking migration lock: %w", err)
+	if _, execErr := conn.Exec(ctx, `SELECT pg_advisory_lock($1)`, migrationLock); execErr != nil {
+		return nil, fmt.Errorf("store: taking migration lock: %w", execErr)
 	}
 	defer func() {
-		_, _ = conn.Exec(context.WithoutCancel(ctx),
+		_, _ = conn.Exec(context.WithoutCancel(ctx), //nolint:errcheck // deliberate
 			`SELECT pg_advisory_unlock($1)`, migrationLock)
 	}()
 
-	if _, err := conn.Exec(ctx, `
+	if _, execErr := conn.Exec(ctx, `
 		CREATE TABLE IF NOT EXISTS schema_migrations (
 			name       text        PRIMARY KEY,
 			digest     text        NOT NULL,
 			applied_at timestamptz NOT NULL DEFAULT now()
-		)`); err != nil {
-		return nil, fmt.Errorf("store: creating migration table: %w", err)
+		)`); execErr != nil {
+		return nil, fmt.Errorf("store: creating migration table: %w", execErr)
 	}
 
 	applied := map[string]string{}
@@ -109,13 +109,13 @@ func (s *Store) Migrate(ctx context.Context) ([]string, error) {
 		// database at a known migration boundary rather than partway through
 		// an unknown one.
 		err = s.InTx(ctx, func(tx pgx.Tx) error {
-			if _, err := tx.Exec(ctx, string(body)); err != nil {
-				return fmt.Errorf("applying %s: %w", name, err)
+			if _, execErr := tx.Exec(ctx, string(body)); execErr != nil {
+				return fmt.Errorf("applying %s: %w", name, execErr)
 			}
-			_, err := tx.Exec(ctx,
+			_, execErr := tx.Exec(ctx,
 				`INSERT INTO schema_migrations (name, digest) VALUES ($1, $2)`,
 				name, digest)
-			return err
+			return execErr
 		})
 		if err != nil {
 			return ran, fmt.Errorf("store: %w", err)

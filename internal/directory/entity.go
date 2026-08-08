@@ -23,13 +23,20 @@ import (
 type Type string
 
 const (
-	TypeUser           Type = "user"
-	TypeGroup          Type = "group"
-	TypeHost           Type = "host"
+	// TypeUser is the 'user' type.
+	TypeUser Type = "user"
+	// TypeGroup is the 'group' type.
+	TypeGroup Type = "group"
+	// TypeHost is the 'host' type.
+	TypeHost Type = "host"
+	// TypeServiceAccount is the 'service_account' type.
 	TypeServiceAccount Type = "service_account"
-	TypeApplication    Type = "application"
-	TypeDevice         Type = "device"
-	TypeRole           Type = "role"
+	// TypeApplication is the 'application' type.
+	TypeApplication Type = "application"
+	// TypeDevice is the 'device' type.
+	TypeDevice Type = "device"
+	// TypeRole is the 'role' type.
+	TypeRole Type = "role"
 )
 
 // AllTypes is the authoritative list, kept in sync with the entity_type enum in
@@ -39,6 +46,7 @@ var AllTypes = []Type{
 	TypeApplication, TypeDevice, TypeRole,
 }
 
+// Valid reports whether t is one of the types this directory knows.
 func (t Type) Valid() bool { return slices.Contains(AllTypes, t) }
 
 func (t Type) String() string { return string(t) }
@@ -102,10 +110,14 @@ func (e *Entity) Redacted() bool { return e.RedactedAt != nil }
 func (e *Entity) Active() bool { return e.DisabledAt == nil }
 
 var (
-	ErrNotFound      = errors.New("directory: entity not found")
+	// ErrNotFound reports that no entity matches.
+	ErrNotFound = errors.New("directory: entity not found")
+	// ErrAlreadyExists reports that an entity of this type already holds the name.
 	ErrAlreadyExists = errors.New("directory: entity already exists")
-	ErrInvalidType   = errors.New("directory: invalid entity type")
-	ErrInvalidName   = errors.New("directory: invalid entity name")
+	// ErrInvalidType reports that the entity type is not one the directory knows.
+	ErrInvalidType = errors.New("directory: invalid entity type")
+	// ErrInvalidName reports that the name does not meet the directory's rules.
+	ErrInvalidName = errors.New("directory: invalid entity name")
 )
 
 // ValidateName enforces namePattern and reports precisely what is wrong, since

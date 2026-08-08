@@ -129,14 +129,14 @@ func Install(ctx context.Context, path string, content []byte) error {
 	if err != nil {
 		return fmt.Errorf("sudoers: creating candidate: %w", err)
 	}
-	defer func() { _ = os.Remove(tmp.Name()) }()
+	defer func() { _ = os.Remove(tmp.Name()) }() //nolint:errcheck // cleanup of a file that the success path has already renamed away
 
 	if _, err := tmp.Write(content); err != nil {
-		_ = tmp.Close()
+		_ = tmp.Close() //nolint:errcheck // best effort; the meaningful error is the one being returned
 		return fmt.Errorf("sudoers: writing candidate: %w", err)
 	}
 	if err := tmp.Sync(); err != nil {
-		_ = tmp.Close()
+		_ = tmp.Close() //nolint:errcheck // best effort; the meaningful error is the one being returned
 		return fmt.Errorf("sudoers: syncing candidate: %w", err)
 	}
 	if err := tmp.Close(); err != nil {

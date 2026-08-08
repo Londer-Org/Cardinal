@@ -2,6 +2,7 @@ package store_test
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -111,7 +112,7 @@ func applyMigrations(ctx context.Context, dsn string) error {
 		return err
 	}
 	if len(paths) == 0 {
-		return fmt.Errorf("no migrations found — is the working directory wrong?")
+		return errors.New("no migrations found — is the working directory wrong?")
 	}
 
 	for _, path := range paths {

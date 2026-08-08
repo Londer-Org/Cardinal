@@ -137,7 +137,7 @@ func runSSHCAList(ctx context.Context, args []string) error {
 	}
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "ID\tFINGERPRINT\tSTATE\tTRUSTED UNTIL")
+	fmt.Fprintln(w, "ID\tFINGERPRINT\tSTATE\tTRUSTED UNTIL") //nolint:errcheck // the header is already written, so the status cannot be changed
 	for _, k := range keys {
 		state := "published"
 		switch {
@@ -150,7 +150,7 @@ func runSSHCAList(ctx context.Context, args []string) error {
 		if k.ValidUntil != nil {
 			until = k.ValidUntil.Format(time.RFC3339)
 		}
-		fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", k.ID, k.Fingerprint, state, until)
+		fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", k.ID, k.Fingerprint, state, until) //nolint:errcheck // the header is already written, so the status cannot be changed
 	}
 	return w.Flush()
 }
@@ -203,8 +203,8 @@ func runSSHCARotate(ctx context.Context, args []string) error {
 	if err != nil {
 		return fmt.Errorf("%q is not a key id — see `cardinal ssh ca list`", pos[0])
 	}
-	if _, err := sealKey(*configPath); err != nil {
-		return err
+	if _, sealKeyErr := sealKey(*configPath); sealKeyErr != nil {
+		return sealKeyErr
 	}
 
 	s, err := open(ctx, *dsnFlag)

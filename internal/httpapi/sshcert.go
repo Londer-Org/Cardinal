@@ -126,7 +126,7 @@ func (s *Server) handleIssueSSHCertificate(w http.ResponseWriter, r *http.Reques
 	})
 
 	principalID := subject.ID
-	if err := s.store.LogDecision(ctx, store.DecisionRecord{
+	if logDecisionErr := s.store.LogDecision(ctx, store.DecisionRecord{
 		DecisionPoint: "sshCA",
 		PrincipalID:   &principalID,
 		Action:        "SSHLogin",
@@ -141,13 +141,13 @@ func (s *Server) handleIssueSSHCertificate(w http.ResponseWriter, r *http.Reques
 			"groups":       subject.GroupNames(),
 		},
 		Duration: decision.Duration,
-	}); err != nil {
+	}); logDecisionErr != nil {
 		// Best-effort, as everywhere else. But note this is the *only* record
 		// that will ever exist of this authorization — the host will not
 		// produce one — so a failure here is logged loudly rather than shrugged
 		// at.
 		s.log.ErrorContext(ctx, "SSH certificate decision log write failed",
-			"error", err, "subject", subject.Login, "host", host.Name)
+			"error", logDecisionErr, "subject", subject.Login, "host", host.Name)
 	}
 
 	if len(decision.Errors) > 0 {

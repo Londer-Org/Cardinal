@@ -47,10 +47,10 @@ func TestUnregisteredScopeIsNotGranted(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer resp.Body.Close()
+	defer resp.Body.Close() //nolint:errcheck // nothing actionable remains once the body is read
 
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
+		body, _ := io.ReadAll(resp.Body) //nolint:errcheck // a body that will not read is reported by the assertion that follows
 		t.Fatalf("token exchange failed with %d: %s", resp.StatusCode, body)
 	}
 
@@ -81,7 +81,7 @@ func registerNarrowClient(t *testing.T) string {
 	const name = "narrow-scope-client"
 
 	if !strings.Contains(cardinalCLI(t, "app", "list"), name) {
-		out, err := exec.Command("docker", "compose", "-f", "../../examples/compose.yml",
+		out, err := exec.CommandContext(t.Context(), "docker", "compose", "-f", "../../examples/compose.yml",
 			"exec", "-T", "cardinal", "cardinal", "app", "register", name,
 			"-redirect", origin(hostRP)+"/callback",
 			"-dev-mode",
@@ -95,7 +95,7 @@ func registerNarrowClient(t *testing.T) string {
 
 	repointClient(t, name)
 
-	out, err := exec.Command("docker", "compose", "-f", "../../examples/compose.yml",
+	out, err := exec.CommandContext(t.Context(), "docker", "compose", "-f", "../../examples/compose.yml",
 		"exec", "-T", "postgres", "psql", "-U", "cardinal", "-d", "cardinal", "-tAc",
 		"SELECT client_id FROM oidc_clients c JOIN entities e ON e.id = c.entity_id "+
 			"WHERE e.name = '"+name+"'").Output()
@@ -130,11 +130,11 @@ func authorizeAs(t *testing.T, c *http.Client, clientID, scope string) (code, ve
 
 	resp := request(t, c, http.MethodGet, hostCardinal,
 		"/oidc/authorize?"+q.Encode(), "text/html")
-	resp.Body.Close()
+	resp.Body.Close() //nolint:errcheck // nothing actionable remains once the body is read
 	bridge := mustLocation(t, resp)
 
 	resp = request(t, c, http.MethodGet, hostCardinal, pathOf(t, bridge), "text/html")
-	resp.Body.Close()
+	resp.Body.Close() //nolint:errcheck // nothing actionable remains once the body is read
 	authID := parkedAuthorizationID(t, mustLocation(t, resp))
 
 	cookie := establishSession(t)
@@ -143,9 +143,9 @@ func authorizeAs(t *testing.T, c *http.Client, clientID, scope string) (code, ve
 
 	resp = request(t, c, http.MethodGet, hostCardinal,
 		"/api/oidc/resume?auth="+url.QueryEscape(authID), "application/json")
-	defer resp.Body.Close()
+	defer resp.Body.Close() //nolint:errcheck // nothing actionable remains once the body is read
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
+		body, _ := io.ReadAll(resp.Body) //nolint:errcheck // a body that will not read is reported by the assertion that follows
 		t.Fatalf("resume failed with %d: %s", resp.StatusCode, body)
 	}
 	var resume struct {
@@ -156,7 +156,7 @@ func authorizeAs(t *testing.T, c *http.Client, clientID, scope string) (code, ve
 	}
 
 	callbackResp := request(t, c, http.MethodGet, hostCardinal, resume.Continue, "text/html")
-	callbackResp.Body.Close()
+	callbackResp.Body.Close() //nolint:errcheck // nothing actionable remains once the body is read
 
 	callback, err := url.Parse(mustLocation(t, callbackResp))
 	if err != nil {

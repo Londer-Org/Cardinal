@@ -103,7 +103,7 @@ func dial(t *testing.T, source func() userdb.Source) *client {
 	}
 
 	t.Cleanup(func() {
-		_ = conn.Close()
+		_ = conn.Close() //nolint:errcheck // best effort; the meaningful error is the one being returned
 		cancel()
 		select {
 		case <-done:

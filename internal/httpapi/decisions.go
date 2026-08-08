@@ -4,6 +4,7 @@ import (
 	"encoding/hex"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -109,14 +110,7 @@ func joinPolicies(ids []string) string {
 	case 1:
 		return "policy " + ids[0]
 	default:
-		out := "policies "
-		for i, id := range ids {
-			if i > 0 {
-				out += ", "
-			}
-			out += id
-		}
-		return out
+		return "policies " + strings.Join(ids, ", ")
 	}
 }
 

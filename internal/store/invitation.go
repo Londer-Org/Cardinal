@@ -21,6 +21,8 @@ var (
 	// of those it is tells an attacker whether they guessed a real account.
 	ErrInvitationNotFound = errors.New("store: no usable invitation")
 
+	// ErrAlreadyEnrolled reports that the account already has a credential, so an
+	// enrollment invitation for it would be a second way in rather than a first.
 	ErrAlreadyEnrolled = errors.New("store: account already has credentials")
 )
 

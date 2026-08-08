@@ -110,7 +110,7 @@ func runTokenList(ctx context.Context, args []string) error {
 	}
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "ID\tNAME\tPREFIX\tEXPIRES\tLAST USED")
+	fmt.Fprintln(w, "ID\tNAME\tPREFIX\tEXPIRES\tLAST USED") //nolint:errcheck // the header is already written, so the status cannot be changed
 	for _, t := range tokens {
 		state := t.ValidUntil.Format("2006-01-02")
 		if t.Expired() {
@@ -120,7 +120,7 @@ func runTokenList(ctx context.Context, args []string) error {
 		if t.LastUsedAt != nil {
 			lastUsed = t.LastUsedAt.Format("2006-01-02 15:04")
 		}
-		fmt.Fprintf(w, "%s\t%s\t%s…\t%s\t%s\n",
+		fmt.Fprintf(w, "%s\t%s\t%s…\t%s\t%s\n", //nolint:errcheck // the header is already written, so the status cannot be changed
 			t.ID, t.Name, t.Prefix, state, lastUsed)
 	}
 	return w.Flush()

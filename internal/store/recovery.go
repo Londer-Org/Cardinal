@@ -34,7 +34,10 @@ const (
 )
 
 var (
-	ErrNoRecoveryCode  = errors.New("store: recovery code not recognised")
+	// ErrNoRecoveryCode reports that the code presented matches none on the account.
+	ErrNoRecoveryCode = errors.New("store: recovery code not recognised")
+	// ErrCodeAlreadyUsed reports that the recovery code has been spent. Codes are
+	// single-use by design.
 	ErrCodeAlreadyUsed = errors.New("store: recovery code already used")
 )
 
@@ -109,15 +112,15 @@ func (s *Store) RedeemRecoveryCode(ctx context.Context, entityID uuid.UUID, code
 		var candidates []candidate
 		for rows.Next() {
 			var c candidate
-			if err := rows.Scan(&c.id, &c.hash, &c.used); err != nil {
+			if scanErr := rows.Scan(&c.id, &c.hash, &c.used); scanErr != nil {
 				rows.Close()
-				return fmt.Errorf("store: scanning recovery code: %w", err)
+				return fmt.Errorf("store: scanning recovery code: %w", scanErr)
 			}
 			candidates = append(candidates, c)
 		}
 		rows.Close()
-		if err := rows.Err(); err != nil {
-			return err
+		if errErr := rows.Err(); errErr != nil {
+			return errErr
 		}
 
 		// Every candidate is checked even after a match, so the time taken does

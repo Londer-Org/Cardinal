@@ -148,14 +148,14 @@ func TestInstallRefusesAnInvalidFileAndKeepsTheOldOne(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := sudoers.Install(t.Context(), path, good); err != nil {
-		t.Fatal(err)
+	if installErr := sudoers.Install(t.Context(), path, good); installErr != nil {
+		t.Fatal(installErr)
 	}
 
 	// Not something Render can produce — which is the point. This is the
 	// belt-and-braces case: if a future change ever emits something visudo
 	// dislikes, Install must still refuse it.
-	if err := sudoers.Install(t.Context(), path, []byte("this is not sudoers syntax at all\n")); err == nil {
+	if installErr := sudoers.Install(t.Context(), path, []byte("this is not sudoers syntax at all\n")); installErr == nil {
 		t.Fatal("an invalid file was installed")
 	}
 
@@ -189,8 +189,8 @@ func TestInstalledFileIsNotGroupOrWorldWritable(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := sudoers.Install(t.Context(), path, content); err != nil {
-		t.Fatal(err)
+	if installErr := sudoers.Install(t.Context(), path, content); installErr != nil {
+		t.Fatal(installErr)
 	}
 
 	info, err := os.Stat(path)
@@ -256,8 +256,8 @@ func TestNothingOutsideTheDropInIsTouched(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := sudoers.Install(t.Context(), filepath.Join(dir, "50-cardinal"), content); err != nil {
-		t.Fatal(err)
+	if installErr := sudoers.Install(t.Context(), filepath.Join(dir, "50-cardinal"), content); installErr != nil {
+		t.Fatal(installErr)
 	}
 
 	after, err := os.ReadFile(neighbour)

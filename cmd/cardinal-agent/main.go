@@ -149,7 +149,7 @@ func runEnroll(ctx context.Context, args []string) error {
 		// Never registered, so the key is useless — and leaving it behind would
 		// make the next attempt fail on O_EXCL, complaining about a key this
 		// host does not really have.
-		_ = os.Remove(*keyPath)
+		_ = os.Remove(*keyPath) //nolint:errcheck // cleanup of a file that the success path has already renamed away
 		return err
 	}
 
@@ -221,8 +221,8 @@ func runAgent(ctx context.Context, args []string) error {
 	// break the rule that makes this safe: Cardinal only ever adds, and can
 	// never take away an account's existing access.
 	if *sudoersPath != "" {
-		if ok, err := sudoers.IncludeDirConfigured("/etc/sudoers", filepath.Dir(*sudoersPath)); err != nil {
-			log.Warn("could not check whether sudo reads the drop-in directory", "error", err)
+		if ok, includeDirConfiguredErr := sudoers.IncludeDirConfigured("/etc/sudoers", filepath.Dir(*sudoersPath)); includeDirConfiguredErr != nil {
+			log.Warn("could not check whether sudo reads the drop-in directory", "error", includeDirConfiguredErr)
 		} else if !ok {
 			log.Warn("sudo does not read this directory, so the rendered rules will do nothing",
 				"directory", filepath.Dir(*sudoersPath),
@@ -233,25 +233,25 @@ func runAgent(ctx context.Context, args []string) error {
 	// Before the socket exists, so the first lookup is answered from the cache
 	// rather than racing the first fetch. A machine rebooting during a Cardinal
 	// outage depends entirely on this line.
-	switch cached, err := a.LoadCache(); {
-	case err == nil:
+	switch cached, loadCacheErr := a.LoadCache(); {
+	case loadCacheErr == nil:
 		log.Info("loaded cached assignment",
 			"host", cached.Host, "users", len(cached.Users),
 			"age", cached.Age().Round(time.Second))
-	case agent.CacheMissing(err):
+	case agent.CacheMissing(loadCacheErr):
 		log.Info("no cached assignment yet; nothing will resolve until the first refresh")
 	default:
 		// A cache that exists and will not parse is a different problem, and
 		// silently continuing would leave a machine serving nothing while the
 		// file sat there looking fine.
-		return err
+		return loadCacheErr
 	}
 
 	listener, err := listen(ctx, *socketDir)
 	if err != nil {
 		return err
 	}
-	defer func() { _ = listener.Close() }()
+	defer func() { _ = listener.Close() }() //nolint:errcheck // best effort; the meaningful error is the one being returned
 
 	provider := &userdb.Server{
 		ServiceName: userdb.ServiceName,
@@ -317,7 +317,7 @@ func listen(ctx context.Context, dir string) (net.Listener, error) {
 	// exactly what `getent passwd` would, so there is nothing here to protect
 	// that is not already public on a Unix machine.
 	if err := os.Chmod(path, 0o666); err != nil { //nolint:gosec // world-connectable on purpose; see above
-		_ = listener.Close()
+		_ = listener.Close() //nolint:errcheck // best effort; the meaningful error is the one being returned
 		return nil, fmt.Errorf("cardinal-agent: setting socket permissions: %w", err)
 	}
 
@@ -381,8 +381,8 @@ func runSudoers(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
-	if _, err := os.Stdout.Write(content); err != nil {
-		return err
+	if _, writeErr := os.Stdout.Write(content); writeErr != nil {
+		return writeErr
 	}
 
 	if !*check {
@@ -393,7 +393,7 @@ func runSudoers(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
-	defer func() { _ = os.Remove(tmp.Name()) }()
+	defer func() { _ = os.Remove(tmp.Name()) }() //nolint:errcheck // cleanup of a file that the success path has already renamed away
 	if _, err := tmp.Write(content); err != nil {
 		return err
 	}
@@ -554,15 +554,15 @@ func printReport(report *shadow.Report) {
 	// Writes to a tabwriter cannot fail in a way worth handling — it buffers into
 	// memory, and Flush is where a real error would surface.
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	_, _ = fmt.Fprintln(w, "USER\tWHAT\tNOW\tCARDINAL\tVERDICT")
+	_, _ = fmt.Fprintln(w, "USER\tWHAT\tNOW\tCARDINAL\tVERDICT") //nolint:errcheck // the header is already written, so the status cannot be changed
 	for _, f := range report.Findings {
 		if f.Severity == shadow.Match {
 			continue
 		}
-		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n",
+		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", //nolint:errcheck // the header is already written, so the status cannot be changed
 			f.User, f.What, f.Local, f.Cardinal, f.Severity)
 	}
-	_ = w.Flush()
+	_ = w.Flush() //nolint:errcheck // writing to stdout; a failure here has nowhere left to be reported
 
 	counts := report.Counts()
 	fmt.Printf("\n  %d matching, %d additive, %d to review, %d blocking\n",

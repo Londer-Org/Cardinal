@@ -56,11 +56,23 @@ linters:
         - name: indent-error-flow
 
   exclusions:
+    # Not a relaxation. `flatted` ships a Go implementation inside its npm
+    # package, so `./...` picks up a third-party file that is not part of this
+    # module and that nobody here can fix.
+    paths:
+      - web/node_modules
+
     rules:
       # Tests deliberately do things production code must not: raw SQL to
       # simulate tampering, disabled rules, fixed credentials.
       - path: _test\.go
         linters: [gosec, unparam, contextcheck]
+
+issues:
+  # Report everything. The defaults cap a linter at 50 findings and identical
+  # texts at 3, which makes a large cleanup look finished several times over.
+  max-issues-per-linter: 0
+  max-same-issues: 0
 
 formatters:
   enable:

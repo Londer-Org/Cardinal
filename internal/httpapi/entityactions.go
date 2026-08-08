@@ -47,7 +47,7 @@ func (s *Server) handleRename(kind directory.Type) http.HandlerFunc {
 		}
 
 		var req renameRequest
-		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 8<<10)).Decode(&req); err != nil {
+		if newDecoderErr := json.NewDecoder(http.MaxBytesReader(w, r.Body, 8<<10)).Decode(&req); newDecoderErr != nil {
 			writeError(w, http.StatusBadRequest, "could not read the request")
 			return
 		}
@@ -144,7 +144,7 @@ func (s *Server) handleUpdateUserProfile(w http.ResponseWriter, r *http.Request)
 	}
 
 	var req adminProfileRequest
-	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 64<<10)).Decode(&req); err != nil {
+	if newDecoderErr := json.NewDecoder(http.MaxBytesReader(w, r.Body, 64<<10)).Decode(&req); newDecoderErr != nil {
 		writeError(w, http.StatusBadRequest, "could not read the request")
 		return
 	}
@@ -161,8 +161,8 @@ func (s *Server) handleUpdateUserProfile(w http.ResponseWriter, r *http.Request)
 	if req.Email != nil {
 		trimmed := strings.TrimSpace(*req.Email)
 		if trimmed != "" {
-			if err := s.checkEmail(trimmed); err != nil {
-				writeError(w, statusForEmail(err), err.Error())
+			if checkEmailErr := s.checkEmail(trimmed); checkEmailErr != nil {
+				writeError(w, statusForEmail(checkEmailErr), checkEmailErr.Error())
 				return
 			}
 		}
@@ -177,7 +177,7 @@ func (s *Server) handleUpdateUserProfile(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	email, _ := updated.Attrs["email"].(string)
+	email, _ := updated.Attrs["email"].(string) //nolint:errcheck // a missing or non-string attribute is the empty string
 	writeJSON(w, http.StatusOK, map[string]any{
 		"displayName": updated.DisplayName,
 		"email":       email,
@@ -207,7 +207,7 @@ func (s *Server) handleAssignPOSIX(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req posixRequest
-	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 8<<10)).Decode(&req); err != nil {
+	if newDecoderErr := json.NewDecoder(http.MaxBytesReader(w, r.Body, 8<<10)).Decode(&req); newDecoderErr != nil {
 		writeError(w, http.StatusBadRequest, "could not read the request")
 		return
 	}
@@ -217,16 +217,16 @@ func (s *Server) handleAssignPOSIX(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case err == nil:
 		// Already has a number: this is an edit of what comes with it.
-		if err := s.store.SetPOSIXAttributes(ctx, entity.ID,
-			req.HomeDirectory, req.LoginShell, &actorID); err != nil {
-			s.log.ErrorContext(ctx, "updating POSIX attributes failed", "error", err)
+		if setPOSIXAttributesErr := s.store.SetPOSIXAttributes(ctx, entity.ID,
+			req.HomeDirectory, req.LoginShell, &actorID); setPOSIXAttributesErr != nil {
+			s.log.ErrorContext(ctx, "updating POSIX attributes failed", "error", setPOSIXAttributesErr)
 			writeError(w, http.StatusInternalServerError, "could not update it")
 			return
 		}
 	case errors.Is(err, store.ErrNoPOSIXIdentity):
-		if _, err := s.store.AssignPOSIXIdentity(ctx, entity.ID,
-			s.cfg.POSIX.Effective(), &actorID); err != nil {
-			s.log.ErrorContext(ctx, "assigning a POSIX identity failed", "error", err)
+		if _, assignPOSIXIdentityErr := s.store.AssignPOSIXIdentity(ctx, entity.ID,
+			s.cfg.POSIX.Effective(), &actorID); assignPOSIXIdentityErr != nil {
+			s.log.ErrorContext(ctx, "assigning a POSIX identity failed", "error", assignPOSIXIdentityErr)
 			writeError(w, http.StatusInternalServerError, "could not assign a number")
 			return
 		}
@@ -234,9 +234,9 @@ func (s *Server) handleAssignPOSIX(w http.ResponseWriter, r *http.Request) {
 		// request. Two calls because they are two decisions: one is permanent
 		// and the other is not.
 		if req.HomeDirectory != "" || req.LoginShell != "" {
-			if err := s.store.SetPOSIXAttributes(ctx, entity.ID,
-				req.HomeDirectory, req.LoginShell, &actorID); err != nil {
-				writeError(w, http.StatusBadRequest, err.Error())
+			if setPOSIXAttributesErr := s.store.SetPOSIXAttributes(ctx, entity.ID,
+				req.HomeDirectory, req.LoginShell, &actorID); setPOSIXAttributesErr != nil {
+				writeError(w, http.StatusBadRequest, setPOSIXAttributesErr.Error())
 				return
 			}
 		}

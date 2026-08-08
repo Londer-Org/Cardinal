@@ -74,12 +74,11 @@ func publishOnly(t *testing.T, document, description string) int64 {
 	}
 	// The container runs as nonroot and docker cp preserves the mode, so a
 	// 0600 temp file lands unreadable inside.
-	//nolint:gosec // a test policy in a temp dir, deliberately readable
+
 	if err := os.Chmod(tmp.Name(), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
-	//nolint:gosec // path from t.TempDir
 	if out, err := exec.CommandContext(t.Context(), "docker", "cp", tmp.Name(),
 		containerID(t)+":/tmp/e2e-versioned.cedar").CombinedOutput(); err != nil {
 		t.Fatalf("copying policy: %v\n%s", err, out)

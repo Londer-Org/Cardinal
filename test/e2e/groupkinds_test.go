@@ -25,7 +25,7 @@ func TestUserAdminCannotSelfPromote(t *testing.T) {
 				"/api/directory/groups/"+group+"/members",
 				`{"member":"e2e-user-admin","reason":"probe"}`)
 			defer drain(resp)
-			body, _ := io.ReadAll(resp.Body)
+			body, _ := io.ReadAll(resp.Body) //nolint:errcheck // a body that will not read is reported by the assertion that follows
 
 			if resp.StatusCode != http.StatusForbidden {
 				t.Fatalf("a user-admin granted itself %s (%d): %s — the tier "+
@@ -69,7 +69,7 @@ func TestUserAdminManagesOrdinaryGroups(t *testing.T) {
 	defer drain(resp)
 
 	if resp.StatusCode != http.StatusNoContent {
-		body, _ := io.ReadAll(resp.Body)
+		body, _ := io.ReadAll(resp.Body) //nolint:errcheck // a body that will not read is reported by the assertion that follows
 		t.Fatalf("a user-admin could not manage an application group (%d): %s — "+
 			"that is the job the tier exists for", resp.StatusCode, body)
 	}
@@ -125,7 +125,7 @@ func TestUserAdminCanSeeApplicationNames(t *testing.T) {
 			"/api/directory/applications", "application/json")
 		defer drain(resp)
 		if resp.StatusCode != http.StatusOK {
-			body, _ := io.ReadAll(resp.Body)
+			body, _ := io.ReadAll(resp.Body) //nolint:errcheck // a body that will not read is reported by the assertion that follows
 			t.Fatalf("a user-admin was refused the application names (%d): %s — "+
 				"the owner picker would then be empty for exactly the tier that "+
 				"creates groups", resp.StatusCode, body)

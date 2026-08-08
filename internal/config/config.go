@@ -31,6 +31,7 @@ import (
 	"go.londer.be/cardinal/internal/store"
 )
 
+// Config is the parsed contents of cardinal.toml.
 type Config struct {
 	Server   Server   `toml:"server"`
 	Database Database `toml:"database"`
@@ -152,6 +153,8 @@ type OIDC struct {
 	SigningKeyEncryptionKey string `toml:"signing_key_encryption_key"`
 }
 
+// Server holds how the HTTP listener presents itself: where it listens, what
+// public URL it believes it has, and how its cookies are scoped.
 type Server struct {
 	Listen string `toml:"listen"`
 
@@ -191,6 +194,7 @@ type Server struct {
 	CookieDomain string `toml:"cookie_domain"`
 }
 
+// Database holds the connection settings for the one datastore (ADR 0004).
 type Database struct {
 	DSN string `toml:"dsn"`
 
@@ -275,7 +279,9 @@ type Recovery struct {
 }
 
 var (
+	// ErrMissing reports that a required configuration value was not supplied.
 	ErrMissing = errors.New("config: required value missing")
+	// ErrInvalid reports that a configured value is not usable.
 	ErrInvalid = errors.New("config: invalid value")
 
 	// ErrCircularRecovery means the deployment would depend on Cardinal to

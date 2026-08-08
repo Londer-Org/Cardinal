@@ -150,7 +150,7 @@ func (s *Store) CreateX509CAKey(
 	}
 
 	err = s.InTx(ctx, func(tx pgx.Tx) error {
-		if err := tx.QueryRow(ctx, `
+		if queryErr := tx.QueryRow(ctx, `
 			INSERT INTO x509_ca_keys
 				(algorithm, private_key_sealed, certificate, fingerprint,
 				 subject, not_before, not_after)
@@ -158,14 +158,14 @@ func (s *Store) CreateX509CAKey(
 			RETURNING id`,
 			key.Algorithm, sealed, der, key.Fingerprint,
 			subject, key.NotBefore, key.NotAfter,
-		).Scan(&key.ID); err != nil {
-			return fmt.Errorf("store: storing the authority key: %w", err)
+		).Scan(&key.ID); queryErr != nil {
+			return fmt.Errorf("store: storing the authority key: %w", queryErr)
 		}
 
-		ev, err := event.New(event.ActionX509CAKeyCreated, nil, actorID,
+		ev, buildErr := event.New(event.ActionX509CAKeyCreated, nil, actorID,
 			map[string]any{"key_id": key.ID})
-		if err != nil {
-			return err
+		if buildErr != nil {
+			return buildErr
 		}
 		return s.AppendEvent(ctx, tx, ev)
 	})
@@ -287,10 +287,10 @@ func (s *Store) TrustedX509CAKeys(ctx context.Context) ([]*X509CAKey, error) {
 			der   []byte
 			chain [][]byte
 		)
-		if err := rows.Scan(&key.ID, &key.Algorithm, &der, &chain, &key.Fingerprint,
+		if scanErr := rows.Scan(&key.ID, &key.Algorithm, &der, &chain, &key.Fingerprint,
 			&key.Subject, &key.NotBefore, &key.NotAfter,
-			&key.ActiveAt, &key.RetiredAt); err != nil {
-			return nil, fmt.Errorf("store: scanning an authority key: %w", err)
+			&key.ActiveAt, &key.RetiredAt); scanErr != nil {
+			return nil, fmt.Errorf("store: scanning an authority key: %w", scanErr)
 		}
 		if key.Certificate, err = x509.ParseCertificate(der); err != nil {
 			return nil, fmt.Errorf("store: parsing an authority certificate: %w", err)

@@ -134,7 +134,7 @@ func (s *Server) authenticateHost(r *http.Request) (*store.HostCredential, error
 	}
 
 	var signature ssh.Signature
-	if err := ssh.Unmarshal(raw, &signature); err != nil {
+	if decodeErr := ssh.Unmarshal(raw, &signature); decodeErr != nil {
 		return nil, errors.New("signature is not an SSH signature")
 	}
 

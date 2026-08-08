@@ -61,7 +61,7 @@ func (s *Server) acmeError(w http.ResponseWriter, r *http.Request, status int, k
 
 	w.Header().Set("Content-Type", "application/problem+json")
 	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(acmeProblem{
+	_ = json.NewEncoder(w).Encode(acmeProblem{ //nolint:errcheck // the header is already written, so the status cannot be changed
 		Type:   "urn:ietf:params:acme:error:" + kind,
 		Detail: detail,
 		Status: status,
@@ -157,7 +157,7 @@ func (s *Server) verify(w http.ResponseWriter, r *http.Request, needAccount bool
 		return nil, false
 	}
 
-	if err := s.store.ConsumeACMENonce(ctx, header.Nonce); err != nil {
+	if consumeACMENonceErr := s.store.ConsumeACMENonce(ctx, header.Nonce); consumeACMENonceErr != nil {
 		s.acmeError(w, r, http.StatusBadRequest, "badNonce",
 			"the nonce was not issued by this server, or has already been used")
 		return nil, false
@@ -187,18 +187,18 @@ func (s *Server) verify(w http.ResponseWriter, r *http.Request, needAccount bool
 		out.account = account
 
 		var jwk acme.JWK
-		if err := json.Unmarshal(account.PublicJWK, &jwk); err != nil {
+		if decodeErr := json.Unmarshal(account.PublicJWK, &jwk); decodeErr != nil {
 			s.acmeError(w, r, http.StatusInternalServerError, "serverInternal",
 				"the stored account key is unreadable")
 			return nil, false
 		}
-		key, err := jwk.PublicKey()
-		if err != nil {
+		key, publicKeyErr := jwk.PublicKey()
+		if publicKeyErr != nil {
 			s.acmeError(w, r, http.StatusInternalServerError, "serverInternal",
 				"the stored account key is unusable")
 			return nil, false
 		}
-		if err := acme.Verify(header, jws, key); err != nil {
+		if publicKeyErr := acme.Verify(header, jws, key); publicKeyErr != nil {
 			s.acmeError(w, r, http.StatusUnauthorized, "unauthorized",
 				"the request signature is not valid")
 			return nil, false
@@ -271,7 +271,7 @@ func (s *Server) handleACMENewAccount(w http.ResponseWriter, r *http.Request) {
 		s.acmeError(w, r, http.StatusBadRequest, "badPublicKey", err.Error())
 		return
 	}
-	if err := acme.Verify(req.header, req.jws, key); err != nil {
+	if verifyErr := acme.Verify(req.header, req.jws, key); verifyErr != nil {
 		s.acmeError(w, r, http.StatusUnauthorized, "unauthorized",
 			"the request is not signed by the key it carries")
 		return
@@ -285,7 +285,7 @@ func (s *Server) handleACMENewAccount(w http.ResponseWriter, r *http.Request) {
 
 	var body newAccountRequest
 	if len(req.payload) > 0 {
-		if err := json.Unmarshal(req.payload, &body); err != nil {
+		if decodeErr := json.Unmarshal(req.payload, &body); decodeErr != nil {
 			s.acmeError(w, r, http.StatusBadRequest, "malformed",
 				"the payload is not JSON")
 			return
@@ -311,7 +311,7 @@ func (s *Server) handleACMENewAccount(w http.ResponseWriter, r *http.Request) {
 	// different key, somebody is replaying a binding captured from elsewhere to
 	// attach their own key to a host they do not have.
 	var bound acme.JWK
-	if err := json.Unmarshal(boundKey, &bound); err != nil {
+	if decodeErr := json.Unmarshal(boundKey, &bound); decodeErr != nil {
 		s.acmeError(w, r, http.StatusBadRequest, "malformed",
 			"the binding does not carry a key")
 		return
@@ -540,7 +540,7 @@ func (s *Server) handleACMEFinalize(w http.ResponseWriter, r *http.Request) {
 		s.acmeError(w, r, http.StatusBadRequest, "badCSR", "the CSR does not parse")
 		return
 	}
-	if err := csr.CheckSignature(); err != nil {
+	if checkSignatureErr := csr.CheckSignature(); checkSignatureErr != nil {
 		// A CSR whose signature does not verify proves nothing about who holds
 		// the private key, which is the only thing a CSR is for.
 		s.acmeError(w, r, http.StatusBadRequest, "badCSR",
@@ -557,9 +557,9 @@ func (s *Server) handleACMEFinalize(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := s.store.FinaliseACMEOrder(ctx, order.ID, caKeyID,
-		req.account.SubjectID, certificate, serial); err != nil {
-		s.log.ErrorContext(ctx, "acme: recording issuance failed", "error", err)
+	if finaliseACMEOrderErr := s.store.FinaliseACMEOrder(ctx, order.ID, caKeyID,
+		req.account.SubjectID, certificate, serial); finaliseACMEOrderErr != nil {
+		s.log.ErrorContext(ctx, "acme: recording issuance failed", "error", finaliseACMEOrderErr)
 		s.acmeError(w, r, http.StatusInternalServerError, "serverInternal",
 			"could not record the certificate")
 		return
@@ -610,14 +610,14 @@ func (s *Server) handleACMECertificate(w http.ResponseWriter, r *http.Request) {
 	// The leaf first, then everything above it — the order every TLS
 	// implementation expects, and the one a client will hand straight to a
 	// server without reordering.
-	_ = pem.Encode(&out, &pem.Block{Type: "CERTIFICATE", Bytes: order.Certificate})
+	_ = pem.Encode(&out, &pem.Block{Type: "CERTIFICATE", Bytes: order.Certificate}) //nolint:errcheck // the header is already written, so the status cannot be changed
 	for _, above := range chain {
-		_ = pem.Encode(&out, &pem.Block{Type: "CERTIFICATE", Bytes: above.Raw})
+		_ = pem.Encode(&out, &pem.Block{Type: "CERTIFICATE", Bytes: above.Raw}) //nolint:errcheck // the header is already written, so the status cannot be changed
 	}
 
 	s.attachNonce(ctx, w)
 	w.Header().Set("Content-Type", "application/pem-certificate-chain")
-	_, _ = io.WriteString(w, out.String())
+	_, _ = io.WriteString(w, out.String()) //nolint:errcheck // the header is already written, so the status cannot be changed
 }
 
 func (s *Server) orderForAccount(w http.ResponseWriter, r *http.Request, account *store.ACMEAccount) (*store.ACMEOrder, bool) {
@@ -653,7 +653,7 @@ func (s *Server) bindAccount(
 	var probe struct {
 		Protected string `json:"protected"`
 	}
-	if err := json.Unmarshal(binding, &probe); err != nil {
+	if decodeErr := json.Unmarshal(binding, &probe); decodeErr != nil {
 		return uuid.Nil, nil, errors.New("binding is not a JWS")
 	}
 	raw, err := base64.RawURLEncoding.DecodeString(probe.Protected)
@@ -663,7 +663,7 @@ func (s *Server) bindAccount(
 	var header struct {
 		KID string `json:"kid"`
 	}
-	if err := json.Unmarshal(raw, &header); err != nil {
+	if decodeErr := json.Unmarshal(raw, &header); decodeErr != nil {
 		return uuid.Nil, nil, errors.New("binding header is not JSON")
 	}
 

@@ -12,9 +12,14 @@ import (
 )
 
 var (
+	// ErrRecoveryNotFound reports that there is no open recovery request.
 	ErrRecoveryNotFound = errors.New("store: no open recovery request")
-	ErrAlreadyApproved  = errors.New("store: you have already approved this")
-	ErrSelfRecovery     = errors.New("store: you cannot recover your own account")
+	// ErrAlreadyApproved reports that this administrator has already approved the
+	// request. Dual control means two *different* people (ADR 0015).
+	ErrAlreadyApproved = errors.New("store: you have already approved this")
+	// ErrSelfRecovery reports an attempt to approve one's own recovery, which would
+	// reduce dual control to one person (ADR 0015).
+	ErrSelfRecovery = errors.New("store: you cannot recover your own account")
 )
 
 // RecoveryApprovals is how many distinct administrators a recovery needs.

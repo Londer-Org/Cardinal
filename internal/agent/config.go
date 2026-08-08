@@ -58,6 +58,8 @@ type Config struct {
 // is the kind of field that gets set to 300000 by accident.
 type Duration time.Duration
 
+// UnmarshalText parses a Go duration string, so a config file can say "15m"
+// rather than a count of nanoseconds nobody can read.
 func (d *Duration) UnmarshalText(text []byte) error {
 	parsed, err := time.ParseDuration(string(text))
 	if err != nil {

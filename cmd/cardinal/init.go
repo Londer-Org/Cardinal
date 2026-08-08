@@ -58,7 +58,7 @@ func runInit(ctx context.Context, args []string) error {
 	// are none" is a condition that can be checked rather than remembered.
 	admins, err := s.LookupEntity(ctx, directory.TypeGroup, "directory-admins")
 	if err != nil {
-		return fmt.Errorf("directory-admins is missing — run `cardinal migrate` first")
+		return errors.New("directory-admins is missing — run `cardinal migrate` first")
 	}
 	existing, err := s.MembersOfGroup(ctx, admins.ID)
 	if err != nil {
@@ -80,21 +80,21 @@ func runInit(ctx context.Context, args []string) error {
 	fmt.Fprintln(os.Stderr)
 
 	if *policyPath != "" {
-		document, err := os.ReadFile(*policyPath)
-		if err != nil {
-			return fmt.Errorf("reading %s: %w", *policyPath, err)
+		document, readErr := os.ReadFile(*policyPath)
+		if readErr != nil {
+			return fmt.Errorf("reading %s: %w", *policyPath, readErr)
 		}
 		// Validated before it is stored: publishing a policy set that does not
 		// parse would leave the deployment default-deny with no obvious cause.
-		if _, err := policy.NewEngine(document, 0); err != nil {
-			return fmt.Errorf("%s does not parse: %w", *policyPath, err)
+		if _, newEngineErr := policy.NewEngine(document, 0); newEngineErr != nil {
+			return fmt.Errorf("%s does not parse: %w", *policyPath, newEngineErr)
 		}
-		version, err := s.PublishPolicy(ctx, string(document), "first-run default", nil)
-		if err != nil {
-			return fmt.Errorf("publishing policy: %w", err)
+		version, readErr := s.PublishPolicy(ctx, string(document), "first-run default", nil)
+		if readErr != nil {
+			return fmt.Errorf("publishing policy: %w", readErr)
 		}
-		if err := s.ActivatePolicy(ctx, version.Version, nil); err != nil {
-			return fmt.Errorf("activating policy: %w", err)
+		if readErr := s.ActivatePolicy(ctx, version.Version, nil); readErr != nil {
+			return fmt.Errorf("activating policy: %w", readErr)
 		}
 		fmt.Fprintf(os.Stderr, "  policy set        version %d\n", version.Version)
 	}
@@ -103,16 +103,16 @@ func runInit(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
-	if err := s.CreateEntity(ctx, entity, nil); err != nil {
-		if errors.Is(err, directory.ErrAlreadyExists) {
+	if createEntityErr := s.CreateEntity(ctx, entity, nil); createEntityErr != nil {
+		if errors.Is(createEntityErr, directory.ErrAlreadyExists) {
 			// The account may exist from a partial run. Continue rather than
 			// making the operator work out which half succeeded.
-			entity, err = s.LookupEntity(ctx, directory.TypeUser, login)
-			if err != nil {
-				return err
+			entity, createEntityErr = s.LookupEntity(ctx, directory.TypeUser, login)
+			if createEntityErr != nil {
+				return createEntityErr
 			}
 		} else {
-			return err
+			return createEntityErr
 		}
 	}
 	fmt.Fprintf(os.Stderr, "  administrator     %s\n", entity.Name)
@@ -120,14 +120,14 @@ func runInit(ctx context.Context, args []string) error {
 	// Granted by nobody: the CLI reaches the database directly and has no
 	// authenticated operator behind it. Recording a subject who did not act
 	// would make the audit trail worse than leaving it null.
-	if err := s.Grant(ctx, temporal.Grant{
+	if grantErr := s.Grant(ctx, temporal.Grant{
 		GroupID:   admins.ID,
 		MemberID:  entity.ID,
 		Period:    temporal.FromTime(time.Now()),
 		GrantedBy: entity.ID,
 		Reason:    "first-run setup",
-	}, nil); err != nil {
-		return fmt.Errorf("granting directory-admins: %w", err)
+	}, nil); grantErr != nil {
+		return fmt.Errorf("granting directory-admins: %w", grantErr)
 	}
 	fmt.Fprintln(os.Stderr, "  group             directory-admins")
 

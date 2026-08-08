@@ -83,12 +83,12 @@ func runAdopt(ctx context.Context, args []string) error {
 
 	switch {
 	case *from != "" && len(pos) == 0:
-		if err := readReports(*from, claims); err != nil {
-			return err
+		if readReportsErr := readReports(*from, claims); readReportsErr != nil {
+			return readReportsErr
 		}
 	case *from == "" && len(pos) == 2:
-		number, err := strconv.Atoi(pos[1])
-		if err != nil {
+		number, parseErr := strconv.Atoi(pos[1])
+		if parseErr != nil {
 			return fmt.Errorf("%q is not a number", pos[1])
 		}
 		c := &claim{}
@@ -106,8 +106,8 @@ func runAdopt(ctx context.Context, args []string) error {
 
 	// Checked before anything is written, because a contradiction is not
 	// something to discover halfway through.
-	if err := refuseContradictions(claims); err != nil {
-		return err
+	if refuseContradictionsErr := refuseContradictions(claims); refuseContradictionsErr != nil {
+		return refuseContradictionsErr
 	}
 
 	s, err := open(ctx, *dsnFlag)

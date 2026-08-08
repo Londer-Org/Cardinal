@@ -22,8 +22,10 @@ import (
 const MinCredentialsForFullEnrollment = 2
 
 var (
+	// ErrCredentialNotFound reports that no such credential exists.
 	ErrCredentialNotFound = errors.New("store: credential not found")
-	ErrCredentialExists   = errors.New("store: credential already registered")
+	// ErrCredentialExists reports that the passkey is already registered.
+	ErrCredentialExists = errors.New("store: credential already registered")
 
 	// ErrCloneDetected means an authenticator's signature counter went
 	// backwards, which should be impossible for a genuine device.
@@ -54,6 +56,7 @@ type Credential struct {
 	RevokedAt  *time.Time
 }
 
+// Active reports whether the credential has not been revoked.
 func (c *Credential) Active() bool { return c.RevokedAt == nil }
 
 // RegisterCredential stores a newly created passkey.
@@ -234,11 +237,11 @@ func (s *Store) RevokeCredential(ctx context.Context, id uuid.UUID, actorID *uui
 		}
 
 		var remaining int
-		if err := tx.QueryRow(ctx, `
+		if queryErr := tx.QueryRow(ctx, `
 			SELECT count(*) FROM webauthn_credentials
 			 WHERE entity_id = $1 AND revoked_at IS NULL AND id <> $2`,
-			entityID, id).Scan(&remaining); err != nil {
-			return fmt.Errorf("store: counting credentials: %w", err)
+			entityID, id).Scan(&remaining); queryErr != nil {
+			return fmt.Errorf("store: counting credentials: %w", queryErr)
 		}
 		if remaining == 0 {
 			return fmt.Errorf(
@@ -246,10 +249,10 @@ func (s *Store) RevokeCredential(ctx context.Context, id uuid.UUID, actorID *uui
 					"lock the account out; disable the account instead", entityID)
 		}
 
-		if _, err := tx.Exec(ctx,
+		if _, execErr := tx.Exec(ctx,
 			`UPDATE webauthn_credentials SET revoked_at = now() WHERE id = $1`,
-			id); err != nil {
-			return fmt.Errorf("store: revoking credential: %w", err)
+			id); execErr != nil {
+			return fmt.Errorf("store: revoking credential: %w", execErr)
 		}
 
 		ev, err := event.New(event.ActionCredentialRevoked, &entityID, actorID, nil)

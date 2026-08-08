@@ -26,7 +26,7 @@ func TestUserAdminCannotRegisterApplications(t *testing.T) {
 			"/api/directory/users", "application/json")
 		defer drain(resp)
 		if resp.StatusCode != http.StatusOK {
-			body, _ := io.ReadAll(resp.Body)
+			body, _ := io.ReadAll(resp.Body) //nolint:errcheck // a body that will not read is reported by the assertion that follows
 			t.Fatalf("a user-admin was refused the people list (%d): %s",
 				resp.StatusCode, body)
 		}
@@ -60,7 +60,7 @@ func TestSecurityAdminCannotManagePeople(t *testing.T) {
 			"/api/applications", "application/json")
 		defer drain(resp)
 		if resp.StatusCode != http.StatusOK {
-			body, _ := io.ReadAll(resp.Body)
+			body, _ := io.ReadAll(resp.Body) //nolint:errcheck // a body that will not read is reported by the assertion that follows
 			t.Fatalf("a security-admin was refused the application list (%d): %s",
 				resp.StatusCode, body)
 		}

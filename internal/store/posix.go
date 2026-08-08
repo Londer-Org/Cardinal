@@ -174,9 +174,9 @@ func (s *Store) AssignPOSIXIdentity(
 	}
 
 	err = s.InTx(ctx, func(tx pgx.Tx) error {
-		if _, err := tx.Exec(ctx,
-			`SELECT pg_advisory_xact_lock($1)`, posixAllocationLock); err != nil {
-			return fmt.Errorf("store: taking the POSIX allocation lock: %w", err)
+		if _, execErr := tx.Exec(ctx,
+			`SELECT pg_advisory_xact_lock($1)`, posixAllocationLock); execErr != nil {
+			return fmt.Errorf("store: taking the POSIX allocation lock: %w", execErr)
 		}
 
 		var (
@@ -187,7 +187,7 @@ func (s *Store) AssignPOSIXIdentity(
 			home, shell = &out.HomeDirectory, &out.LoginShell
 		}
 
-		err := tx.QueryRow(ctx, `
+		queryErr := tx.QueryRow(ctx, `
 			INSERT INTO posix_identities
 				(entity_id, id_number, home_directory, login_shell)
 			SELECT $1, next.number, $4, $5
@@ -202,17 +202,17 @@ func (s *Store) AssignPOSIXIdentity(
 		// No row means the WHERE excluded it, which can only be the range being
 		// full. Distinguished from a real failure because the answer is
 		// different: one is a configuration change, the other is an incident.
-		if errors.Is(err, pgx.ErrNoRows) {
+		if errors.Is(queryErr, pgx.ErrNoRows) {
 			return fmt.Errorf("%w: %d–%d", ErrPOSIXRangeExhausted, r.Low, r.High)
 		}
-		if err != nil {
-			return fmt.Errorf("store: assigning POSIX identity: %w", err)
+		if queryErr != nil {
+			return fmt.Errorf("store: assigning POSIX identity: %w", queryErr)
 		}
 
-		ev, err := event.New(event.ActionPOSIXIdentityAssigned, &entityID, actorID,
+		ev, queryErr := event.New(event.ActionPOSIXIdentityAssigned, &entityID, actorID,
 			map[string]any{"id_number": out.Number})
-		if err != nil {
-			return err
+		if queryErr != nil {
+			return queryErr
 		}
 		return s.AppendEvent(ctx, tx, ev)
 	})
@@ -310,15 +310,15 @@ func (s *Store) AdoptPOSIXNumber(
 				ErrNumberAlreadyServed, current, served.UTC().Format(time.RFC3339))
 		}
 
-		if _, err := tx.Exec(ctx,
+		if _, execErr := tx.Exec(ctx,
 			`UPDATE posix_identities SET id_number = $2 WHERE entity_id = $1`,
-			entityID, number); err != nil {
+			entityID, number); execErr != nil {
 			var pgErr *pgconn.PgError
-			if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+			if errors.As(execErr, &pgErr) && pgErr.Code == "23505" {
 				return fmt.Errorf(
 					"store: %d is already held by somebody else in this directory", number)
 			}
-			return fmt.Errorf("store: adopting the number: %w", err)
+			return fmt.Errorf("store: adopting the number: %w", execErr)
 		}
 
 		ev, err := event.New(event.ActionPOSIXNumberAdopted, &entityID, actorID,

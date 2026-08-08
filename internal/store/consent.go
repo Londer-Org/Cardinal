@@ -12,6 +12,7 @@ import (
 	"go.londer.be/cardinal/internal/event"
 )
 
+// ErrConsentNotFound reports that the subject has not consented to this client.
 var ErrConsentNotFound = errors.New("store: no consent record")
 
 // Consent is a user's standing agreement to release claims to an application.
@@ -30,6 +31,7 @@ type Consent struct {
 	RevokedAt *time.Time
 }
 
+// Active reports whether the consent still stands.
 func (c *Consent) Active() bool { return c.RevokedAt == nil }
 
 // ConsentCovers reports whether standing consent already covers a request.
@@ -115,11 +117,11 @@ func (s *Store) RevokeConsent(ctx context.Context, subjectID uuid.UUID, clientID
 			return ErrConsentNotFound
 		}
 
-		if _, err := tx.Exec(ctx, `
+		if _, execErr := tx.Exec(ctx, `
 			UPDATE oidc_tokens SET revoked_at = now()
 			 WHERE subject_id = $1 AND client_id = $2 AND revoked_at IS NULL`,
-			subjectID, clientID); err != nil {
-			return fmt.Errorf("store: revoking tokens for withdrawn consent: %w", err)
+			subjectID, clientID); execErr != nil {
+			return fmt.Errorf("store: revoking tokens for withdrawn consent: %w", execErr)
 		}
 
 		ev, err := event.New(event.ActionConsentRevoked, &subjectID, &subjectID, nil)

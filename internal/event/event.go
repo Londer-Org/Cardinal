@@ -12,6 +12,7 @@ import (
 	"crypto/sha256"
 	"encoding/binary"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
@@ -47,8 +48,8 @@ const (
 	// must never be reused for anything else, because it appears in hashes that
 	// cannot be rewritten.
 
-	ActionCredentialRegistered = "credential.registered"
-	ActionCredentialRevoked    = "credential.revoked"
+	ActionCredentialRegistered = "credential.registered" //nolint:gosec // an action name, not a credential
+	ActionCredentialRevoked    = "credential.revoked"    //nolint:gosec // an action name, not a credential
 
 	// Access tokens. Issuing one creates a credential that can act as the
 	// subject without a passkey, so it is as auditable as registering a
@@ -65,7 +66,7 @@ const (
 	ActionX509CAKeyActivated    = "x509_ca.key_activated"
 	ActionX509CertificateIssued = "x509_ca.certificate_issued"
 	ActionACMEAccountCreated    = "acme.account_created"
-	ActionACMECredentialIssued  = "acme.credential_issued"
+	ActionACMECredentialIssued  = "acme.credential_issued" //nolint:gosec // an action name, not a credential
 
 	ActionSSHCAKeyCreated      = "ssh_ca.key_created"
 	ActionSSHCAKeyActivated    = "ssh_ca.key_activated"
@@ -159,7 +160,7 @@ type Event struct {
 // New builds an unhashed Event. Call ComputeHash once the predecessor is known.
 func New(action string, entityID, actorID *uuid.UUID, payload map[string]any) (*Event, error) {
 	if action == "" {
-		return nil, fmt.Errorf("event: action must not be empty")
+		return nil, errors.New("event: action must not be empty")
 	}
 	id, err := uuid.NewV7()
 	if err != nil {

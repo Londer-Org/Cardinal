@@ -54,7 +54,7 @@ func (s *Server) handleHostEnroll(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var from netip.Addr
-	if ip, err := netip.ParseAddr(s.clientIP.resolve(r)); err == nil {
+	if ip, parseErr := netip.ParseAddr(s.clientIP.resolve(r)); parseErr == nil {
 		from = ip
 	}
 

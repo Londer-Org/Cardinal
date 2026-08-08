@@ -131,7 +131,7 @@ type Server struct {
 func (s *Server) Serve(ctx context.Context, l net.Listener) error {
 	go func() {
 		<-ctx.Done()
-		_ = l.Close()
+		_ = l.Close() //nolint:errcheck // best effort; the meaningful error is the one being returned
 	}()
 
 	var wg sync.WaitGroup
@@ -147,7 +147,7 @@ func (s *Server) Serve(ctx context.Context, l net.Listener) error {
 		}
 
 		wg.Go(func() {
-			defer func() { _ = conn.Close() }()
+			defer func() { _ = conn.Close() }() //nolint:errcheck // best effort; the meaningful error is the one being returned
 			s.handle(ctx, conn)
 		})
 	}
@@ -188,7 +188,7 @@ func (s *Server) handle(ctx context.Context, conn net.Conn) {
 
 		var req request
 		if err := json.Unmarshal(raw, &req); err != nil {
-			_ = s.write(conn, reply{Error: errInterfaceInvalidArgument}, false)
+			_ = s.write(conn, reply{Error: errInterfaceInvalidArgument}, false) //nolint:errcheck // deliberate
 			return
 		}
 

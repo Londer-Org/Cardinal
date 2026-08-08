@@ -132,10 +132,10 @@ func runInviteList(ctx context.Context, args []string) error {
 	}
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "LOGIN\tEXPIRES\tREMAINING")
+	fmt.Fprintln(w, "LOGIN\tEXPIRES\tREMAINING") //nolint:errcheck // the header is already written, so the status cannot be changed
 	for _, inv := range invitations {
 		remaining := time.Until(inv.ExpiresAt).Round(time.Minute)
-		fmt.Fprintf(w, "%s\t%s\t%s\n", inv.Login,
+		fmt.Fprintf(w, "%s\t%s\t%s\n", inv.Login, //nolint:errcheck // the header is already written, so the status cannot be changed
 			inv.ExpiresAt.Local().Format(time.RFC3339), remaining)
 	}
 	return w.Flush()

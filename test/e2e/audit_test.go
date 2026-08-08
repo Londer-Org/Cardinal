@@ -176,7 +176,7 @@ func TestVerifyingTheChainFromTheConsole(t *testing.T) {
 		BrokenAtSeq   int64  `json:"brokenAtSeq"`
 		Reason        string `json:"reason"`
 	}
-	resp := postJSON(t, admin, "/api/audit/verify", csrf, nil, &report)
+	resp := postJSON(t, admin, "/api/audit/verify", csrf, nil, &report) //nolint:bodyclose // the helper drains and closes it; bodyclose cannot see through the call
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("verifying returned %d", resp.StatusCode)
 	}

@@ -34,8 +34,11 @@ const (
 const sessionTokenBytes = 32
 
 var (
+	// ErrSessionInvalid reports that the session has expired or been revoked.
 	ErrSessionInvalid = errors.New("store: session is invalid or expired")
-	ErrNoSuchSession  = errors.New("store: no such session")
+	// ErrNoSuchSession reports that the session does not exist, or belongs to
+	// somebody else — the two are deliberately indistinguishable to the caller.
+	ErrNoSuchSession = errors.New("store: no such session")
 )
 
 // Session is an authenticated session.
@@ -81,6 +84,8 @@ func (l SessionLimits) withDefaults() SessionLimits {
 	return l
 }
 
+// Session is a signed-in session, including how it was authenticated and
+// whether that credential was device-bound (ADR 0018).
 type Session struct {
 	ID        uuid.UUID
 	SubjectID uuid.UUID

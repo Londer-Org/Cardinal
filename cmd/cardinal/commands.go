@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -115,13 +116,13 @@ func runList(ctx context.Context, args []string) error {
 	}
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "TYPE\tNAME\tID\tSTATUS")
+	fmt.Fprintln(w, "TYPE\tNAME\tID\tSTATUS") //nolint:errcheck // the header is already written, so the status cannot be changed
 	for _, e := range entities {
 		status := "active"
 		if !e.Active() {
 			status = "disabled " + e.DisabledAt.Format(time.DateOnly)
 		}
-		fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", e.Type, e.Name, e.ID, status)
+		fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", e.Type, e.Name, e.ID, status) //nolint:errcheck // the header is already written, so the status cannot be changed
 	}
 	return w.Flush()
 }
@@ -197,14 +198,14 @@ func runGrant(ctx context.Context, args []string) error {
 	case *forDur != 0:
 		period = temporal.For(*forDur)
 	case *until != "":
-		t, err := time.Parse(time.RFC3339, *until)
-		if err != nil {
-			return fmt.Errorf("parsing -until: %w", err)
+		t, parseErr := time.Parse(time.RFC3339, *until)
+		if parseErr != nil {
+			return fmt.Errorf("parsing -until: %w", parseErr)
 		}
 		period = temporal.Between(time.Now(), t)
 	}
-	if err := period.Validate(); err != nil {
-		return err
+	if validateErr := period.Validate(); validateErr != nil {
+		return validateErr
 	}
 
 	s, err := open(ctx, *dsnFlag)
@@ -259,9 +260,9 @@ func runRevoke(ctx context.Context, args []string) error {
 
 	when := time.Now().UTC()
 	if *at != "" {
-		t, err := time.Parse(time.RFC3339, *at)
-		if err != nil {
-			return fmt.Errorf("parsing -at: %w", err)
+		t, parseErr := time.Parse(time.RFC3339, *at)
+		if parseErr != nil {
+			return fmt.Errorf("parsing -at: %w", parseErr)
 		}
 		when = t
 	}
@@ -330,13 +331,13 @@ func runMembers(ctx context.Context, args []string) error {
 
 	fmt.Printf("members of %s at %s\n", group.Name, instantLabel(*at, when))
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "  MEMBER\tPERIOD\tREASON")
+	fmt.Fprintln(w, "  MEMBER\tPERIOD\tREASON") //nolint:errcheck // the header is already written, so the status cannot be changed
 	for _, g := range grants {
 		member, err := s.GetEntity(ctx, g.MemberID)
 		if err != nil {
 			return err
 		}
-		fmt.Fprintf(w, "  %s\t%s\t%s\n", member.Name, g.Period, g.Reason)
+		fmt.Fprintf(w, "  %s\t%s\t%s\n", member.Name, g.Period, g.Reason) //nolint:errcheck // the header is already written, so the status cannot be changed
 	}
 	return w.Flush()
 }
@@ -425,13 +426,13 @@ func runHistory(ctx context.Context, args []string) error {
 
 	fmt.Printf("every grant of %s to %s\n", group.Name, member.Name)
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "  PERIOD\tACTIVE NOW\tREASON")
+	fmt.Fprintln(w, "  PERIOD\tACTIVE NOW\tREASON") //nolint:errcheck // the header is already written, so the status cannot be changed
 	for _, g := range grants {
 		active := "no"
 		if g.Period.Active() {
 			active = "yes"
 		}
-		fmt.Fprintf(w, "  %s\t%s\t%s\n", g.Period, active, g.Reason)
+		fmt.Fprintf(w, "  %s\t%s\t%s\n", g.Period, active, g.Reason) //nolint:errcheck // the header is already written, so the status cannot be changed
 	}
 	return w.Flush()
 }
@@ -526,7 +527,7 @@ func runAudit(ctx context.Context, args []string) error {
 			"The event log is append-only and protected by database rules, so this\n"+
 				"indicates direct database access outside the application. Treat it as\n"+
 				"a security incident.\n")
-		return fmt.Errorf("audit chain verification failed")
+		return errors.New("audit chain verification failed")
 	}
 
 	fmt.Printf("audit chain intact — %d events verified\n", report.EventsChecked)
@@ -601,8 +602,8 @@ func runEntityAvailability(ctx context.Context, typeWord string, args []string, 
 	}
 
 	if enable {
-		if err := s.EnableEntity(ctx, entity.ID, nil); err != nil {
-			return err
+		if enableEntityErr := s.EnableEntity(ctx, entity.ID, nil); enableEntityErr != nil {
+			return enableEntityErr
 		}
 		fmt.Printf("enabled %s %s\n", typeWord, entity.Name)
 		fmt.Fprintln(os.Stderr,
@@ -611,8 +612,8 @@ func runEntityAvailability(ctx context.Context, typeWord string, args []string, 
 		return nil
 	}
 
-	if err := s.DisableEntity(ctx, entity.ID, nil); err != nil {
-		return err
+	if disableEntityErr := s.DisableEntity(ctx, entity.ID, nil); disableEntityErr != nil {
+		return disableEntityErr
 	}
 
 	// Sessions and tokens, for the same reason the API does it: an account

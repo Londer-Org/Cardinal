@@ -67,13 +67,13 @@ func main() {
 	// JSON, for the end-to-end test to assert against.
 	mux.HandleFunc("GET /whoami.json", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(identityFrom(r))
+		_ = json.NewEncoder(w).Encode(identityFrom(r)) //nolint:errcheck // the header is already written, so the status cannot be changed
 	})
 
 	// A liveness endpoint that must NOT be behind the auth middleware, so the
 	// stack can tell "the app is down" apart from "the app refused you".
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
-		fmt.Fprintln(w, "ok")
+		fmt.Fprintln(w, "ok") //nolint:errcheck // the header is already written, so the status cannot be changed
 	})
 
 	mux.HandleFunc("GET /", func(w http.ResponseWriter, r *http.Request) {
@@ -84,7 +84,7 @@ func main() {
 		// how people end up shipping an app that "worked in testing".
 		if id.UserID == "" {
 			w.WriteHeader(http.StatusInternalServerError)
-			fmt.Fprintln(w, "No identity headers. This service must only be "+
+			fmt.Fprintln(w, "No identity headers. This service must only be "+ //nolint:errcheck // the header is already written, so the status cannot be changed
 				"reachable through the authenticating proxy.")
 			return
 		}
@@ -95,7 +95,7 @@ func main() {
 		}
 	})
 
-	log.Printf("protected-app listening on %s", addr)
+	log.Printf("protected-app listening on %s", addr) //nolint:gosec // addr comes from this process's own flag, not from a request
 	server := &http.Server{Addr: addr, Handler: mux, ReadHeaderTimeout: 10 * 1e9}
 	log.Fatal(server.ListenAndServe())
 }

@@ -133,6 +133,7 @@ type Resolver struct {
 	store *store.Store
 }
 
+// NewResolver builds a claims resolver over the given store.
 func NewResolver(s *store.Store) *Resolver { return &Resolver{store: s} }
 
 // Resolve projects a session into a Subject.

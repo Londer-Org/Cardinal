@@ -90,6 +90,8 @@ func (s *Server) ReloadPolicy(engine *policy.Engine) {
 	}
 }
 
+// Options carries the collaborators a Server needs that are not configuration:
+// the policy engine, the OIDC provider, the certificate authorities.
 type Options struct {
 	DevMode bool
 	UI      fs.FS
@@ -107,6 +109,7 @@ type Options struct {
 	X509CA *x509ca.CA
 }
 
+// New builds a Server and wires its routes.
 func New(s *store.Store, a *auth.Service, cfg *config.Config, opts Options) (*Server, error) {
 	log := opts.Logger
 	if log == nil {
@@ -525,7 +528,7 @@ func writeJSON(w http.ResponseWriter, status int, body any) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(status)
 	if body != nil {
-		_ = json.NewEncoder(w).Encode(body)
+		_ = json.NewEncoder(w).Encode(body) //nolint:errcheck // the header is already written, so the status cannot be changed
 	}
 }
 

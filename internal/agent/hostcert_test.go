@@ -68,7 +68,7 @@ func certServer(t *testing.T, principals []string, tamper func(*ssh.Certificate)
 				}
 			}
 
-			_ = json.NewEncoder(w).Encode(map[string]any{
+			_ = json.NewEncoder(w).Encode(map[string]any{ //nolint:errcheck // the header is already written, so the status cannot be changed
 				"certificate": string(ssh.MarshalAuthorizedKey(cert)),
 				"principals":  cert.ValidPrincipals,
 			})

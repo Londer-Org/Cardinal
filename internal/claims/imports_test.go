@@ -22,7 +22,7 @@ import (
 // note on that below. What matters here is that claims itself never names a
 // protocol type, which is what keeps its own API neutral.
 func TestClaimsImportsNoProtocolPackages(t *testing.T) {
-	out, err := exec.Command("go", "list", "-f", `{{join .Imports "\n"}}`,
+	out, err := exec.CommandContext(t.Context(), "go", "list", "-f", `{{join .Imports "\n"}}`,
 		"go.londer.be/cardinal/internal/claims").Output()
 	if err != nil {
 		t.Fatalf("listing imports: %v", err)
@@ -62,7 +62,7 @@ func TestClaimsImportsNoProtocolPackages(t *testing.T) {
 // The test asserts the coupling stays *narrow*: WebAuthn may reach the store,
 // and nothing else may.
 func TestStoreCredentialCouplingIsKnown(t *testing.T) {
-	out, err := exec.Command("go", "list", "-f", `{{join .Imports "\n"}}`,
+	out, err := exec.CommandContext(t.Context(), "go", "list", "-f", `{{join .Imports "\n"}}`,
 		"go.londer.be/cardinal/internal/store").Output()
 	if err != nil {
 		t.Fatalf("listing imports: %v", err)

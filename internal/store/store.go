@@ -78,10 +78,14 @@ func (s *Store) checkVersion(ctx context.Context) error {
 	return nil
 }
 
+// Pool exposes the underlying connection pool, for callers that need to run a
+// statement this package does not wrap.
 func (s *Store) Pool() *pgxpool.Pool { return s.pool }
 
+// Close releases the connection pool.
 func (s *Store) Close() { s.pool.Close() }
 
+// Ping checks the database is reachable.
 func (s *Store) Ping(ctx context.Context) error { return s.pool.Ping(ctx) }
 
 // InTx runs fn inside a transaction, rolling back on error or panic.
@@ -99,7 +103,7 @@ func (s *Store) InTx(ctx context.Context, fn func(pgx.Tx) error) error {
 		if p := recover(); p != nil {
 			// Best-effort rollback, then re-panic: swallowing it here would
 			// turn a bug into a silently half-applied write.
-			_ = tx.Rollback(context.WithoutCancel(ctx))
+			_ = tx.Rollback(context.WithoutCancel(ctx)) //nolint:errcheck // a rollback after a successful commit returns ErrTxClosed
 			panic(p)
 		}
 	}()

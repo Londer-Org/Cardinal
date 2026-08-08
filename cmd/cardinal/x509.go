@@ -137,7 +137,7 @@ func runX509List(ctx context.Context, args []string) error {
 	}
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "ID\tSUBJECT\tSTATE\tEXPIRES")
+	fmt.Fprintln(w, "ID\tSUBJECT\tSTATE\tEXPIRES") //nolint:errcheck // the header is already written, so the status cannot be changed
 	for _, k := range keys {
 		state := "published"
 		switch {
@@ -146,7 +146,7 @@ func runX509List(ctx context.Context, args []string) error {
 		case k.RetiredAt != nil:
 			state = "retired"
 		}
-		fmt.Fprintf(w, "%s\t%s\t%s\t%s\n",
+		fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", //nolint:errcheck // the header is already written, so the status cannot be changed
 			k.ID, k.Subject, state, k.NotAfter.Format("2006-01-02"))
 	}
 	return w.Flush()
@@ -203,8 +203,8 @@ func runX509Rotate(ctx context.Context, args []string) error {
 	if err != nil {
 		return fmt.Errorf("%q is not a key id — see `cardinal x509 ca list`", pos[0])
 	}
-	if _, err := x509SealKey(*configPath); err != nil {
-		return err
+	if _, x509SealKeyErr := x509SealKey(*configPath); x509SealKeyErr != nil {
+		return x509SealKeyErr
 	}
 
 	s, err := open(ctx, *dsnFlag)

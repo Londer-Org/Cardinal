@@ -152,7 +152,7 @@ func TestRotatingAClientSecretInvalidatesTheOldOne(t *testing.T) {
 	var rotated struct {
 		Secret string `json:"secret"`
 	}
-	resp := postJSON(t, admin, "/api/applications/"+clientID+"/secret", csrf, nil, &rotated)
+	resp := postJSON(t, admin, "/api/applications/"+clientID+"/secret", csrf, nil, &rotated) //nolint:bodyclose // the helper drains and closes it; bodyclose cannot see through the call
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("rotating returned %d", resp.StatusCode)
 	}

@@ -18,8 +18,10 @@ import (
 )
 
 var (
+	// ErrClientNotFound reports that no OIDC client is registered under that id.
 	ErrClientNotFound = errors.New("store: OIDC client not found")
-	ErrInvalidSecret  = errors.New("store: client secret does not match")
+	// ErrInvalidSecret reports that the client secret did not match.
+	ErrInvalidSecret = errors.New("store: client secret does not match")
 
 	// ErrInsecureRedirect means a redirect URI would weaken the flow.
 	ErrInsecureRedirect = errors.New("store: insecure redirect URI")
@@ -40,8 +42,10 @@ const (
 	// no secret because it cannot keep one, and relies on PKCE instead.
 	AuthNone AuthMethod = "none"
 
+	// AuthClientSecretBasic is the 'client_secret_basic' authmethod.
 	AuthClientSecretBasic AuthMethod = "client_secret_basic"
-	AuthClientSecretPost  AuthMethod = "client_secret_post"
+	// AuthClientSecretPost is the 'client_secret_post' authmethod.
+	AuthClientSecretPost AuthMethod = "client_secret_post"
 
 	// AuthPrivateKeyJWT is the strongest: the client signs an assertion with a
 	// private key Cardinal never holds, so there is no shared secret to leak
@@ -109,7 +113,7 @@ func (s *Store) RegisterOIDCClient(
 	actorID *uuid.UUID,
 ) (*RegisteredClient, error) {
 	if len(in.RedirectURIs) == 0 {
-		return nil, fmt.Errorf("store: at least one redirect URI is required")
+		return nil, errors.New("store: at least one redirect URI is required")
 	}
 
 	for _, raw := range in.RedirectURIs {
@@ -152,20 +156,20 @@ func (s *Store) RegisterOIDCClient(
 
 	var secretHash []byte
 	if in.AuthMethod == AuthClientSecretBasic || in.AuthMethod == AuthClientSecretPost {
-		secret, err := newOpaqueID()
-		if err != nil {
-			return nil, err
+		secret, newOpaqueIDErr := newOpaqueID()
+		if newOpaqueIDErr != nil {
+			return nil, newOpaqueIDErr
 		}
 		out.Secret = secret
 		secretHash = hashClientSecret(clientID, secret)
 	}
 
 	err = s.InTx(ctx, func(tx pgx.Tx) error {
-		if err := insertEntityTx(ctx, tx, entity); err != nil {
-			return err
+		if insertEntityTxErr := insertEntityTx(ctx, tx, entity); insertEntityTxErr != nil {
+			return insertEntityTxErr
 		}
 
-		if _, err := tx.Exec(ctx, `
+		if _, execErr := tx.Exec(ctx, `
 			INSERT INTO oidc_clients
 				(entity_id, client_id, secret_hash, auth_method, redirect_uris,
 				 grant_types, scopes, require_pkce, dev_mode, require_consent)
@@ -173,14 +177,14 @@ func (s *Store) RegisterOIDCClient(
 			entity.ID, clientID, secretHash, string(in.AuthMethod),
 			in.RedirectURIs, out.Client.GrantTypes, out.Client.Scopes, in.DevMode,
 			in.RequireConsent,
-		); err != nil {
-			return fmt.Errorf("store: registering client: %w", err)
+		); execErr != nil {
+			return fmt.Errorf("store: registering client: %w", execErr)
 		}
 
-		ev, err := event.New(event.ActionEntityCreated, &entity.ID, actorID,
+		ev, buildErr := event.New(event.ActionEntityCreated, &entity.ID, actorID,
 			map[string]any{"type": string(directory.TypeApplication)})
-		if err != nil {
-			return err
+		if buildErr != nil {
+			return buildErr
 		}
 		return s.AppendEvent(ctx, tx, ev)
 	})
@@ -456,14 +460,14 @@ func (s *Store) RotateClientSecret(ctx context.Context, clientID string, actorID
 		var entityID uuid.UUID
 		var method string
 
-		err := tx.QueryRow(ctx, `
+		queryErr := tx.QueryRow(ctx, `
 			SELECT entity_id, auth_method FROM oidc_clients WHERE client_id = $1`,
 			clientID).Scan(&entityID, &method)
-		if errors.Is(err, pgx.ErrNoRows) {
+		if errors.Is(queryErr, pgx.ErrNoRows) {
 			return ErrClientNotFound
 		}
-		if err != nil {
-			return fmt.Errorf("store: reading client: %w", err)
+		if queryErr != nil {
+			return fmt.Errorf("store: reading client: %w", queryErr)
 		}
 
 		// A public client has no secret, and giving it one would change what it
@@ -473,26 +477,26 @@ func (s *Store) RotateClientSecret(ctx context.Context, clientID string, actorID
 			return ErrPublicClient
 		}
 
-		if _, err := tx.Exec(ctx, `
+		if _, execErr := tx.Exec(ctx, `
 			UPDATE oidc_clients SET secret_hash = $2 WHERE client_id = $1`,
-			clientID, hashClientSecret(clientID, secret)); err != nil {
-			return fmt.Errorf("store: rotating client secret: %w", err)
+			clientID, hashClientSecret(clientID, secret)); execErr != nil {
+			return fmt.Errorf("store: rotating client secret: %w", execErr)
 		}
 
 		// Every token the old secret was used to obtain goes with it. Leaving
 		// them would mean a rotation that stops an attacker getting *new*
 		// tokens while the ones they already hold keep working for their full
 		// lifetime — which is the part that matters when a secret has leaked.
-		if _, err := tx.Exec(ctx,
+		if _, execErr := tx.Exec(ctx,
 			`UPDATE oidc_tokens
 			    SET revoked_at = now()
-			  WHERE client_id = $1 AND revoked_at IS NULL`, clientID); err != nil {
-			return fmt.Errorf("store: revoking this client's tokens: %w", err)
+			  WHERE client_id = $1 AND revoked_at IS NULL`, clientID); execErr != nil {
+			return fmt.Errorf("store: revoking this client's tokens: %w", execErr)
 		}
 
-		ev, err := event.New(event.ActionClientSecretRotated, &entityID, actorID, nil)
-		if err != nil {
-			return err
+		ev, queryErr := event.New(event.ActionClientSecretRotated, &entityID, actorID, nil)
+		if queryErr != nil {
+			return queryErr
 		}
 		return s.AppendEvent(ctx, tx, ev)
 	})

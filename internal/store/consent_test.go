@@ -62,8 +62,8 @@ func TestConsentCoversRequestedScopes(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got, err := s.ConsentCovers(ctx, user.ID, client, tc.requested)
-			require.NoError(t, err)
+			got, consentCoversErr := s.ConsentCovers(ctx, user.ID, client, tc.requested)
+			require.NoError(t, consentCoversErr)
 			assert.Equal(t, tc.covered, got, tc.because)
 		})
 	}

@@ -182,7 +182,7 @@ func TestAnEnrollmentTokenFromTheConsoleActuallyEnrols(t *testing.T) {
 		Command   string `json:"command"`
 		ExpiresAt string `json:"expiresAt"`
 	}
-	resp := postJSON(t, admin, "/api/directory/hosts/"+host+"/enrollment", csrf, nil, &issued)
+	resp := postJSON(t, admin, "/api/directory/hosts/"+host+"/enrollment", csrf, nil, &issued) //nolint:bodyclose // the helper drains and closes it; bodyclose cannot see through the call
 	if resp.StatusCode != http.StatusCreated {
 		t.Fatalf("issuing enrollment returned %d", resp.StatusCode)
 	}

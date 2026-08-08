@@ -105,7 +105,7 @@ func (a *Agent) Fetch(ctx context.Context) (*Assignment, error) {
 	if err != nil {
 		return nil, fmt.Errorf("agent: fetching assignment: %w", err)
 	}
-	defer func() { _ = resp.Body.Close() }()
+	defer func() { _ = resp.Body.Close() }() //nolint:errcheck // nothing actionable remains once the body is read
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("agent: Cardinal refused the assignment: %s",

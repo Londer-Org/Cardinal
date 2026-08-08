@@ -146,7 +146,7 @@ func groupMembers(t *testing.T, c *http.Client, group string) []memberRow {
 	defer drain(resp)
 
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
+		body, _ := io.ReadAll(resp.Body) //nolint:errcheck // a body that will not read is reported by the assertion that follows
 		t.Fatalf("reading %s returned %d: %s", group, resp.StatusCode, body)
 	}
 

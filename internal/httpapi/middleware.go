@@ -429,6 +429,8 @@ type statusRecorder struct {
 	status int
 }
 
+// WriteHeader records the status before passing it on, so the access log can
+// report what was actually sent rather than assuming 200.
 func (r *statusRecorder) WriteHeader(code int) {
 	r.status = code
 	r.ResponseWriter.WriteHeader(code)

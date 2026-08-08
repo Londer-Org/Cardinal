@@ -458,7 +458,7 @@ func TestServingAnAssignmentClosesTheAdoptionWindow(t *testing.T) {
 	seedSQL(t, `
 		UPDATE posix_identities SET first_served_at = NULL
 		 WHERE entity_id = (SELECT id FROM entities WHERE name = 'e2e-linux-users')`)
-	drain(signedGET{signer: host.Signer, path: "/api/hosts/assignment"}.send(t))
+	drain(signedGET{signer: host.Signer, path: "/api/hosts/assignment"}.send(t)) //nolint:bodyclose // the helper drains and closes it; bodyclose cannot see through the call
 
 	group := seedQuery(t, `
 		SELECT first_served_at IS NULL FROM posix_identities p

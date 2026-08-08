@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -124,7 +125,7 @@ func runAppList(ctx context.Context, args []string) error {
 	}
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "NAME\tCLIENT ID\tAUTH\tPKCE\tCONSENT\tDEV\tREDIRECT URIS")
+	fmt.Fprintln(w, "NAME\tCLIENT ID\tAUTH\tPKCE\tCONSENT\tDEV\tREDIRECT URIS") //nolint:errcheck // the header is already written, so the status cannot be changed
 	for _, c := range clients {
 		dev := ""
 		if c.DevMode {
@@ -140,7 +141,7 @@ func runAppList(ctx context.Context, args []string) error {
 		if c.RequireConsent {
 			consent = "yes"
 		}
-		fmt.Fprintf(w, "%s\t%s…\t%s\t%s\t%s\t%s\t%s\n",
+		fmt.Fprintf(w, "%s\t%s…\t%s\t%s\t%s\t%s\t%s\n", //nolint:errcheck // the header is already written, so the status cannot be changed
 			c.Name, c.ClientID[:12], c.AuthMethod, pkce, consent, dev,
 			strings.Join(c.RedirectURIs, " "))
 	}
@@ -157,7 +158,7 @@ func loadConfigForCheck(path string) (*config.Config, error) {
 			return cfg, nil
 		}
 	}
-	return nil, fmt.Errorf("no readable configuration")
+	return nil, errors.New("no readable configuration")
 }
 
 func splitList(v string) []string {

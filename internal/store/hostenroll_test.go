@@ -77,7 +77,7 @@ func TestConcurrentHostEnrollment(t *testing.T) {
 	for i := range racers {
 		go func() {
 			defer wg.Done()
-			if _, err := s.RedeemHostEnrollment(ctx, enrollment.Token, keys[i], testIP); err == nil {
+			if _, redeemHostEnrollmentErr := s.RedeemHostEnrollment(ctx, enrollment.Token, keys[i], testIP); redeemHostEnrollmentErr == nil {
 				mu.Lock()
 				successes++
 				mu.Unlock()

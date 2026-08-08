@@ -26,7 +26,9 @@ type Period struct {
 }
 
 var (
-	ErrEmptyPeriod   = errors.New("temporal: period is empty")
+	// ErrEmptyPeriod reports that the period covers no time at all.
+	ErrEmptyPeriod = errors.New("temporal: period is empty")
+	// ErrInvertedRange reports that the period ends before it starts.
 	ErrInvertedRange = errors.New("temporal: period ends before it starts")
 )
 
@@ -35,7 +37,7 @@ func Forever() Period {
 	return Period{From: time.Now().UTC().Truncate(time.Microsecond)}
 }
 
-// From returns an open-ended period starting at t.
+// FromTime returns an open-ended period starting at t.
 func FromTime(t time.Time) Period {
 	return Period{From: t.UTC().Truncate(time.Microsecond)}
 }

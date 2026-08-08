@@ -252,7 +252,7 @@ func runPOSIXList(ctx context.Context, args []string) error {
 	}
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "NUMBER\tTYPE\tNAME\tHOME\tSHELL\tSTATE")
+	fmt.Fprintln(w, "NUMBER\tTYPE\tNAME\tHOME\tSHELL\tSTATE") //nolint:errcheck // the header is already written, so the status cannot be changed
 	for _, p := range identities {
 		home, shell := p.HomeDirectory, p.LoginShell
 		if home == "" {
@@ -264,7 +264,7 @@ func runPOSIXList(ctx context.Context, args []string) error {
 		if p.Adoptable() {
 			state = "adoptable"
 		}
-		fmt.Fprintf(w, "%d\t%s\t%s\t%s\t%s\t%s\n",
+		fmt.Fprintf(w, "%d\t%s\t%s\t%s\t%s\t%s\n", //nolint:errcheck // the header is already written, so the status cannot be changed
 			p.Number, p.Type, p.Name, home, shell, state)
 	}
 	return w.Flush()

@@ -51,8 +51,8 @@ type userResponse struct {
 // safe interpretation is obvious.
 func pageFrom(r *http.Request) store.Page {
 	q := r.URL.Query()
-	limit, _ := strconv.Atoi(q.Get("limit"))
-	offset, _ := strconv.Atoi(q.Get("offset"))
+	limit, _ := strconv.Atoi(q.Get("limit"))   //nolint:errcheck // a bad number means the default, as documented above
+	offset, _ := strconv.Atoi(q.Get("offset")) //nolint:errcheck // a bad number means the default, as documented above
 	return store.Page{Search: q.Get("q"), Limit: limit, Offset: offset}
 }
 
@@ -189,7 +189,7 @@ func (s *Server) handleGetUser(w http.ResponseWriter, r *http.Request) {
 		posix = posixResponse(identity)
 	}
 
-	email, _ := entity.Attrs["email"].(string)
+	email, _ := entity.Attrs["email"].(string) //nolint:errcheck // a missing or non-string attribute is the empty string
 	writeJSON(w, http.StatusOK, userDetailResponse{
 		userResponse: userResponse{
 			Login:             entity.Name,

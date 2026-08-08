@@ -134,7 +134,7 @@ func (a *Agent) RefreshHostCertificate(ctx context.Context) (bool, error) {
 	if err != nil {
 		return false, fmt.Errorf("agent: requesting a host certificate: %w", err)
 	}
-	defer func() { _ = resp.Body.Close() }()
+	defer func() { _ = resp.Body.Close() }() //nolint:errcheck // nothing actionable remains once the body is read
 
 	if resp.StatusCode != http.StatusOK {
 		return false, fmt.Errorf("agent: Cardinal refused a host certificate: %s",
@@ -234,10 +234,10 @@ HostCertificate %s
 	if err != nil {
 		return fmt.Errorf("agent: creating the sshd drop-in candidate: %w", err)
 	}
-	defer func() { _ = os.Remove(tmp.Name()) }()
+	defer func() { _ = os.Remove(tmp.Name()) }() //nolint:errcheck // cleanup of a file the success path has already renamed away
 
 	if _, err := tmp.WriteString(content); err != nil {
-		_ = tmp.Close()
+		_ = tmp.Close() //nolint:errcheck // best effort; the meaningful error is the one being returned
 		return fmt.Errorf("agent: writing the sshd drop-in: %w", err)
 	}
 	if err := tmp.Close(); err != nil {
@@ -346,14 +346,14 @@ func writeFileAtomically(path string, content []byte, mode os.FileMode) error {
 	if err != nil {
 		return fmt.Errorf("agent: creating a candidate in %s: %w", dir, err)
 	}
-	defer func() { _ = os.Remove(tmp.Name()) }()
+	defer func() { _ = os.Remove(tmp.Name()) }() //nolint:errcheck // cleanup of a file the success path has already renamed away
 
 	if _, err := tmp.Write(content); err != nil {
-		_ = tmp.Close()
+		_ = tmp.Close() //nolint:errcheck // best effort; the meaningful error is the one being returned
 		return fmt.Errorf("agent: writing %s: %w", path, err)
 	}
 	if err := tmp.Sync(); err != nil {
-		_ = tmp.Close()
+		_ = tmp.Close() //nolint:errcheck // best effort; the meaningful error is the one being returned
 		return fmt.Errorf("agent: syncing %s: %w", path, err)
 	}
 	if err := tmp.Close(); err != nil {

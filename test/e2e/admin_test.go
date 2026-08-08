@@ -51,7 +51,7 @@ func TestOrdinaryUserCannotReachTheAdminAPI(t *testing.T) {
 			resp := requestWithCSRF(t, c, endpoint.method, endpoint.path, csrf)
 			defer drain(resp)
 
-			body, _ := io.ReadAll(resp.Body)
+			body, _ := io.ReadAll(resp.Body) //nolint:errcheck // a body that will not read is reported by the assertion that follows
 
 			// 403 specifically. A 401 would say "sign in", which this session
 			// already has done, and a 404 would hide that the endpoint exists.
@@ -159,7 +159,6 @@ func TestUnauthenticatedAdminAPIIsUnauthorized(t *testing.T) {
 func adminClient(t *testing.T) (*http.Client, string) {
 	t.Helper()
 
-	//nolint:gosec // a session token for a throwaway container, not a credential
 	const token = "e2e-admin-session-token-with-plenty-of-entropy-0123456789"
 	const login = "e2e-admin"
 
@@ -272,7 +271,7 @@ func TestAdminCanManageApplications(t *testing.T) {
 		"/api/applications/"+registered.ClientID, "application/json")
 	defer drain(detailResp)
 	if detailResp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(detailResp.Body)
+		body, _ := io.ReadAll(detailResp.Body) //nolint:errcheck // a body that will not read is reported by the assertion that follows
 		t.Fatalf("inspecting returned %d: %s", detailResp.StatusCode, body)
 	}
 	var detail struct {
@@ -371,4 +370,4 @@ func requestWithCSRF(t *testing.T, c *http.Client, method, path, csrf string) *h
 // Wrapped because the error is genuinely uninteresting in a test — there is
 // nothing to do about a failed close on a response already read — and nine
 // copies of the same discard read worse than one named function.
-func drain(resp *http.Response) { _ = resp.Body.Close() }
+func drain(resp *http.Response) { _ = resp.Body.Close() } //nolint:errcheck // nothing actionable remains once the body is read
