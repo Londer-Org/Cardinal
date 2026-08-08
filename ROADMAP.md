@@ -26,7 +26,31 @@ access.
 
 Phase 5 is SCIM, SSF/CAEP events, an audit explorer with point-in-time queries,
 a documentation site, hardening and coverage work, and a stated API-stability
-policy for 1.0.
+policy for 1.0. The documentation site is built; the audit explorer is built.
+
+Ahead of the rest of it, three things found by audit are worth more than any new
+feature, because each is a promise the project already makes: redeeming a
+recovery code, `cardinal ssh`, and deciding what `recovery.email_enabled` is —
+implemented, or removed so it stops claiming to be a setting.
+
+## Built but unreachable
+
+The most useful thing an audit of this project finds, and it has now found it
+three times: something implemented, tested, and wired to nothing. It passes
+every test it has, and no user can get to it.
+
+| Thing | State | Consequence |
+|---|---|---|
+| **Recovery codes cannot be redeemed** | `store.RedeemRecoveryCode` is written and tested. No route, no CLI command, no page calls it | Codes can be generated and counted. Somebody locked out, holding one on paper, has nowhere to enter it. This is phase-0 non-negotiable #2 |
+| **SSH certificates had no client** | The endpoint has existed since Phase 4; nothing could reach it, because it needs a device-bound session and a terminal cannot perform a ceremony | Half fixed: the browser-handoff flow is built, `cardinal ssh` is not |
+| **Email recovery is configured, not implemented** | `recovery.email_enabled` and `email_domains` parse and validate, with circular-recovery checks. Nothing sends mail | Worse than absent: setting it to `true` reads as enabling a channel, and enables nothing |
+| **`database.max_conns`, `conn_max_lifetime`** | Parsed; `store.Open` takes a DSN and never sees them | An operator tuning a busy deployment silently gets pgx's defaults |
+| **`PurgeACMENonces`, `PurgeExpiredOIDCFlows`** | Written; `backgroundMaintenance` purges only ceremonies and rate limits | ACME nonces and spent OIDC flows accumulate forever |
+
+How they are found: every HTTP route checked for a caller in the console, the
+CLI, the agent or the tests; every exported store method checked for a caller
+outside its own package; every config field checked for a read. Worth repeating
+before each release — `docs/` says how in the contributing notes.
 
 ## Known gaps
 
@@ -42,6 +66,10 @@ Honest, and referenced from [the threat model](docs/threat-model.md) and
 | No SSF/CAEP | A revocation here does not propagate to applications; they learn at their next token refresh | 5 |
 | Single writer | PostgreSQL streaming replication with manual promotion. Deliberate — split-brain in an identity store means two primaries accepting credential writes | revisit with a team on call |
 | No automated failover | Same reason. A misconfigured automatic failover is more dangerous than none | revisit |
+| Agents do not receive CA trust | `cardinal-agent` installs the host certificate but not `TrustedUserCAKeys`. Distributing it is a manual step, and rotating the SSH authority is a manual fleet-wide operation | 5 |
+| No N-1 compatibility test | Nothing runs the previous release against a schema migrated by the current one. The expand-only rule is what makes it safe, and the rule is enforced per migration — the pairing is checked by reading | when there are two releases |
+| No agent/server version negotiation | A newer agent may request a route an older server lacks. It surfaces as a fetch failing while the agent goes on serving its cache, which is a degradation that hides itself | 5 |
+| Windows is client-only | Passkeys, OIDC and OpenSSH work. There is no managed-host path and no domain join: the agent needs systemd's userdb, sudoers and sshd config | not planned |
 
 ## Deliberately not building
 
