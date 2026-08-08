@@ -71,6 +71,25 @@ Honest, and referenced from [the threat model](docs/threat-model.md) and
 | No agent/server version negotiation | A newer agent may request a route an older server lacks. It surfaces as a fetch failing while the agent goes on serving its cache, which is a degradation that hides itself | 5 |
 | Windows is client-only | Passkeys, OIDC and OpenSSH work. There is no managed-host path and no domain join: the agent needs systemd's userdb, sudoers and sshd config | not planned |
 
+## Open questions
+
+Not gaps — decisions nobody has made yet.
+
+**Does the shipped policy set assume too much?** Policy itself is already the
+most editable thing here: Cedar in the database, versioned, activated and rolled
+back from the console, picked up by every server within ten seconds. What is not
+editable is the *starting point*. `policies/cardinal.cedar` names `AccessURL`
+with an `audience` context and `SSHLogin` with a `localAccount`, and carries
+placeholder group UUIDs with a comment telling you to replace them — so somebody
+deploying Cardinal has to read Cedar and rewrite that file before anything
+works. Whether the console should help build those rules, or whether writing
+them by hand is the honest price of policy-as-code, is undecided.
+
+Worth separating from a related misreading, because they have different answers:
+the forwardAuth endpoint is not Traefik-specific. It emits the `X-Auth-Request-*`
+convention that nginx `auth_request`, Caddy, Envoy and HAProxy all consume. The
+Traefik coupling is in the examples and the lab, not the product.
+
 ## Deliberately not building
 
 These are decisions, not omissions, and each is recorded with its reasoning.
