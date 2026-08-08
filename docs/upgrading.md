@@ -101,24 +101,121 @@ else. `CARDINAL_DSN` and `-dsn` work too, and `-config` points elsewhere.
 
 Rolling back is deploying the previous tag. Nothing else.
 
+## Agents
+
+An agent is on a machine, and a fleet cannot be updated atomically. Everything
+below is measured on a real host rather than reasoned about, because the numbers
+are what decide whether this is a maintenance window or a routine act.
+
+### Upgrading one
+
+```sh
+sudo apt install ./cardinal-agent_0.2.0_linux_amd64.deb   # or dnf/rpm
+sudo systemctl restart cardinal-agent
+```
+
+**The restart is a separate step, and the package will not do it for you.**
+There is deliberately no postinstall script: the two edits a managed host needs —
+`systemd` in `nsswitch.conf` and `@includedir` in `/etc/sudoers` — are exactly
+the ones the agent refuses to make itself, and a package allowed what the daemon
+is not is the surprise that costs people's trust. The cost of that decision is
+this line, and installing without it leaves the old agent running.
+
+**What survives the upgrade,** measured by installing over a running,
+enrolled agent:
+
+| | |
+|---|---|
+| `/etc/cardinal/host_key` | unchanged — **no re-enrollment** |
+| `/var/lib/cardinal/assignment.json` | survives; identity is served from it immediately |
+| `/etc/cardinal/agent.toml` | `config|noreplace`, so local edits are kept |
+
+**The gap is about 6 ms.** The agent loads its cached assignment from disk
+before contacting anything, so identity is being served again before a login has
+time to notice. Measured by stopping the agent and polling `getent` until the
+name came back.
+
+It is not zero, and what happens inside it is worth knowing: while the agent is
+down, directory users **do not exist** on that machine. `getent passwd alice`
+returns nothing, a new login is refused, and `sudo` cannot resolve the name.
+Already-running sessions keep their shell — the process holds a uid, not a name.
+
+### Rolling out to a fleet
+
+Update one machine, look at it, then the rest.
+
+```sh
+cardinal-agent status     # what is cached here, and how old
+cardinal-agent doctor     # this machine's prerequisites, changes nothing
+```
+
+A mixed fleet is a normal state, not a race to end. An agent fetches an
+assignment and renders it, so a server that adds a field simply sends one older
+agents ignore.
+
+**Update servers before agents.** The reverse is the risky order: there is no
+version negotiation between them, so a newer agent may ask for a route an older
+server does not have. Nothing detects that today — it surfaces as a fetch
+failing, and the agent goes on serving its cache, which is a degradation that
+hides itself.
+
+### If Cardinal is unreachable during any of this
+
+Nothing on the host stops working. Verified by pointing an agent at a hostname
+that does not resolve: it logged `loaded cached assignment host=dev-01 users=2`
+and went on answering `getent`. That is the property the whole design rests on
+([ADR 0006](adr/0006-ssh-certificates-for-host-access.md)) — the machine already
+holds what it needs, and the certificate a person logs in with is validated by
+signature rather than by asking anybody.
+
+So an agent upgrade during a Cardinal outage is safe, and so is the outage.
+
+### Rolling back an agent
+
+Install the previous package and restart. The host key and cache are untouched,
+so nothing re-enrolls and no assignment is refetched before it would have been
+anyway.
+
+One thing to know, because the failure is abrupt. The cache is the only file a
+newer agent might write in a shape an older one cannot read, and an agent that
+cannot parse its cache **exits** rather than starting without it:
+
+```
+cardinal-agent: agent: parsing cache /var/lib/cardinal/assignment.json:
+  invalid character 't' looking for beginning of object key string
+```
+
+That is deliberate — continuing would leave a machine serving nothing while the
+file sat there looking fine — but it means the machine has no directory users
+until it is dealt with. The fix is one line:
+
+```sh
+sudo rm /var/lib/cardinal/assignment.json
+sudo systemctl restart cardinal-agent
+```
+
+It then starts empty and refetches. Verified: a deliberately corrupted cache
+stops the agent, and deleting it brings identity straight back.
+
+The consequence worth planning around: a change to the cache format is a
+breaking change *for rollback*, even though nothing about the schema changed. If
+a release changes it, say so in the release notes, because rolling back that one
+means clearing the cache on every host — and doing that during a Cardinal outage
+leaves those hosts with no identity until it returns.
+
 ## Everything else that moves
 
 | Component | Updates by | Goes back by |
 |---|---|---|
 | `cardinal server` | Pull the image, restart | Deploy the previous image |
 | Database schema | `cardinal migrate` | Nothing — the old build runs against it |
-| `cardinal-agent` | `.deb` / `.rpm` per host | Install the previous package |
+| `cardinal-agent` | `.deb` / `.rpm`, then restart | Install the previous package ([above](#agents)) |
 | `cardinal` CLI | Binary or package | Install the previous one |
 | Policy | `cardinal policy publish -activate` | Activate an earlier version |
 
 Policy was always reversible: every published version is kept, activating an
 earlier one is a button in the console, and servers pick it up within ten
 seconds.
-
-Agents update per host and will be a mixed fleet during any rollout, which is
-fine — an agent fetches an assignment and renders it, so a server that adds a
-field sends one older agents ignore. Update servers before agents; a new agent
-may ask for a route an old server does not have.
 
 Host access survives all of it. Certificates are validated by signature and
 carry their own expiry, so a machine keeps working through an upgrade, a
