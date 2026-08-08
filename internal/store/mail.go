@@ -227,18 +227,30 @@ type Queued struct {
 
 // EnqueueMail adds a message to the outbox.
 //
-// Called inside the transaction that caused it, so a passkey registration and
-// the notification about it either both happen or neither does. The alternative
-// — sending after the commit — drops the notification whenever the process dies
-// in between, which is exactly when somebody most wants to have been told.
-func EnqueueMail(
+// Takes a transaction when the caller has one, so the notification and the
+// change it describes commit together. Several callers do not — a passkey
+// registration commits inside the auth service — and pass nil, which queues on
+// the pool instead.
+//
+// The difference is worth stating plainly rather than pretending it away: with
+// nil there is a window, between the change committing and this row being
+// written, in which a process that dies loses the notice. That is acceptable
+// here and would not be for anything that granted access. These messages report;
+// a lost one costs somebody a notification, not their account.
+func (s *Store) EnqueueMail(
 	ctx context.Context, tx pgx.Tx,
 	subjectID *uuid.UUID, recipient, kind, subjectLine, body string,
 ) error {
-	_, err := tx.Exec(ctx, `
+	const insert = `
 		INSERT INTO mail_outbox (subject_id, recipient, kind, subject_line, body)
-		VALUES ($1, $2, $3, $4, $5)`,
-		subjectID, recipient, kind, subjectLine, body)
+		VALUES ($1, $2, $3, $4, $5)`
+
+	var err error
+	if tx != nil {
+		_, err = tx.Exec(ctx, insert, subjectID, recipient, kind, subjectLine, body)
+	} else {
+		_, err = s.pool.Exec(ctx, insert, subjectID, recipient, kind, subjectLine, body)
+	}
 	if err != nil {
 		return fmt.Errorf("store: queueing mail: %w", err)
 	}

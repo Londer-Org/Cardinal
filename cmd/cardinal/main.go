@@ -101,6 +101,8 @@ func run(ctx context.Context, args []string) error {
 		return runApp(ctx, rest)
 	case "token":
 		return runToken(ctx, rest)
+	case "mail":
+		return runMail(ctx, rest)
 	case "ssh":
 		return runSSH(ctx, rest)
 	case "posix":
@@ -180,6 +182,21 @@ ACCESS TOKENS (scripts and automation)
 
   A token authenticates its owner but is never device-bound, so existing policy
   refuses it administrative actions and SSH certificates.
+
+NOTIFICATION EMAIL
+  mail settings                            How this deployment sends
+  mail set [-host -port -from -tls ...]    Change it. Omitted fields are left
+                                           alone; -password unchanged unless given
+  mail test -to <address>                  Send one and print what the relay said
+  mail status                              What is queued, and what is failing
+  mail templates [-show <kind>] [-reset]   The wording, built-in or overridden
+
+  Settings live in the database, not the configuration file, so a deployment
+  running the published image can change them. Only mail.encryption_key is in
+  the file, because it protects the relay password stored beside everything else.
+
+  Nothing here authorises anything: these messages report what happened
+  (ADR 0009). Recovery email is never a way in.
 
 HOST ACCESS (SSH certificates)
   ssh [user@]<host> [-server <url>]        Log into a machine. Opens a browser

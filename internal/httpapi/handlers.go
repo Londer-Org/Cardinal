@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 	"go.londer.be/cardinal/internal/auth"
 	"go.londer.be/cardinal/internal/directory"
+	"go.londer.be/cardinal/internal/mail"
 	"go.londer.be/cardinal/internal/store"
 )
 
@@ -246,6 +247,14 @@ func (s *Server) handleRegisterFinish(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// After the fact and best effort: the passkey is registered either way, and
+	// a mail problem must not turn that into an error. This is the message that
+	// matters most of the set — a passkey somebody did not add is somebody else
+	// able to sign in as them.
+	if session, ok := SessionFrom(ctx); ok {
+		s.notify(ctx, session.SubjectID, mail.KindPasskeyRegistered, "")
+	}
+
 	writeJSON(w, http.StatusCreated, credentialBody(cred))
 }
 
@@ -332,6 +341,12 @@ func (s *Server) handleRevokeCredential(w http.ResponseWriter, r *http.Request) 
 			"cannot revoke your only credential — register another first")
 		return
 	}
+
+	// The other half of the pair. Somebody removing a passkey they still have
+	// knows they did it; somebody who reads this and did not is being locked
+	// out, which is the case worth telling them about while there is still time.
+	s.notify(ctx, session.SubjectID, mail.KindPasskeyRevoked, "")
+
 	w.WriteHeader(http.StatusNoContent)
 }
 

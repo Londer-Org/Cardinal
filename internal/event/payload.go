@@ -54,6 +54,13 @@ var allowedPayloadKeys = []string{
 	"device_bound",
 	"depth",
 
+	// Whether a deployment-wide feature is on. Records that somebody turned
+	// notification email on or off, which matters because redirecting or
+	// silencing a deployment's mail is how an account owner stops hearing what
+	// is being done to their account. A boolean about the deployment, so it
+	// cannot identify anybody.
+	"enabled",
+
 	// A uid or gid. Identifies a person only through the entity it was
 	// assigned to, exactly like entity_id — and once that entity is redacted
 	// the number resolves to nobody. Recording it matters because the number

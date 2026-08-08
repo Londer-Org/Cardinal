@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"go.londer.be/cardinal/internal/directory"
+	"go.londer.be/cardinal/internal/mail"
 	"go.londer.be/cardinal/internal/store"
 )
 
@@ -107,6 +108,12 @@ func (s *Server) handleRedeemRecoveryCode(w http.ResponseWriter, r *http.Request
 
 	s.log.InfoContext(ctx, "recovery code redeemed",
 		"subject", entity.ID, "expires", invitation.Invitation.ExpiresAt)
+
+	// Sent even though the person redeeming is presumably the account owner,
+	// because the case that matters is the one where they are not: somebody who
+	// found the printed sheet. The message says a code was used and that a new
+	// set invalidates every old one.
+	s.notify(ctx, entity.ID, mail.KindRecoveryCodeUsed, "")
 
 	// The token, for the client to walk the enrollment path with. Not a session:
 	// what this proves is that somebody holds a code, and what that earns is the

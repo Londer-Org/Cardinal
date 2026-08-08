@@ -14,6 +14,7 @@ import (
 	"go.londer.be/cardinal/internal/claims"
 	"go.londer.be/cardinal/internal/config"
 	"go.londer.be/cardinal/internal/directory"
+	"go.londer.be/cardinal/internal/mail"
 	"go.londer.be/cardinal/internal/oidcprovider"
 	"go.londer.be/cardinal/internal/policy"
 	"go.londer.be/cardinal/internal/sshca"
@@ -45,7 +46,8 @@ type Server struct {
 	// sshCA is nil unless host access is configured. A certificate authority
 	// nobody has enrolled hosts against is a signing key sitting in a database
 	// for no reason, so it stays off until asked for.
-	sshCA *sshca.CA
+	sshCA    *sshca.CA
+	notifier *mail.Notifier
 
 	// x509CA is nil unless X.509 issuance is configured. Optional in exactly
 	// the same way and for the same reason: a deployment that already has a CA
@@ -107,6 +109,11 @@ type Options struct {
 
 	// X509CA enables ACME issuance. Nil leaves it off.
 	X509CA *x509ca.CA
+
+	// Notifier sends people word of what happened to their account. Nil leaves
+	// notifications off, which is what a deployment with no relay configured
+	// gets, and the server works identically without it.
+	Notifier *mail.Notifier
 }
 
 // New builds a Server and wires its routes.
@@ -138,6 +145,7 @@ func New(s *store.Store, a *auth.Service, cfg *config.Config, opts Options) (*Se
 		claims:        claims.NewResolver(s),
 		oidc:          opts.OIDC,
 		sshCA:         opts.SSHCA,
+		notifier:      opts.Notifier,
 		x509CA:        opts.X509CA,
 	}
 	return srv, nil

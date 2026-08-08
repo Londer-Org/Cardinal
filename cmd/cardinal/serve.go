@@ -15,6 +15,7 @@ import (
 	"go.londer.be/cardinal/internal/claims"
 	"go.londer.be/cardinal/internal/config"
 	"go.londer.be/cardinal/internal/httpapi"
+	"go.londer.be/cardinal/internal/mail"
 	"go.londer.be/cardinal/internal/oidcprovider"
 	"go.londer.be/cardinal/internal/policy"
 	"go.londer.be/cardinal/internal/sshca"
@@ -168,13 +169,20 @@ func runServe(ctx context.Context, args []string) error {
 			"directory", strings.TrimRight(cfg.Server.PublicURL, "/")+"/acme/directory")
 	}
 
+	// Notifications, if a relay has been configured. The settings live in the
+	// database rather than here, so this is built unconditionally and does
+	// nothing until somebody turns it on — which means enabling mail does not
+	// need a restart.
+	notifier := mail.NewNotifier(st, cfg.Server.PublicURL, cfg.WebAuthn.RPDisplayName, log)
+
 	apiServer, err := httpapi.New(st, authSvc, cfg, httpapi.Options{
-		DevMode: *dev,
-		UI:      ui,
-		Logger:  log,
-		OIDC:    oidcProvider,
-		SSHCA:   hostCA,
-		X509CA:  certificateAuthority,
+		DevMode:  *dev,
+		UI:       ui,
+		Logger:   log,
+		OIDC:     oidcProvider,
+		SSHCA:    hostCA,
+		Notifier: notifier,
+		X509CA:   certificateAuthority,
 	})
 	if err != nil {
 		return err
@@ -210,6 +218,7 @@ func runServe(ctx context.Context, args []string) error {
 	}
 
 	go backgroundMaintenance(ctx, st, log)
+	go deliverMail(ctx, notifier, cfg.Mail.EncryptionKey, log)
 	go watchPolicy(ctx, st, apiServer, log)
 
 	errCh := make(chan error, 1)
@@ -325,6 +334,44 @@ func watchPolicy(ctx context.Context, st *store.Store, server *httpapi.Server, l
 				continue
 			}
 			server.ReloadPolicy(engine)
+		}
+	}
+}
+
+// deliverMail sends whatever the outbox holds.
+//
+// Its own loop rather than part of backgroundMaintenance, which runs every ten
+// minutes: a notification that somebody's passkey changed is worth very little
+// ten minutes later, and the whole point of these messages is that the person
+// finds out in time to do something.
+//
+// Failures are the queue's problem, not this loop's. A row that will not send
+// has already had its next attempt moved forward, so a broken relay slows
+// nothing down and an unreachable one costs one connection attempt a minute.
+func deliverMail(ctx context.Context, notifier *mail.Notifier, sealKey string, log *slog.Logger) {
+	const (
+		interval = 15 * time.Second
+		batch    = 20
+	)
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			sent, err := notifier.Deliver(ctx, sealKey, batch)
+			if err != nil {
+				// Not fatal, and not per-message: this is the settings being
+				// unreadable or the seal key being wrong, which is worth saying
+				// once a cycle rather than staying silent.
+				log.WarnContext(ctx, "could not deliver notifications", "error", err)
+				continue
+			}
+			if sent > 0 {
+				log.InfoContext(ctx, "notifications sent", "count", sent)
+			}
 		}
 	}
 }
