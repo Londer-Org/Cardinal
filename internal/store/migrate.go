@@ -176,9 +176,9 @@ func (s *Store) SchemaAhead(ctx context.Context) ([]string, error) {
 	// where the honest answer is "nothing has been applied, so nothing is ahead"
 	// and not a 42P01 that reads like the database is broken.
 	var exists bool
-	if err := s.pool.QueryRow(ctx,
-		`SELECT to_regclass('public.schema_migrations') IS NOT NULL`).Scan(&exists); err != nil {
-		return nil, fmt.Errorf("store: looking for the migration table: %w", err)
+	if scanErr := s.pool.QueryRow(ctx,
+		`SELECT to_regclass('public.schema_migrations') IS NOT NULL`).Scan(&exists); scanErr != nil {
+		return nil, fmt.Errorf("store: looking for the migration table: %w", scanErr)
 	}
 	if !exists {
 		return nil, nil

@@ -69,17 +69,21 @@ func runServe(ctx context.Context, args []string) error {
 		return err
 	}
 	if len(ahead) > 0 {
-		return fmt.Errorf(
-			"%w\n\n"+
-				"  This database has %d migration(s) this build does not contain:\n"+
+		// Printed rather than returned as a single error string. The guidance
+		// this trips (ST1005) is about error strings being fragments that
+		// compose; this is an operator message with a list and a next step, and
+		// squeezing it onto one punctuation-free line would make it useless at
+		// the moment somebody most needs it.
+		fmt.Fprintf(os.Stderr,
+			"\n  This database has %d migration(s) this build does not contain:\n"+
 				"    %s\n\n"+
 				"  It was migrated by a newer Cardinal. This binary is %s.\n\n"+
 				"  Either run the newer version again, or take the database back with\n"+
 				"  `cardinal migrate -to <migration>` — from a backup taken before the\n"+
 				"  upgrade, because a reversal restores the shape of the data and not\n"+
-				"  the data itself.",
-			store.ErrSchemaAhead, len(ahead), strings.Join(ahead, "\n    "),
-			version.String())
+				"  the data itself.\n\n",
+			len(ahead), strings.Join(ahead, "\n    "), version.String())
+		return store.ErrSchemaAhead
 	}
 
 	idle, absolute := cfg.Sessions.Effective()
