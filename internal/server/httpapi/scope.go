@@ -51,11 +51,21 @@ const (
 	// ScopePolicy reads the active policy set. Useful to a CI job checking a
 	// deployment matches git; it is also every rule governing every door.
 	ScopePolicy = "policy"
+
+	// ScopeSCIM provisions accounts, for an identity provider.
+	//
+	// The one scope that writes to the directory, and the reason it is a scope
+	// at all: a token that could provision because its owner happens to be a
+	// provisioner would make every other token that person holds a provisioning
+	// credential too. Both must be true — this scope, and policy permitting
+	// Provision (ADR 0031).
+	ScopeSCIM = "scim"
 )
 
 // AllScopes is the closed vocabulary, in the order a listing should show it.
 var AllScopes = []string{
 	ScopeIdentity, ScopeApplications, ScopeProfile, ScopeDecisions, ScopePolicy,
+	ScopeSCIM,
 }
 
 // ValidScope reports whether a name is one Cardinal knows.

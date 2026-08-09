@@ -202,6 +202,10 @@ func TestTheShippedSetIsMostlyManageable(t *testing.T) {
 		"admin-requires-fresh-device-bound-auth",
 		"ssh-requires-device-bound",
 		"root-requires-recent-auth",
+		// Provisioning. Hand-written on purpose: it is read together with the
+		// step-up forbid it deliberately escapes, and a rule whose whole point
+		// is an exception to a guardrail should not be one a form produces.
+		"provisioners-may-provision",
 	}, byKind[policy.KindOther],
 		"the set of hand-written rules changed — check that a guardrail did not "+
 			"become removable with a click, or a manageable rule stop being one")

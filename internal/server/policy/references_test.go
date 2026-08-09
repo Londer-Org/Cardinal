@@ -152,6 +152,7 @@ func TestShippedPolicyNamesOnlyGroupsAMigrationCreates(t *testing.T) {
 		policy.EngineersGroupID,
 		policy.DevHostsGroupID,
 		policy.PlatformAdminsGroupID,
+		policy.ProvisionersGroupID,
 	))
 	require.NoError(t, err)
 

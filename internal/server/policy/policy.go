@@ -59,6 +59,22 @@ var (
 	// covered by a narrower action still asks for it.
 	ActionManageUsers        = types.NewEntityUID(TypeAction, "ManageUsers")
 	ActionManageApplications = types.NewEntityUID(TypeAction, "ManageApplications")
+
+	// ActionProvision is an identity provider creating and updating accounts
+	// over SCIM.
+	//
+	// Deliberately not ManageUsers. Every administrative action is guarded by a
+	// forbid demanding a device-bound credential used in the last five minutes,
+	// and a machine provisioning at 3am has neither and never will — so a SCIM
+	// client authenticating with an access token would be refused the accounts
+	// it exists to create.
+	//
+	// Its own action rather than an exemption carved into that forbid, so the
+	// difference is visible in the policy set rather than hidden in a special
+	// case in code. What bounds it instead is stated in ADR 0031: a system group
+	// is never provisionable, so this cannot make anybody a Cardinal
+	// administrator.
+	ActionProvision = types.NewEntityUID(TypeAction, "Provision")
 )
 
 // Built-in groups, created by migration with fixed identifiers.
@@ -104,6 +120,13 @@ const (
 	// DevHostsGroupID. Named platform-admins rather than root-admins because
 	// what it grants is decided by the rule, not by the name.
 	PlatformAdminsGroupID = "00000000-0000-7000-8000-0000000e5be5"
+
+	// ProvisionersGroupID may provision accounts over SCIM.
+	//
+	// Whoever an identity provider's access token belongs to. Empty on a fresh
+	// install, so pointing Entra at Cardinal is two deliberate acts — a token
+	// with the scim scope, and membership here — rather than one.
+	ProvisionersGroupID = "00000000-0000-7000-8000-0000000e5be6"
 )
 
 // AdminGroupID is the built-in directory-admins group.
@@ -417,6 +440,7 @@ var evaluatedActions = []types.EntityUID{
 	ActionManageApplications,
 	ActionSSHLogin,
 	ActionRunAsRoot,
+	ActionProvision,
 }
 
 // UngovernedActions names the actions this policy set never mentions.

@@ -523,6 +523,36 @@ func (s *Server) Handler() http.Handler {
 	// Composing rules. The same tier as activating a version, and for the same
 	// reason: a rule decides who may reach what, including who may compose the
 	// next one.
+	// ── SCIM 2.0 ────────────────────────────────────────────────────────────
+	//
+	// Its own path prefix rather than /api, because identity providers are
+	// configured with a base URL and every one of them appends /Users to it.
+	//
+	// requireProvision is both halves of ADR 0031: the token must carry the
+	// scim scope, and policy must permit its owner to Provision. Neither
+	// implies the other, and the discovery documents sit behind it too — what
+	// this deployment supports is not something to tell an unauthenticated
+	// caller.
+	scimRoute := func(h http.HandlerFunc) http.Handler { return s.requireProvision(h) }
+
+	mux.Handle("GET /scim/v2/ServiceProviderConfig",
+		scimRoute(s.handleSCIMServiceProviderConfig))
+	mux.Handle("GET /scim/v2/ResourceTypes", scimRoute(s.handleSCIMResourceTypes))
+	mux.Handle("GET /scim/v2/Schemas", scimRoute(s.handleSCIMSchemas))
+
+	mux.Handle("GET /scim/v2/Users", scimRoute(s.handleSCIMListUsers))
+	mux.Handle("POST /scim/v2/Users", scimRoute(s.handleSCIMCreateUser))
+	mux.Handle("GET /scim/v2/Users/{id}", scimRoute(s.handleSCIMGetUser))
+	mux.Handle("PUT /scim/v2/Users/{id}", scimRoute(s.handleSCIMReplaceUser))
+	mux.Handle("PATCH /scim/v2/Users/{id}", scimRoute(s.handleSCIMPatchUser))
+	mux.Handle("DELETE /scim/v2/Users/{id}", scimRoute(s.handleSCIMDeleteUser))
+
+	mux.Handle("GET /scim/v2/Groups", scimRoute(s.handleSCIMListGroups))
+	mux.Handle("POST /scim/v2/Groups", scimRoute(s.handleSCIMCreateGroup))
+	mux.Handle("GET /scim/v2/Groups/{id}", scimRoute(s.handleSCIMGetGroup))
+	mux.Handle("PATCH /scim/v2/Groups/{id}", scimRoute(s.handleSCIMPatchGroup))
+	mux.Handle("DELETE /scim/v2/Groups/{id}", scimRoute(s.handleSCIMDeleteGroup))
+
 	mux.Handle("GET /api/policy/rules", admin(s.handleListRules))
 	mux.Handle("POST /api/policy/rules", admin(s.handleAddRule))
 	mux.Handle("DELETE /api/policy/rules/{id}", admin(s.handleRemoveRule))

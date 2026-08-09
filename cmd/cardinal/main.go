@@ -327,6 +327,16 @@ AUTHORIZATION
   published, policy lives in the database: a deployment running the image edits
   it the same way a source checkout does.
 
+PROVISIONING (SCIM 2.0)
+  Base URL: <public-url>/scim/v2 — point Entra, Okta or anything else at it.
+
+  cardinal grant provisioners <login>        Who may provision
+  cardinal token create <login> -scope scim  The credential it authenticates with
+
+  Both are needed: the token must carry the scim scope and policy must permit
+  its owner to Provision. A system group is never provisionable, so an identity
+  provider cannot make anybody a Cardinal administrator (ADR 0031).
+
 AUDIT
   audit verify                             Verify the event log's hash chain
 

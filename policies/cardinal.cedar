@@ -131,6 +131,35 @@ permit (
 );
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Provisioning
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Members of provisioners may create and update accounts over SCIM.
+//
+// Read this together with the step-up forbid below, because this is where its
+// guarantee stops. That rule demands a device-bound credential used in the last
+// five minutes, and an identity provider synchronising at 3am has neither and
+// never will — so Provision is deliberately not one of the actions it lists.
+//
+// Anyone auditing that forbid and concluding "no unattended credential can
+// change the directory" would be wrong, and this rule is where they should find
+// out rather than discovering it from a changelog.
+//
+// What bounds this instead (ADR 0031): the token must also carry the `scim`
+// scope, a system group is never provisionable so this cannot make anybody a
+// Cardinal administrator, credentials are never provisionable so a provisioned
+// account cannot be signed into until its owner enrols one, and every change is
+// in the journal with the token's owner as actor.
+//
+// The group is created by migration 0029 and is empty.
+@id("provisioners-may-provision")
+permit (
+    principal in Cardinal::Group::"00000000-0000-7000-8000-0000000e5be6",
+    action == Cardinal::Action::"Provision",
+    resource
+);
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Step-up
 // ─────────────────────────────────────────────────────────────────────────────
 

@@ -198,6 +198,50 @@ exceed its owner — this answers the question Cedar cannot ask, because Cedar
 sees a principal and not the credential that presented it. Scopes cannot be
 changed on an existing token, so narrowing one means issuing a new one.
 
+### Provisioning in, over SCIM
+
+An identity provider — Entra, Okta, anything speaking SCIM 2.0 — keeps Cardinal
+in step with who exists. The base URL is `https://cardinal.example/scim/v2`, and
+it authenticates with an ordinary access token:
+
+```sh
+cardinal user create entra-provisioning
+cardinal grant provisioners entra-provisioning -reason "Entra SCIM"
+cardinal token create entra-provisioning -name "Entra SCIM" -scope scim -for 8760h
+```
+
+Two things must be true and neither implies the other: the token carries the
+`scim` scope, and policy permits its owner to `Provision`. A provisioner's other
+tokens cannot provision, and a scim-scoped token belonging to somebody else
+cannot either.
+
+**Provisioning is not administration**, and
+[ADR 0031](adr/0031-scim-provisioning-is-its-own-action.md) is the argument.
+Every administrative action is guarded by a forbid demanding a device-bound
+credential used in the last five minutes; a machine synchronising at 3am has
+neither and never will. So `Provision` is its own action, deliberately outside
+that forbid — which means anyone reading the step-up rule and concluding "no
+unattended credential can change the directory" is wrong, and the rule
+permitting this sits directly above it in the shipped policy set so they find
+out there.
+
+What bounds it instead:
+
+- **No system group, ever.** `directory-admins`, `user-admins` and
+  `security-admins` confer authority inside Cardinal. SCIM refuses to modify one
+  with a 403 that says why, so an IdP administrator does not thereby become a
+  Cardinal administrator.
+- **No credentials.** A provisioned account exists and cannot be signed into
+  until its owner enrols a passkey.
+- **No POSIX numbers.** They are permanent once served, and an IdP has no idea
+  which are taken.
+
+`GET /scim/v2/ServiceProviderConfig` states what is and is not implemented —
+bulk operations and sorting are not, filtering and PATCH are. Filters are a
+single `attribute eq "value"`, which is what reconciliation sends; anything
+compound is refused rather than approximated, because a filter silently misread
+returns the wrong people and the client acts on the answer.
+
 ## Style 2 — the application speaks OpenID Connect
 
 For applications that want their own session, or run somewhere the proxy does

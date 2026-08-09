@@ -585,6 +585,7 @@ func TestBuiltInGroupIDsMatchTheShippedPolicy(t *testing.T) {
 		"engineers":        policy.EngineersGroupID,
 		"env-dev":          policy.DevHostsGroupID,
 		"platform-admins":  policy.PlatformAdminsGroupID,
+		"provisioners":     policy.ProvisionersGroupID,
 	} {
 		assert.Contains(t, string(source), id,
 			"policies/cardinal.cedar must reference %s (%s)", name, id)
