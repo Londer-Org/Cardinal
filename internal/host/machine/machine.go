@@ -26,6 +26,8 @@ import (
 	"time"
 
 	"golang.org/x/crypto/ssh"
+
+	"go.londer.be/cardinal/internal/version"
 )
 
 // DefaultKeyPath is where a host keeps the key it authenticates with.
@@ -181,6 +183,10 @@ func (i *Identity) Do(ctx context.Context, client *http.Client, method, path str
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
+	// So the server can say, in its own log, that a host is running something
+	// newer than it. Without it the only symptom of that mismatch is a 404 the
+	// agent reports as a fetch failure while it goes on serving its cache.
+	req.Header.Set("User-Agent", version.AgentUserAgent)
 	if err := i.Sign(req); err != nil {
 		return nil, err
 	}

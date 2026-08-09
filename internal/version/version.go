@@ -16,6 +16,17 @@
 // genuinely unknowable from the source tree, and they are allowed to be empty.
 package version
 
+// Header names the release answering an HTTP request.
+//
+// Defined here rather than in the server package because both ends need it and
+// only one of them is a server. The agent reading it from internal/server/httpapi
+// would link the entire API surface — store, policy, OIDC, both certificate
+// authorities — into a binary whose job is to answer getent.
+const Header = "X-Cardinal-Version"
+
+// AgentUserAgent is what a cardinal-agent identifies itself as.
+const AgentUserAgent = "cardinal-agent/" + Number
+
 // Number is the release this was built from.
 const Number = "0.2.0"
 

@@ -577,8 +577,26 @@ func (s *Server) Handler() http.Handler {
 	h = s.csrfProtect(h)
 	h = s.authenticate(h)
 	h = securityHeaders(s.devMode)(h)
+	h = announceVersion(h)
 	h = requestLogger(s.log)(h)
 	return h
+}
+
+// announceVersion stamps every response with the release that produced it.
+//
+// Every response, including errors, which is the point: the case this exists
+// for is an agent newer than the server asking for a route the server does not
+// have. That answer is a 404, and a 404 with no version on it is
+// indistinguishable from a typo in a path — so the agent logged a generic fetch
+// failure and carried on serving its cache, which is a degradation that hides
+// itself.
+func announceVersion(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Set before the handler runs, so it survives a handler that writes a
+		// status and returns without touching headers again.
+		w.Header().Set(version.Header, version.Number)
+		next.ServeHTTP(w, r)
+	})
 }
 
 // spaHandler serves the embedded single-page app.

@@ -359,5 +359,6 @@ echo "  correctly clear — so the block above was the mismatch, not the default
 
 echo
 echo "PASS: nss-systemd agrees with the provider, sudo honours the rendered file,"
-echo "      a real ssh client verifies this machine by certificate, and shadow"
-echo "      mode catches a uid that would silently reassign every file"
+echo "      a real ssh client verifies this machine by certificate, a real sshd"
+echo "      admits a user certificate through the trust file the agent wrote,"
+echo "      and shadow mode catches a uid that would silently reassign every file"

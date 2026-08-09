@@ -15,6 +15,7 @@ import (
 	"go.londer.be/cardinal/internal/host/machine"
 	"go.londer.be/cardinal/internal/host/sudoers"
 	"go.londer.be/cardinal/internal/host/userdb"
+	"go.londer.be/cardinal/internal/version"
 )
 
 // DefaultInterval is how often the agent asks Cardinal for its assignment.
@@ -113,6 +114,21 @@ func (a *Agent) Fetch(ctx context.Context) (*Assignment, error) {
 	}
 	defer func() { _ = resp.Body.Close() }() //nolint:errcheck // nothing actionable remains once the body is read
 
+	served := resp.Header.Get(version.Header)
+
+	// A 404 from a server that named its version is the mismatch case, and it
+	// is worth its own message. Reported as a refusal it reads as a
+	// configuration error, and the agent then goes on serving its cache — a
+	// degradation that hides itself, because everything on the host keeps
+	// working until the cache is the only thing left.
+	if resp.StatusCode == http.StatusNotFound && served != "" && served != version.Number {
+		return nil, fmt.Errorf(
+			"agent: this server is Cardinal %s and does not have the assignment "+
+				"endpoint this agent (%s) asks for. The host keeps serving its "+
+				"cache and will drift: upgrade the server, or downgrade the agent "+
+				"to match it", served, version.Number)
+	}
+
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("agent: Cardinal refused the assignment: %s",
 			describe(resp))
@@ -123,6 +139,15 @@ func (a *Agent) Fetch(ctx context.Context) (*Assignment, error) {
 		return nil, fmt.Errorf("agent: reading assignment: %w", err)
 	}
 	fetched.FetchedAt = time.Now()
+	fetched.ServerVersion = served
+
+	// Newer than the server, on a route the server does happen to have. Not an
+	// error — the response was understood — but the next release is where it
+	// stops being one, so it is said once per poll rather than discovered.
+	if served != "" && served != version.Number {
+		a.log().Warn("this agent and Cardinal are different releases",
+			"agent", version.Number, "server", served)
+	}
 
 	// An empty assignment is accepted as an answer. It looks alarming and is
 	// legitimate — a host removed from its group should stop resolving those

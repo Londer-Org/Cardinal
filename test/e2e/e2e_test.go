@@ -596,3 +596,31 @@ func TestHealthSaysWhichBuildAndWhichPolicy(t *testing.T) {
 			"is enforcing no policy at all", *body.PolicyVersion)
 	}
 }
+
+// TestEveryResponseNamesTheRelease.
+//
+// The header an agent reads to know whether it is talking to a server that
+// understands it. On errors as well as successes, which is the whole point: the
+// case it exists for is a newer agent asking for a route the server lacks, and
+// that answer is a 404. A 404 with no version on it is indistinguishable from a
+// typo in a path, so the agent reported a fetch failure and went on serving its
+// cache — a degradation that hides itself.
+func TestEveryResponseNamesTheRelease(t *testing.T) {
+	c := client(t)
+
+	for _, path := range []string{
+		"/api/health",
+		"/api/auth/me",                // unauthenticated: 401
+		"/api/no-such-route-anywhere", // the case this exists for: 404
+	} {
+		resp := request(t, c, http.MethodGet, hostCardinal, path, "application/json")
+		got := resp.Header.Get("X-Cardinal-Version")
+		drain(resp)
+
+		if got == "" {
+			t.Errorf("%s answered %d with no X-Cardinal-Version — an agent cannot "+
+				"tell a route this server lacks from a path it typed wrong",
+				path, resp.StatusCode)
+		}
+	}
+}

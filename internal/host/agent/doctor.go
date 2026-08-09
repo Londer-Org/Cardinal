@@ -11,6 +11,8 @@ import (
 
 	"go.londer.be/cardinal/internal/host/sudoers"
 	"go.londer.be/cardinal/internal/host/userdb"
+
+	"go.londer.be/cardinal/internal/version"
 )
 
 // Checking a machine is ready, rather than making it ready.
@@ -61,6 +63,7 @@ func Diagnose(ctx context.Context, cfg *Config) []Check {
 		sudoersIncluded(cfg),
 		visudoPresent(),
 		sshdDropInSupported(ctx, cfg),
+		versionsAgree(cfg),
 	}
 
 	// An empty Name means the check did not apply — that part of the agent is
@@ -82,6 +85,46 @@ func Ready(checks []Check) bool {
 		}
 	}
 	return true
+}
+
+// versionsAgree compares this agent against whatever last answered it.
+//
+// The failure it exists to name: an agent newer than its server asks for a
+// route the server does not have, gets a 404, reports a fetch failure and goes
+// on serving its cache. Everything on the host keeps working, so nothing is
+// reported — until the cache is the only thing left and the drift is weeks old.
+//
+// Read from the cache rather than by asking, because `doctor` is a separate
+// process that must work with Cardinal unreachable. That is also the honest
+// answer: what matters is what the agent last actually talked to.
+func versionsAgree(cfg *Config) Check {
+	c := Check{Name: "versions"}
+
+	cached, err := Load(cfg.CachePath)
+	if err != nil {
+		// Not this check's business. `enrolled` and the first refresh both
+		// speak to a missing cache far more usefully than a version comparison
+		// with nothing to compare against.
+		return Check{}
+	}
+
+	switch cached.ServerVersion {
+	case "":
+		c.OK = true
+		c.Detail = "agent " + version.Number +
+			"; the server did not name its release, so it predates 0.3.0"
+		c.Advice = "upgrade the server to see a mismatch reported here rather " +
+			"than as a fetch that quietly failed"
+	case version.Number:
+		c.OK = true
+		c.Detail = "agent and server are both " + version.Number
+	default:
+		c.Detail = "agent " + version.Number + ", server " + cached.ServerVersion
+		c.Advice = "run the same release on both. A newer agent asking for a " +
+			"route the server lacks keeps serving its cache, which looks like " +
+			"nothing being wrong"
+	}
+	return c
 }
 
 func enrolled(cfg *Config) Check {

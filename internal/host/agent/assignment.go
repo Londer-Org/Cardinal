@@ -57,6 +57,15 @@ type Assignment struct {
 	// sends a non-empty list.
 	TrustedUserCAKeys []string `json:"trustedUserCaKeys"`
 
+	// ServerVersion is what answered the last successful fetch, read from the
+	// X-Cardinal-Version header rather than from the body.
+	//
+	// Stamped locally like FetchedAt and kept in the cache for the same reason:
+	// `cardinal-agent doctor` is a separate process with no memory of the last
+	// poll, and the question it exists to answer — "is this agent talking to a
+	// server that understands it?" — has to survive a restart.
+	ServerVersion string `json:"serverVersion"`
+
 	// FetchedAt is stamped locally, not by the server. What matters when
 	// deciding whether to trust a cache is how long *this machine* has been
 	// out of contact, and a server timestamp answers a different question and
