@@ -281,21 +281,20 @@ type NamedGrant struct {
 	MemberName string
 	MemberType string
 
-	From  time.Time
-	Until *time.Time // nil means unbounded
+	From time.Time
+
+	// Until is nil for an unbounded grant.
+	//
+	// That needs saying because unbounded is stored as PostgreSQL's 'infinity'
+	// rather than NULL — a deliberate choice so range operators behave — which
+	// means upper_inf() is false for it and the obvious query hands Go a
+	// timestamp it cannot represent.
+	Until *time.Time
 
 	GrantedBy   *uuid.UUID
 	GrantedByAs string
 	Reason      string
 }
-
-// Expiring reports whether this grant has an end date.
-//
-// Until is nil for an unbounded grant. That needs saying because unbounded is
-// stored as PostgreSQL's 'infinity' rather than NULL — a deliberate choice so
-// range operators behave — which means upper_inf() is false for it and the
-// obvious query hands Go a timestamp it cannot represent.
-func (g *NamedGrant) Expiring() bool { return g.Until != nil }
 
 const namedGrantColumns = `
 	m.group_id, g.name,

@@ -41,16 +41,6 @@ type Stream struct {
 	UpdatedAt time.Time
 }
 
-// Wants reports whether this stream subscribed to an event type.
-func (s Stream) Wants(eventType string) bool {
-	for _, e := range s.Events {
-		if e == eventType {
-			return true
-		}
-	}
-	return false
-}
-
 const streamColumns = `s.id, s.entity_id, c.client_id, e.name,
                        s.endpoint, s.events, s.enabled, s.created_at, s.updated_at`
 

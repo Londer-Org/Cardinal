@@ -17,8 +17,6 @@ package claims
 import (
 	"context"
 	"fmt"
-	"slices"
-	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -116,16 +114,6 @@ func (s *Subject) GroupIDs() []string {
 		ids = append(ids, g.ID.String())
 	}
 	return ids
-}
-
-// InGroup reports transitive membership by name.
-//
-// Convenient for simple checks, but not a substitute for policy: it answers
-// "are they in this group", never "may they do this thing".
-func (s *Subject) InGroup(name string) bool {
-	return slices.ContainsFunc(s.Groups, func(g Group) bool {
-		return strings.EqualFold(g.Name, name)
-	})
 }
 
 // Resolver builds Subjects from directory state.

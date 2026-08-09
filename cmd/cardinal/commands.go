@@ -392,12 +392,25 @@ func runMemberships(ctx context.Context, args []string) error {
 func runHistory(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("history", flag.ContinueOnError)
 	dsnFlag := fs.String("dsn", "", "PostgreSQL connection string")
+	at := fs.String("at", "", "answer for one instant (RFC 3339) rather than listing every grant")
 	pos, err := parse(fs, args)
 	if err != nil {
 		return errUsage
 	}
 	if len(pos) != 2 {
-		return fmt.Errorf("%w: cardinal history <group> <member>", errUsage)
+		return fmt.Errorf("%w: cardinal history <group> <member> [-at <timestamp>]", errUsage)
+	}
+
+	// -at is the question an auditor actually asks — "was this person in this
+	// group on the third of March" — and until now the only way to answer it
+	// was to read the grant list and do the interval arithmetic by eye. The
+	// query behind it has existed since the first migration and had no caller.
+	var instant time.Time
+	if *at != "" {
+		instant, err = time.Parse(time.RFC3339, *at)
+		if err != nil {
+			return fmt.Errorf("-at %q is not an RFC 3339 timestamp, e.g. 2026-03-03T00:00:00Z", *at)
+		}
 	}
 
 	s, err := open(ctx, *dsnFlag)
@@ -413,6 +426,20 @@ func runHistory(ctx context.Context, args []string) error {
 	member, err := resolveMember(ctx, s, pos[1])
 	if err != nil {
 		return err
+	}
+
+	if !instant.IsZero() {
+		wasMember, memberErr := s.IsMemberAt(ctx, member.ID, group.ID, instant)
+		if memberErr != nil {
+			return memberErr
+		}
+		was := "was not"
+		if wasMember {
+			was = "was"
+		}
+		fmt.Printf("%s %s a member of %s at %s\n",
+			member.Name, was, group.Name, instant.Format(time.RFC3339))
+		return nil
 	}
 
 	grants, err := s.GrantHistory(ctx, group.ID, member.ID)

@@ -132,7 +132,7 @@ func TestMemberListResolvesNamesAndPeriods(t *testing.T) {
 	assert.Equal(t, "prod-access", m.GroupName)
 	assert.Equal(t, "admin", m.GrantedByAs, "who granted it must survive for the auditor")
 	assert.Equal(t, "incident 4412", m.Reason)
-	require.True(t, m.Expiring(), "a bounded grant must report its end")
+	require.NotNil(t, m.Until, "a bounded grant must report its end")
 	assert.WithinDuration(t, until, *m.Until, time.Second)
 
 	// And from the other side.
@@ -152,7 +152,7 @@ func TestMemberListResolvesNamesAndPeriods(t *testing.T) {
 	require.NoError(t, err)
 	for _, g := range memberships {
 		if g.GroupName == "staff" {
-			assert.False(t, g.Expiring())
+			assert.Nil(t, g.Until)
 			assert.Nil(t, g.Until, "unbounded must be nil, not a far-future date")
 		}
 	}

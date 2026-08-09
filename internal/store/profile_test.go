@@ -68,7 +68,7 @@ func TestUpdateProfileIsAudited(t *testing.T) {
 	}, &user.ID)
 	require.NoError(t, err)
 
-	events, err := s.EventsForEntity(ctx, user.ID, 10)
+	events, err := s.ListEvents(ctx, store.EventFilter{Subject: &user.ID}, 10)
 	require.NoError(t, err)
 
 	var found bool

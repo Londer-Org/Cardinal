@@ -183,7 +183,7 @@ func TestInvitationTokenIsNotStored(t *testing.T) {
 	issued, err := s.IssueInvitation(ctx, user.ID, &user.ID, 0)
 	require.NoError(t, err)
 
-	events, err := s.EventsForEntity(ctx, user.ID, 10)
+	events, err := s.ListEvents(ctx, store.EventFilter{Subject: &user.ID}, 10)
 	require.NoError(t, err)
 	for _, ev := range events {
 		for _, value := range ev.Payload {
@@ -211,7 +211,7 @@ func TestIssuedInvitationIsAudited(t *testing.T) {
 	_, err = s.RedeemInvitation(ctx, issued.Token, testIP)
 	require.NoError(t, err)
 
-	events, err := s.EventsForEntity(ctx, user.ID, 10)
+	events, err := s.ListEvents(ctx, store.EventFilter{Subject: &user.ID}, 10)
 	require.NoError(t, err)
 
 	actions := map[string]bool{}

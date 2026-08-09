@@ -15,7 +15,6 @@ import (
 	"context"
 	"crypto/x509"
 	"errors"
-	"fmt"
 
 	"go.londer.be/cardinal/internal/store"
 )
@@ -81,19 +80,6 @@ func (c *CA) Chain(ctx context.Context) ([]*x509.Certificate, error) {
 		return nil, nil
 	}
 	return out, nil
-}
-
-// Roots is what has to reach every trust store.
-//
-// The hard part of an internal CA, and the part no code can do: this returns
-// the certificates, and getting them into system stores, container images, JVM
-// keystores and browsers is somebody's afternoon.
-func (c *CA) Roots(ctx context.Context) ([]*store.X509CAKey, error) {
-	keys, err := c.store.TrustedX509CAKeys(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("x509ca: reading trusted keys: %w", err)
-	}
-	return keys, nil
 }
 
 func isSelfSigned(cert *x509.Certificate) bool {

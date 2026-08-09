@@ -172,6 +172,8 @@ MEMBERSHIP
   members <group> [-at <RFC3339>]          Who is in a group, now or at an instant
   memberships <user> [-at <RFC3339>]       Which groups someone is in, transitively
   history <group> <member>                 Every grant ever, including expired
+      -at <RFC3339>                          answer for one instant instead:
+                                             was this member in this group then
 
 PRIVACY
   redact <type> <name> [-yes]              Erase personal data (GDPR Art. 17).
@@ -292,12 +294,6 @@ CERTIFICATE AUTHORITY (X.509, over ACME)
   Clients point at <public-url>/acme/directory and speak RFC 8555. Nothing is
   issued for a name the directory has not granted, whatever the CSR asks for.
 
-  join and whoami run on the host and never touch the database. Everything else
-  here is administration and does.
-
-AUTHORIZATION
-  policy test <file.cedar> [-dsn <url>]    Compile a policy file. Offline
-                                           without -dsn; with one, also reports
 TOKEN SIGNING KEY
   oidc key list                            Keys, and which one is signing
   oidc key rotate [-grace <dur>]           Sign with a new key; the previous
@@ -308,6 +304,12 @@ TOKEN SIGNING KEY
   defaults to the longest token lifetime any registered client is configured
   with, so the default is measured rather than assumed.
 
+  join and whoami run on the host and never touch the database. Everything else
+  here is administration and does.
+
+AUTHORIZATION
+  policy test <file.cedar> [-dsn <url>]    Compile a policy file. Offline
+                                           without -dsn; with one, also reports
                                            groups and applications a rule names
                                            that do not exist. A rule naming a
                                            group that is not there never
@@ -317,6 +319,7 @@ TOKEN SIGNING KEY
   policy activate <version>                Make a version live (rollback too)
   policy list                              Published versions
   policy show                              The live policy set
+
 
   policy rule list                         The live set, rule by rule, in words
   policy rule remove <id>                  Drop one and publish the result
