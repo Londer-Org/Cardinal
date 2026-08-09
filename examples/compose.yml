@@ -100,7 +100,10 @@ services:
       - cardinal
       - protected-app
     command:
-      - --providers.file.filename=/etc/traefik/dynamic.yml
+      # A directory rather than a filename, so an edit that replaces the file
+      # is picked up. See the volume below for why that is not a nicety.
+      - --providers.file.directory=/etc/traefik/dynamic
+      - --providers.file.watch=true
       # Port 8100 inside the network as well as outside, so the issuer URL
       # https://id.cardinal.test:8443 resolves identically from the browser and from
       # a container. An OIDC issuer must be one identifier everywhere: the
@@ -133,7 +136,15 @@ services:
       - "${CARDINAL_HTTP_PORT:-8100}:${CARDINAL_HTTP_PORT:-8100}"
       - "${CARDINAL_PORT:-8443}:${CARDINAL_PORT:-8443}"
     volumes:
-      - ./traefik/dynamic.yml:/etc/traefik/dynamic.yml:ro
+      # The directory, not the file.
+      #
+      # A bind mount of a single file binds an inode, and most editors write by
+      # creating a replacement and renaming it over the original. The container
+      # then keeps serving the file that was there when it started, with the
+      # host showing the new contents and nothing anywhere reporting a
+      # difference — an edit that appears to have no effect, which is a
+      # remarkably expensive hour. Mounting the directory follows the rename.
+      - ./traefik:/etc/traefik/dynamic:ro
       - ./traefik/tls:/etc/traefik/tls:ro
 
   # An OpenID Connect relying party, using coreos/go-oidc.

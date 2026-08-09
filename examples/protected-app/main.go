@@ -32,6 +32,14 @@ type identity struct {
 	AuthMethod  string   `json:"authMethod"`
 	DeviceBound bool     `json:"deviceBound"`
 
+	// GroupIDs are the same memberships by immutable identifier.
+	//
+	// What an application deciding what somebody may do should key on. Group
+	// names are mutable attributes by design (ADR 0002), so a permission model
+	// written against the string "aura-admins" repeats LDAP's mistake one layer
+	// out. Names are for showing a person.
+	GroupIDs []string `json:"groupIds"`
+
 	// Policy names the rule that admitted this request. Logging it lets an
 	// application's own logs be correlated with Cardinal's decision log, which
 	// is the difference between "access denied" and "denied by
@@ -41,6 +49,7 @@ type identity struct {
 
 func identityFrom(r *http.Request) identity {
 	groups := r.Header.Get("X-Auth-Request-Groups")
+	groupIDs := r.Header.Get("X-Auth-Request-Group-Ids")
 
 	id := identity{
 		UserID:      r.Header.Get("X-Auth-Request-User"),
@@ -52,6 +61,9 @@ func identityFrom(r *http.Request) identity {
 	}
 	if groups != "" {
 		id.Groups = strings.Split(groups, ",")
+	}
+	if groupIDs != "" {
+		id.GroupIDs = strings.Split(groupIDs, ",")
 	}
 	return id
 }

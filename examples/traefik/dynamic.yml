@@ -43,6 +43,11 @@ http:
           - X-Auth-Request-Preferred-Username
           - X-Auth-Request-Name
           - X-Auth-Request-Groups
+          # The stable identifiers for those same memberships, and the ones an
+          # application should actually key on. Absent from this list until now,
+          # so Cardinal set it on every response and no application ever saw it
+          # — the exact failure the paragraph above describes.
+          - X-Auth-Request-Group-Ids
           - X-Auth-Request-Auth-Method
           - X-Auth-Request-Device-Bound
           - X-Cardinal-Policy
@@ -60,6 +65,7 @@ http:
           X-Auth-Request-Preferred-Username: ""
           X-Auth-Request-Name: ""
           X-Auth-Request-Groups: ""
+          X-Auth-Request-Group-Ids: ""
           X-Auth-Request-Auth-Method: ""
           X-Auth-Request-Device-Bound: ""
           X-Cardinal-Policy: ""
