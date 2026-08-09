@@ -13,6 +13,7 @@ import (
 	"go.londer.be/cardinal/internal/directory/temporal"
 	"go.londer.be/cardinal/internal/server/policy"
 	"go.londer.be/cardinal/internal/store"
+	"go.londer.be/cardinal/policies"
 )
 
 // runInit performs first-run setup.
@@ -30,8 +31,10 @@ import (
 func runInit(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("init", flag.ContinueOnError)
 	display := fs.String("display", "", "the administrator's display name")
-	policyPath := fs.String("policy", "policies/cardinal.cedar",
-		"policy set to publish; empty to skip")
+	policyPath := fs.String("policy", "",
+		"publish this policy file instead of the one built into this binary")
+	noPolicy := fs.Bool("no-policy", false,
+		"publish nothing, leaving the deployment default-deny until you do")
 	baseURL := fs.String("url", "", "public base URL, if it differs from the config")
 	configPath := fs.String("config", "", "configuration file")
 	dsnFlag := fs.String("dsn", "", "PostgreSQL connection string")
@@ -79,24 +82,44 @@ func runInit(ctx context.Context, args []string) error {
 	fmt.Fprintln(os.Stderr, "Setting up Cardinal.")
 	fmt.Fprintln(os.Stderr)
 
-	if *policyPath != "" {
-		document, readErr := os.ReadFile(*policyPath)
-		if readErr != nil {
-			return fmt.Errorf("reading %s: %w", *policyPath, readErr)
+	if !*noPolicy {
+		// The embedded set unless a file is named. Reading from the working
+		// directory used to be the only option, which worked from a source
+		// checkout and could not work in the released image — a distroless
+		// filesystem holding one static binary and no policies/ directory. The
+		// first thing a container deployment ran therefore failed, before an
+		// administrator existed.
+		document, source := policies.Default, "the default policy set"
+		if *policyPath != "" {
+			read, readErr := os.ReadFile(*policyPath)
+			if readErr != nil {
+				return fmt.Errorf("reading %s: %w", *policyPath, readErr)
+			}
+			document, source = read, *policyPath
 		}
+
 		// Validated before it is stored: publishing a policy set that does not
 		// parse would leave the deployment default-deny with no obvious cause.
-		if _, newEngineErr := policy.NewEngine(document, 0); newEngineErr != nil {
-			return fmt.Errorf("%s does not parse: %w", *policyPath, newEngineErr)
+		engine, newEngineErr := policy.NewEngine(document, 0)
+		if newEngineErr != nil {
+			return fmt.Errorf("%s does not parse: %w", source, newEngineErr)
 		}
-		version, readErr := s.PublishPolicy(ctx, string(document), "first-run default", nil)
-		if readErr != nil {
-			return fmt.Errorf("publishing policy: %w", readErr)
+		version, publishErr := s.PublishPolicy(ctx, string(document), "first-run default", nil)
+		if publishErr != nil {
+			return fmt.Errorf("publishing policy: %w", publishErr)
 		}
-		if readErr := s.ActivatePolicy(ctx, version.Version, nil); readErr != nil {
-			return fmt.Errorf("activating policy: %w", readErr)
+		if activateErr := s.ActivatePolicy(ctx, version.Version, nil); activateErr != nil {
+			return fmt.Errorf("activating policy: %w", activateErr)
 		}
-		fmt.Fprintf(os.Stderr, "  policy set        version %d\n", version.Version)
+		fmt.Fprintf(os.Stderr, "  policy set        version %d, from %s\n",
+			version.Version, source)
+
+		// Migrations have just run, so every group the default set names exists.
+		// A set supplied with -policy is the case this catches, and it is worth
+		// catching at first run above all: a rule naming a group that is not
+		// there never matches, and on a directory this empty that is
+		// indistinguishable from every other refusal.
+		warnDangling(ctx, s, engine)
 	}
 
 	entity, err := directory.NewEntity(directory.TypeUser, login, *display)

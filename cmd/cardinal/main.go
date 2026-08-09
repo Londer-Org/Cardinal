@@ -137,6 +137,10 @@ SERVER
   migrate [-status]                         Apply the embedded schema
   init <login> [-display <text>]            First-run setup: policy, the first
                                             administrator, and an enrollment link
+      -policy <file>                          publish this instead of the set
+                                              built into the binary
+      -no-policy                              publish nothing, leaving the
+                                              deployment default-deny
   serve [-config <file>] [-dev]             Run the API and admin UI
 
 ENTITIES
@@ -170,9 +174,25 @@ PRIVACY
                                            Membership history and the audit
                                            chain survive; attribution does not.
 
-APPLICATIONS (OpenID Connect)
-  app register <name> -redirect <uri>       Register a relying party
-  app list                                  Registered applications
+APPLICATIONS
+  app register <name> -redirect <uri>       Register an OIDC relying party
+  app list                                  Registered relying parties
+
+  app hostname add <app> <hostname>         Which address this application
+                                            answers to, so forwardAuth can find
+                                            it. One application per hostname.
+  app hostname remove <app> <hostname>      Withdraw one. Effective immediately:
+                                            forwardAuth asks on every request.
+  app hostname list [app]                   Every mapping, or one application's
+
+  An application behind a proxy needs no OIDC client — cardinal application
+  create <name>, plus a hostname, is enough. A hostname nothing claims is
+  refused before policy is consulted, like an SSH certificate for a machine
+  nobody enrolled.
+
+  Registering makes an application findable, not reachable. What makes it
+  reachable is a group the policy set names — for the shipped rule, that is
+  cardinal grant staff-apps <app>.
 
 ACCESS TOKENS (scripts and automation)
   token create <login> -name <text>         Issue a bearer token, shown once
@@ -263,11 +283,21 @@ CERTIFICATE AUTHORITY (X.509, over ACME)
   here is administration and does.
 
 AUTHORIZATION
-  policy test <file.cedar>                 Compile a policy file (offline)
+  policy test <file.cedar> [-dsn <url>]    Compile a policy file. Offline
+                                           without -dsn; with one, also reports
+                                           groups and applications a rule names
+                                           that do not exist. A rule naming a
+                                           group that is not there never
+                                           matches, and Cedar being default-deny
+                                           makes that look like it working.
   policy publish <file> [-activate]        Store a new version
   policy activate <version>                Make a version live (rollback too)
   policy list                              Published versions
   policy show                              The live policy set
+
+  The binary carries the default set, so init needs no files on disk. Once
+  published, policy lives in the database: a deployment running the image edits
+  it the same way a source checkout does.
 
 AUDIT
   audit verify                             Verify the event log's hash chain
