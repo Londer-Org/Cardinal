@@ -2,6 +2,8 @@ package config
 
 import (
 	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -117,7 +119,7 @@ func TestSubdomainOriginsAccepted(t *testing.T) {
 // thinking about account recovery.
 func TestCircularRecoveryRefused(t *testing.T) {
 	c := valid()
-	c.Recovery = Recovery{EmailEnabled: true, EmailDomains: []string{"example.com"}}
+	c.Recovery = Recovery{EmailDomains: []string{"example.com"}}
 
 	t.Run("exact domain is refused", func(t *testing.T) {
 		err := c.CheckRelyingPartyDomain("example.com")
@@ -140,46 +142,73 @@ func TestCircularRecoveryRefused(t *testing.T) {
 		}
 	})
 
-	t.Run("no constraint when recovery email is off", func(t *testing.T) {
+	// Empty is the honest reading of "I have not told Cardinal where recovery
+	// mail goes". It used to be gated on a separate boolean, which meant the
+	// check was off for everybody who had not enabled a feature that did not
+	// exist — so the domains were listed, the rule was documented, and nothing
+	// enforced it.
+	t.Run("no constraint when no domains are listed", func(t *testing.T) {
 		off := valid()
-		off.Recovery = Recovery{EmailEnabled: false, EmailDomains: []string{"example.com"}}
+		off.Recovery = Recovery{}
 		if err := off.CheckRelyingPartyDomain("example.com"); err != nil {
-			t.Fatalf("the check should not apply when recovery email is disabled: %v", err)
+			t.Fatalf("the check applied with no recovery domains listed: %v", err)
 		}
 	})
 }
 
-// TestRecoveryEmailIsOptInWithBoundedDomains: an unrestricted recovery domain
-// would let any mailbox anywhere recover any account.
-func TestRecoveryEmailIsOptInWithBoundedDomains(t *testing.T) {
-	c := valid()
-	c.Recovery = Recovery{EmailEnabled: true}
+// TestRemovedSettingsAreRefusedNotIgnored.
+//
+// recovery.email_enabled validated, appeared on the configuration page, and
+// enabled nothing for two releases. Removing the field from the struct would
+// have made a file still setting it load silently — the same bug, one layer
+// further down — so an unread key is a refusal.
+//
+// It guards every other key too, which is the larger win: a typo in
+// `require_pkce` costs a security control and produces no output at all.
+func TestRemovedSettingsAreRefusedNotIgnored(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "cardinal.toml")
 
-	if err := c.Validate(); !errors.Is(err, ErrMissing) {
-		t.Fatalf("recovery email was enabled with no domain restriction: %v", err)
+	body := `
+[server]
+listen = "127.0.0.1:8099"
+public_url = "https://id.example.com"
+
+[database]
+dsn = "postgres://cardinal@localhost:5433/cardinal"
+
+[webauthn]
+rp_id = "example.com"
+origins = ["https://id.example.com"]
+
+[recovery]
+email_enabled = true
+email_domains = ["example.com"]
+`
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
 	}
 
-	if valid().Recovery.EmailEnabled {
-		t.Fatal("recovery email must be off unless deliberately enabled")
+	_, err := Load(path)
+	if !errors.Is(err, ErrInvalid) {
+		t.Fatalf("a removed setting was accepted: %v", err)
+	}
+	if !strings.Contains(err.Error(), "recovery.email_enabled") {
+		t.Errorf("the refusal does not name the offending key: %v", err)
+	}
+	if !strings.Contains(err.Error(), "ADR 0009") {
+		t.Errorf("the refusal does not say why the setting went away: %v", err)
 	}
 }
 
-func TestRecoveryDomainAllowed(t *testing.T) {
-	c := valid()
-	c.Recovery = Recovery{EmailEnabled: true, EmailDomains: []string{"example.com", "Example.NET"}}
-
-	cases := map[string]bool{
-		"arthur@example.com":      true,
-		"arthur@EXAMPLE.com":      true,
-		"arthur@example.net":      true,
-		"arthur@notexample.com":   false,
-		"arthur@mail.example.com": false, // subdomains are not implied
-		"not-an-address":          false,
-	}
-	for addr, want := range cases {
-		if got := c.RecoveryDomainAllowed(addr); got != want {
-			t.Errorf("RecoveryDomainAllowed(%q) = %v, want %v", addr, got, want)
-		}
+// TestTheExampleConfigLoads.
+//
+// The file every deployment starts from, checked against the refusal above:
+// shipping an example that Cardinal will not read is a worse first impression
+// than shipping none.
+func TestTheExampleConfigLoads(t *testing.T) {
+	if _, err := Load(filepath.Join("..", "..", "cardinal.example.toml")); err != nil {
+		t.Fatalf("cardinal.example.toml does not load: %v", err)
 	}
 }
 

@@ -110,7 +110,6 @@ func TestCircularRecoveryDependencyRefusedAtRegistration(t *testing.T) {
 
 	cfg := &config.Config{
 		Recovery: config.Recovery{
-			EmailEnabled: true,
 			EmailDomains: []string{"example.com"},
 		},
 	}

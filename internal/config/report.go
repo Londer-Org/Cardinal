@@ -62,14 +62,7 @@ const (
 // Hand-maintained, and kept honest by TestIgnoredSettingsAreStillIgnored, which
 // fails when an entry here starts being used — because a list of known problems
 // that quietly stops being true is the same kind of lie it exists to expose.
-var ignored = map[string]string{
-	"database.max_conns": "the pool is built from the DSN alone; this is never applied",
-	"database.conn_max_lifetime": "the pool is built from the DSN alone; this is never " +
-		"applied",
-	"recovery.email_enabled": "no recovery email is implemented — this enables nothing",
-	"recovery.email_domains": "read only by the validation of email_enabled, which " +
-		"enables nothing",
-}
+var ignored = map[string]string{}
 
 // Report describes the running configuration.
 func (c *Config) Report() []Setting {
@@ -113,7 +106,6 @@ func (c *Config) Report() []Setting {
 	out = add(out, "posix", "range_low", strconv.Itoa(posix.Low), false)
 	out = add(out, "posix", "range_high", strconv.Itoa(posix.High), false)
 
-	out = add(out, "recovery", "email_enabled", strconv.FormatBool(c.Recovery.EmailEnabled), false)
 	out = add(out, "recovery", "email_domains",
 		strings.Join(c.Recovery.EmailDomains, ", "), false)
 

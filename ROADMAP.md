@@ -33,10 +33,12 @@ gone, replaced by
 presentation as well as documentation and has no reason to be versioned
 alongside the server.
 
-Two of the three things that audit found have been built: redeeming a recovery
-code, and `cardinal ssh`. What remains from that list is deciding what
-`recovery.email_enabled` is — implemented, or removed so it stops claiming to be
-a setting — and connecting the two purge routines nothing calls.
+Everything that audit found has now been dealt with, and the table below is
+empty of open rows for the first time. The last three went in 0.2.0: the pool
+settings reach pgx, the two purge routines are called, and
+`recovery.email_enabled` was removed rather than implemented — ADR 0009 rules
+out email as a recovery channel, so a flag enabling one could only ever have
+been a lie.
 
 The same audit run against the shipped policy set found a fourth variant of the
 pattern, and the worst one so far: not code wired to nothing, but code wired to
@@ -48,17 +50,18 @@ common with the earlier three is that every test passed.
 
 ## Built but unreachable
 
-The most useful thing an audit of this project finds, and it has now found it
-three times: something implemented, tested, and wired to nothing. It passes
-every test it has, and no user can get to it.
+The most useful thing an audit of this project finds: something implemented,
+tested, and wired to nothing. It passes every test it has, and no user can get
+to it. Every row below is now closed — kept rather than deleted, because the
+list is also the argument for running the audit again.
 
 | Thing | State | Consequence |
 |---|---|---|
 | ~~Recovery codes cannot be redeemed~~ | **Fixed.** A code now redeems into a short-lived enrollment at `/recover` | Not a session: credential self-service is behind `requireDeviceBound`, so a session minted from a string on paper could not register the passkey recovery exists to register |
 | ~~SSH certificates had no client~~ | **Fixed.** `cardinal ssh [user@]host` borrows the console's passkey through a loopback handoff | Building it found two more of the same shape: a session was not accepted as a bearer token anywhere, and CSRF exempted requests by auth method rather than by how they authenticated |
-| **Email recovery is configured, not implemented** | `recovery.email_enabled` and `email_domains` parse and validate, with circular-recovery checks. Nothing sends mail | Worse than absent: setting it to `true` reads as enabling a channel, and enables nothing |
-| **`database.max_conns`, `conn_max_lifetime`** | Parsed; `store.Open` takes a DSN and never sees them | An operator tuning a busy deployment silently gets pgx's defaults. Shown as ignored on the configuration page, and a test keeps that claim true |
-| **`PurgeACMENonces`, `PurgeExpiredOIDCFlows`** | Written; `backgroundMaintenance` purges only ceremonies and rate limits | ACME nonces and spent OIDC flows accumulate forever |
+| ~~Email recovery was configured, not implemented~~ | **Removed.** `recovery.email_enabled` is gone; `email_domains` remains and now gates the circular-recovery check on its own | ADR 0009 rules out email as a recovery channel, so the flag could only ever lie. The check it gated was real and was off for everyone: enrollment and recovery links *are* mailed, so federating the mailbox domain is still refused |
+| ~~`database.max_conns`, `conn_max_lifetime`~~ | **Fixed.** `store.OpenWithLimits` applies them, unless the DSN sets `pool_max_conns` itself | An operator tuning a busy deployment silently got pgx's defaults — max(4, NumCPU) connections — while the configuration page showed the number they had chosen |
+| ~~`PurgeACMENonces`, `PurgeExpiredOIDCFlows`~~ | **Fixed.** Both run in `backgroundMaintenance`; the nonce window is one constant shared with the consume path | ACME nonces and spent OIDC flows accumulated for the life of a deployment. Never a correctness problem, because every read enforces expiry — which is exactly why nobody noticed |
 | ~~`audienceFor` decided nothing~~ | **Fixed.** forwardAuth resolves the hostname to an application and asks about that entity's group membership | It returned `"staff"` for every hostname, so the shipped rule permitting staff applications permitted every authenticated principal to reach every protected URL — a rule that read as though it classified and was a constant |
 | ~~Five group identifiers no migration created~~ | **Fixed.** Migration 0027 creates them, and `cardinal policy test -dsn` reports any that go missing | Three of eleven shipped rules — SSH, sudo, web access — could never match. Cedar is default-deny, so they refused everyone and looked like policy working |
 | ~~`X-Auth-Request-Group-Ids` never arrived~~ | **Fixed.** Added to `authResponseHeaders` in the example Traefik config | Cardinal set it on every response and Traefik dropped it, so the header applications are told to branch on reached nothing. The test asserting it passed by reading Cardinal's response instead of the application's |

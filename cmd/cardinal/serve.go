@@ -47,7 +47,10 @@ func runServe(ctx context.Context, args []string) error {
 			"Never use this on a network anyone else can reach.")
 	}
 
-	st, err := store.Open(ctx, cfg.Database.DSN)
+	st, err := store.OpenWithLimits(ctx, cfg.Database.DSN, store.PoolLimits{
+		MaxConns:        cfg.Database.MaxConns,
+		ConnMaxLifetime: cfg.Database.ConnMaxLifetime,
+	})
 	if err != nil {
 		return err
 	}
@@ -266,6 +269,24 @@ func backgroundMaintenance(ctx context.Context, st *store.Store, log *slog.Logge
 			}
 			if _, err := st.PurgeRateLimits(ctx, time.Hour); err != nil {
 				log.WarnContext(ctx, "purging rate limits failed", "error", err)
+			}
+			// Both of these were written and called by nothing, so ACME nonces
+			// and spent OIDC flows accumulated for the life of the deployment.
+			// Neither is a correctness problem — every read enforces expiry —
+			// which is exactly why nobody noticed.
+			//
+			// The nonce window is store.ACMENonceTTL rather than a literal, so
+			// this cannot start deleting nonces a client is still entitled to
+			// spend.
+			if n, err := st.PurgeACMENonces(ctx, store.ACMENonceTTL); err != nil {
+				log.WarnContext(ctx, "purging ACME nonces failed", "error", err)
+			} else if n > 0 {
+				log.DebugContext(ctx, "purged ACME nonces", "count", n)
+			}
+			if n, err := st.PurgeExpiredOIDCFlows(ctx); err != nil {
+				log.WarnContext(ctx, "purging OpenID Connect flows failed", "error", err)
+			} else if n > 0 {
+				log.DebugContext(ctx, "purged OpenID Connect flows", "count", n)
 			}
 		}
 	}

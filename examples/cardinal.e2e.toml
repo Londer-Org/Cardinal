@@ -75,8 +75,10 @@ rp_id = "cardinal.test"
 rp_display_name = "Cardinal (end-to-end stack)"
 origins = ["https://id.cardinal.test:8443"]
 
-[recovery]
-email_enabled = false
+# Nothing to configure: there is no email recovery channel, and
+# recovery.email_domains is empty because this stack federates no mail domain.
+# The section used to set email_enabled = false, which enabled nothing and is
+# now refused outright rather than ignored.
 
 [oidc]
 enabled = true

@@ -19,7 +19,6 @@ import (
 	"net/netip"
 	"net/url"
 	"os"
-	"slices"
 	"strings"
 	"time"
 
@@ -280,20 +279,28 @@ type Mail struct {
 	EncryptionKey string `toml:"encryption_key"`
 }
 
-// Recovery configures account recovery channels.
+// Recovery configures account recovery.
+//
+// There is deliberately no email_enabled. It existed for two releases, was
+// validated, appeared on the configuration page, and enabled nothing — there is
+// no email recovery channel and ADR 0009 rules one out anyway: mail can never be
+// sufficient alone, and never available for administrators, because that would
+// place Cardinal's admin tier beneath the mail platform's. Recovery is a code
+// from the sheet, or two administrators agreeing.
 type Recovery struct {
-	// EmailEnabled is off by default. Recovery email makes the mail provider a
-	// root of trust for Cardinal, and mail administrators implicitly become
-	// Cardinal administrators, so enabling it must be a deliberate act
-	// (ADR 0009).
-	EmailEnabled bool `toml:"email_enabled"`
-
-	// EmailDomains are the domains acceptable for recovery addresses.
+	// EmailDomains are the domains recovery mail is delivered to.
 	//
-	// These are checked against registered OIDC clients: Cardinal refuses to be
-	// the identity provider for a domain it also relies on for recovery, since
-	// that creates a circular dependency where the recovery channel fails
-	// exactly when it is needed.
+	// Cardinal refuses to be the identity provider for any of them. That loop is
+	// not hypothetical and does not depend on a recovery *channel* existing:
+	// enrollment and recovery invitations carry a link, and that link is mailed
+	// (see mail.KindInvitationIssued). Federate the mailbox domain to Cardinal
+	// and an outage takes the way back in with it — a loop normally created much
+	// later, by somebody changing something unrelated.
+	//
+	// Empty turns the check off, which is the honest reading of "I have not told
+	// Cardinal where recovery mail goes". It used to be gated on the boolean
+	// above, so the check was off for everyone who had not enabled a feature
+	// that did not exist.
 	EmailDomains []string `toml:"email_domains"`
 }
 
@@ -329,6 +336,28 @@ func Load(path string) (*Config, error) {
 		return nil, fmt.Errorf("config: reading %s: %w", path, err)
 	}
 	c.defined = func(section, name string) bool { return meta.IsDefined(section, name) }
+
+	// A key nothing reads is refused rather than ignored.
+	//
+	// This is the shape of bug this file keeps producing: a setting that is
+	// written, looks applied, and does nothing. A typo in `require_pkce` or
+	// `trusted_proxies` costs a security control and produces no output at all,
+	// and `recovery.email_enabled` was accepted for two releases while enabling
+	// nothing. Refusing is loud, and the fix is always deleting one line.
+	if undecoded := meta.Undecoded(); len(undecoded) > 0 {
+		keys := make([]string, 0, len(undecoded))
+		for _, key := range undecoded {
+			keys = append(keys, key.String())
+		}
+		return nil, fmt.Errorf(
+			"%w: %s sets keys Cardinal does not read: %s"+
+				" — a setting nothing reads is worse than a missing one, so this is a"+
+				" refusal rather than a warning."+
+				" recovery.email_enabled was removed in 0.2.0: it enabled nothing, and"+
+				" ADR 0009 rules out email as a recovery channel, while"+
+				" recovery.email_domains still does its job and now needs no flag",
+			ErrInvalid, path, strings.Join(keys, ", "))
+	}
 
 	// The DSN may come from the environment so that a secret need not be
 	// written to a file that gets committed, copied, or backed up.
@@ -414,11 +443,21 @@ func (c *Config) Validate() error {
 			ErrInvalid, absolute, idle))
 	}
 
-	if c.Recovery.EmailEnabled && len(c.Recovery.EmailDomains) == 0 {
+	// Bounded rather than merely non-negative. The pool is per server process,
+	// so a fleet multiplies whatever is written here — and PostgreSQL's own
+	// max_connections is typically 100, which a single node asking for more
+	// would exhaust on its own. The ceiling is deliberately far above any real
+	// answer: this is here to catch a typo, not to have an opinion.
+	const maxPoolSize = 500
+	if c.Database.MaxConns < 0 || c.Database.MaxConns > maxPoolSize {
 		problems = append(problems, fmt.Errorf(
-			"%w: recovery.email_domains must list the acceptable domains when "+
-				"recovery.email_enabled is true; an unrestricted recovery domain would "+
-				"let any mailbox recover any account", ErrMissing))
+			"%w: database.max_conns is %d; it must be between 0 (pgx's own "+
+				"default) and %d, and note this is per server process",
+			ErrInvalid, c.Database.MaxConns, maxPoolSize))
+	}
+	if c.Database.ConnMaxLifetime < 0 {
+		problems = append(problems, fmt.Errorf(
+			"%w: database.conn_max_lifetime is negative", ErrInvalid))
 	}
 
 	for _, cidr := range c.Server.TrustedProxies {
@@ -645,7 +684,7 @@ func (c *Config) validateWebAuthn() []error {
 // long after the recovery setting was made, by someone changing something else
 // entirely.
 func (c *Config) CheckRelyingPartyDomain(domain string) error {
-	if !c.Recovery.EmailEnabled {
+	if len(c.Recovery.EmailDomains) == 0 {
 		return nil
 	}
 	domain = strings.ToLower(strings.TrimSpace(domain))
@@ -691,19 +730,4 @@ func stripToHost(v string) string {
 		return u.Hostname()
 	}
 	return strings.SplitN(strings.TrimPrefix(v, "//"), ":", 2)[0]
-}
-
-// RecoveryDomainAllowed reports whether an address may be used for recovery.
-func (c *Config) RecoveryDomainAllowed(email string) bool {
-	if !c.Recovery.EmailEnabled {
-		return false
-	}
-	at := strings.LastIndex(email, "@")
-	if at < 0 {
-		return false
-	}
-	domain := strings.ToLower(email[at+1:])
-	return slices.ContainsFunc(c.Recovery.EmailDomains, func(d string) bool {
-		return strings.EqualFold(strings.TrimSpace(d), domain)
-	})
 }

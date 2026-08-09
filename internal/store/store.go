@@ -8,6 +8,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -39,11 +41,46 @@ func (s *Store) SetSessionLimits(limits SessionLimits) {
 
 func (s *Store) sessionLimits() SessionLimits { return s.limits.withDefaults() }
 
-// Open connects, verifies the server is new enough, and returns a Store.
+// PoolLimits bound the connection pool.
+//
+// Separate from SessionLimits and applied at Open rather than after it, because
+// a pgxpool's size is fixed once the pool is built. A zero field means "leave
+// pgx's own default", which is what `cardinal migrate` and the CLI get: they
+// have a DSN long before they have a configuration file, and a one-shot command
+// has no opinion about pool sizing.
+type PoolLimits struct {
+	MaxConns        int
+	ConnMaxLifetime time.Duration
+}
+
+// Open connects with pgx's own pool defaults.
 func Open(ctx context.Context, dsn string) (*Store, error) {
+	return OpenWithLimits(ctx, dsn, PoolLimits{})
+}
+
+// OpenWithLimits connects, verifies the server is new enough, and returns a
+// Store whose pool is bounded as configured.
+//
+// These settings were parsed and never reached the pool for two releases, so an
+// operator tuning a busy deployment silently got pgx's defaults — max(4, NumCPU)
+// connections, measured, and an hour's lifetime — while the configuration page
+// showed the number they had chosen.
+func OpenWithLimits(ctx context.Context, dsn string, limits PoolLimits) (*Store, error) {
 	cfg, err := pgxpool.ParseConfig(dsn)
 	if err != nil {
 		return nil, fmt.Errorf("store: parsing dsn: %w", err)
+	}
+
+	// Applied only where the connection string is silent. pgx reads
+	// pool_max_conns and pool_max_conn_lifetime from the DSN itself, and
+	// overriding one somebody wrote there would replace a setting that works
+	// with one that looks like it does — which is the bug being fixed here,
+	// moved rather than removed.
+	if limits.MaxConns > 0 && !strings.Contains(dsn, "pool_max_conns") {
+		cfg.MaxConns = int32(limits.MaxConns) //nolint:gosec // Config.Validate refuses anything outside 0..500
+	}
+	if limits.ConnMaxLifetime > 0 && !strings.Contains(dsn, "pool_max_conn_lifetime") {
+		cfg.MaxConnLifetime = limits.ConnMaxLifetime
 	}
 
 	pool, err := pgxpool.NewWithConfig(ctx, cfg)

@@ -116,9 +116,12 @@ idle = "2h"
 // the kind of thing that stops being true without anybody noticing — and a
 // stale list of known problems is the same lie it exists to expose.
 //
-// So it is checked against the code. Each entry must still have no reader
-// outside the config package; the moment one gains one, this fails and the
-// entry has to go.
+// It is empty as of 0.2.0, which is why the second half of this test exists.
+// Checking only the entries in the list would now pass without evaluating
+// anything: an empty list satisfies "every entry is still ignored" perfectly,
+// and the test would keep reporting success while proving nothing. So the
+// settings that were on it are named here individually and checked to have
+// actually been fixed or removed.
 func TestIgnoredSettingsAreStillIgnored(t *testing.T) {
 	cfg, err := config.Load(write(t, minimal))
 	require.NoError(t, err)
@@ -127,15 +130,18 @@ func TestIgnoredSettingsAreStillIgnored(t *testing.T) {
 	fields := map[string]string{
 		"database.max_conns":         "MaxConns",
 		"database.conn_max_lifetime": "ConnMaxLifetime",
-		"recovery.email_enabled":     "EmailEnabled",
 		"recovery.email_domains":     "EmailDomains",
 	}
 
+	reported := map[string]config.Setting{}
 	for _, s := range cfg.Report() {
+		reported[s.Section+"."+s.Name] = s
+	}
+
+	for key, s := range reported {
 		if s.Ignored == "" {
 			continue
 		}
-		key := s.Section + "." + s.Name
 		field, known := fields[key]
 		require.True(t, known,
 			"%s is marked ignored and this test does not know which Go field it is; "+
@@ -147,6 +153,30 @@ func TestIgnoredSettingsAreStillIgnored(t *testing.T) {
 				"setting now works and the entry should go, or something reads it "+
 				"and does nothing with it", key, field, readers)
 	}
+
+	// The other direction, and the one that has teeth now the list is empty.
+	t.Run("the pool settings reach something", func(t *testing.T) {
+		for key, field := range map[string]string{
+			"database.max_conns":         "MaxConns",
+			"database.conn_max_lifetime": "ConnMaxLifetime",
+		} {
+			setting, listed := reported[key]
+			require.True(t, listed, "%s vanished from the configuration report", key)
+			assert.Empty(t, setting.Ignored,
+				"%s is marked ignored again", key)
+			assert.NotEmpty(t, readersOf(t, field),
+				"%s is on the configuration page and nothing outside internal/config "+
+					"reads %s — which is how it spent two releases doing nothing",
+				key, field)
+		}
+	})
+
+	t.Run("the phantom recovery flag is gone", func(t *testing.T) {
+		_, listed := reported["recovery.email_enabled"]
+		assert.False(t, listed,
+			"recovery.email_enabled is back on the configuration page; it enabled "+
+				"nothing, and ADR 0009 rules out email as a recovery channel")
+	})
 }
 
 // readersOf finds Go files outside internal/config that mention a field.

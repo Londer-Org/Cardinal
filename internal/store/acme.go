@@ -217,6 +217,15 @@ func (s *Store) ACMEAccountByID(ctx context.Context, id uuid.UUID) (*ACMEAccount
 	return &a, nil
 }
 
+// ACMENonceTTL is how long an issued nonce remains spendable.
+//
+// One constant rather than the same interval written into two statements. The
+// purge below must never run ahead of the consume above: deleting a nonce a
+// client is still entitled to spend turns a working ACME exchange into
+// "unknown or replayed nonce", which reads as an attack rather than as a
+// maintenance job.
+const ACMENonceTTL = time.Hour
+
 // NewACMENonce issues an anti-replay nonce.
 func (s *Store) NewACMENonce(ctx context.Context) (string, error) {
 	b := make([]byte, 24)
@@ -239,8 +248,8 @@ func (s *Store) NewACMENonce(ctx context.Context) (string, error) {
 // replaying one nonce cannot both find it present.
 func (s *Store) ConsumeACMENonce(ctx context.Context, nonce string) error {
 	tag, err := s.pool.Exec(ctx,
-		`DELETE FROM acme_nonces WHERE nonce = $1 AND issued_at > now() - interval '1 hour'`,
-		nonce)
+		`DELETE FROM acme_nonces WHERE nonce = $1 AND issued_at > now() - $2::interval`,
+		nonce, ACMENonceTTL.String())
 	if err != nil {
 		return fmt.Errorf("store: consuming the nonce: %w", err)
 	}
