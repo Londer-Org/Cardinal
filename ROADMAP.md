@@ -33,6 +33,14 @@ code, and `cardinal ssh`. What remains from that list is deciding what
 `recovery.email_enabled` is — implemented, or removed so it stops claiming to be
 a setting — and connecting the two purge routines nothing calls.
 
+The same audit run against the shipped policy set found a fourth variant of the
+pattern, and the worst one so far: not code wired to nothing, but code wired to
+a constant. `audienceFor` classified every hostname as `"staff"` and the rule
+matching on it therefore permitted everyone everywhere, while three other rules
+named groups no migration created and so permitted nobody anywhere. Both
+directions of wrong, both invisible, both shipped in 0.1.0. What they have in
+common with the earlier three is that every test passed.
+
 ## Built but unreachable
 
 The most useful thing an audit of this project finds, and it has now found it
@@ -46,6 +54,10 @@ every test it has, and no user can get to it.
 | **Email recovery is configured, not implemented** | `recovery.email_enabled` and `email_domains` parse and validate, with circular-recovery checks. Nothing sends mail | Worse than absent: setting it to `true` reads as enabling a channel, and enables nothing |
 | **`database.max_conns`, `conn_max_lifetime`** | Parsed; `store.Open` takes a DSN and never sees them | An operator tuning a busy deployment silently gets pgx's defaults. Shown as ignored on the configuration page, and a test keeps that claim true |
 | **`PurgeACMENonces`, `PurgeExpiredOIDCFlows`** | Written; `backgroundMaintenance` purges only ceremonies and rate limits | ACME nonces and spent OIDC flows accumulate forever |
+| ~~`audienceFor` decided nothing~~ | **Fixed.** forwardAuth resolves the hostname to an application and asks about that entity's group membership | It returned `"staff"` for every hostname, so the shipped rule permitting staff applications permitted every authenticated principal to reach every protected URL — a rule that read as though it classified and was a constant |
+| ~~Five group identifiers no migration created~~ | **Fixed.** Migration 0027 creates them, and `cardinal policy test -dsn` reports any that go missing | Three of eleven shipped rules — SSH, sudo, web access — could never match. Cedar is default-deny, so they refused everyone and looked like policy working |
+| ~~`X-Auth-Request-Group-Ids` never arrived~~ | **Fixed.** Added to `authResponseHeaders` in the example Traefik config | Cardinal set it on every response and Traefik dropped it, so the header applications are told to branch on reached nothing. The test asserting it passed by reading Cardinal's response instead of the application's |
+| **The console cannot manage forwardAuth-only applications** | `/api/applications` is keyed on OIDC `client_id`, so an application with no OIDC client does not appear, and nothing exposes hostnames | `cardinal app hostname` is the only way to make a protected site reachable. Fine for a CLI deployment, wrong for the one the console exists to serve |
 
 How they are found: every HTTP route checked for a caller in the console, the
 CLI, the agent or the tests; every exported store method checked for a caller
@@ -75,15 +87,29 @@ Honest, and referenced from [the threat model](docs/threat-model.md) and
 
 Not gaps — decisions nobody has made yet.
 
-**Does the shipped policy set assume too much?** Policy itself is already the
-most editable thing here: Cedar in the database, versioned, activated and rolled
-back from the console, picked up by every server within ten seconds. What is not
-editable is the *starting point*. `policies/cardinal.cedar` names `AccessURL`
-with an `audience` context and `SSHLogin` with a `localAccount`, and carries
-placeholder group UUIDs with a comment telling you to replace them — so somebody
-deploying Cardinal has to read Cedar and rewrite that file before anything
-works. Whether the console should help build those rules, or whether writing
-them by hand is the honest price of policy-as-code, is undecided.
+**Should the console help build policy rules?** What remains of a question that
+turned out to be mostly a bug report. Policy was already the most editable thing
+here — Cedar in the database, versioned, activated and rolled back from the
+console, picked up by every server within ten seconds — and the binary now
+carries the default set, so a deployment running the published image is not
+missing anything a source checkout has.
+
+What was actually wrong was the starting point, and it was worse than assuming
+too much. Three of eleven shipped rules named group identifiers no migration
+created, so every rule governing SSH, sudo and web access was inert; Cedar is
+default-deny, so they refused everyone and looked like policy working. The
+web-access rule matched on a `context.audience` computed by a function that
+ignored the hostname and returned `"staff"` for all of them, so it permitted
+every authenticated principal to reach every protected URL while reading as
+though it discriminated. Both are fixed: the groups are created by migration
+0027, the audience is gone in favour of the application's own group membership,
+and `cardinal policy test -dsn` plus a warning on every policy load report a
+rule naming something the directory does not have.
+
+So the open part is narrower now. Editing Cedar by hand is still the price of
+policy-as-code, and it may be the honest one. Whether the console should offer
+help building the common rules — "these people may SSH to these machines" — is
+undecided.
 
 Worth separating from a related misreading, because they have different answers:
 the forwardAuth endpoint is not Traefik-specific. It emits the `X-Auth-Request-*`
