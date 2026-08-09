@@ -286,3 +286,20 @@ inherit in infrastructure people are asked to trust.
 
 Cardinal is an independent project. The copyright is held by Londer; no client
 and no employer has a claim on it or a say in its direction.
+
+**It is not a Londer product.** It is not sold, not offered as a service, and
+not part of any Londer engagement or support agreement. There is no commercial
+licence, no support contract and no service level, and nothing here is an offer
+of any of those.
+
+**There is no warranty.** Apache-2.0 section 7 means what it says: the software
+is provided as is, you carry the entire risk of running it, and Londer carries
+none of it. It is unaudited, pre-1.0, and depends on a PostgreSQL release that
+is not yet generally available.
+
+**It may stop being maintained**, at any point, without notice and without a
+deprecation period. That is the ordinary condition of small open-source
+projects and is stated here rather than left to be discovered — "it is on
+GitHub and looks active" is not a maintenance commitment. What the licence does
+give you is the right to fork it and keep going, which is the mitigation to
+budget for if you come to depend on it.
