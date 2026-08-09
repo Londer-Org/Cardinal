@@ -134,7 +134,14 @@ Point-in-time queries:
 
 ```sh
 ./bin/cardinal members prod-access -at 2026-08-04T12:00:00Z
+./bin/cardinal memberships alonfils  -at 2026-08-04T12:00:00Z
+./bin/cardinal history prod-access contractor -at 2026-08-04T12:00:00Z
 ```
+
+The last one answers the question an auditor actually asks — *was this person in
+this group on that date* — as a yes or a no, rather than leaving you to read the
+grant list and do the interval arithmetic by eye. It is one SQL query against a
+`tstzrange`, and in FreeIPA or Keycloak it is log archaeology.
 
 And the audit chain:
 

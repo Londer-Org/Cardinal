@@ -90,6 +90,33 @@ applications. The SSH CA key logs into every host as anybody. One leaked
 configuration file should not yield both, and a warning about it is something
 people read once.
 
+### Rotating the token signing key
+
+The OIDC signing key rotates too, and until 0.3.0 it could not: the rotation was
+implemented, wrapped in a method nothing called, so the key with the widest
+blast radius in the system was the one authority that had no rotate command.
+
+```
+cardinal oidc key list                  # keys, and which one is signing
+cardinal oidc key rotate                # sign with a new one
+```
+
+Unlike the CAs this is one step, not two. A trust store has to be updated before
+an SSH or X.509 authority can start signing; the JWKS is fetched live, so a
+receiver picks up the new key on its next refresh with no distribution to
+perform and no restart.
+
+The retired key keeps verifying for a grace period, defaulting to the longest
+token lifetime any registered client is configured with — measured rather than
+assumed, because a key that stops verifying while tokens signed by it are still
+valid is how a rotation becomes an outage. `-grace` overrides it and a shorter
+one is refused unless you also pass `-force`.
+
+The one failure mode worth knowing: a client that caches the JWKS aggressively
+rather than honouring its refresh will reject new tokens until it refetches.
+Both keys are published throughout the grace period precisely so that window is
+survivable.
+
 ## What an attacker gets
 
 Stated plainly, because a security control whose limits are unstated is one
@@ -130,20 +157,41 @@ physical machine, which breaks the stateless-nodes-plus-standby arrangement that
 makes failover a ten-minute runbook. Trading fleet availability for key secrecy
 is the wrong way round when the fleet is what the key exists to serve.
 
-## X.509 — not built yet
+## X.509
 
-Two things will differ, both for the better:
+Built in 0.2.0 — [ADR 0023](adr/0023-x509-certificates-via-acme.md). This
+section said "not built yet" for a release after it shipped, which is the kind
+of claim this project keeps finding: nobody writes it wrong, they write it true
+and then it stops being true.
 
-**Intermediates are possible.** Unlike SSH, X.509 supports a chain — so the
-recommended shape is an offline root signing a short-lived online intermediate,
-and the long-lived key never touches Cardinal at all. That is a materially
-better answer than anything available for SSH.
+It works the same way the SSH authority does, and the commands mirror it:
 
-**Bringing your own root should be supported**, and this is an open question
-rather than a decision. Most organisations already have a root they intend to
-keep, and "Cardinal generates it or nothing" would be a poor reason to run a
-second CA. The SSH side generates only because there is rarely an existing SSH
-CA to import.
+```
+cardinal x509 ca init -subject "Example Internal CA"   # create, not yet signing
+cardinal x509 ca trust                                  # every trusted cert, PEM
+cardinal x509 ca rotate <key-id>                        # make a key sign
+cardinal x509 ca list                                   # keys, and which signs
+```
+
+Certificates are issued over ACME (RFC 8555) rather than a bespoke endpoint, so
+any ACME client can order one. A host authenticates with an external account
+binding issued by `cardinal host acme-credentials <host>`, and nothing is issued
+for a name the directory has not granted whatever the CSR asks for.
+
+Two things the earlier version of this section promised are still not built, and
+are gaps rather than plans:
+
+**Intermediates are not supported.** X.509 allows a chain, and the better shape
+is an offline root signing a short-lived online intermediate so the long-lived
+key never touches Cardinal. What exists is a self-signed root held the same way
+the SSH CA key is held — sealed with `x509.ca_encryption_key`, in the database.
+That is the same custody as SSH, not better, and the paragraph claiming
+otherwise was describing an intention.
+
+**Bringing your own root is not supported.** `x509 ca init` generates. Most
+organisations already have a root they intend to keep, and "Cardinal generates
+it or nothing" is a poor reason to run a second CA — this remains an open
+question rather than a decision.
 
 Trust distribution is the part that makes internal CAs fail in practice. An
 internal CA is worthless until its root is in system trust stores, container

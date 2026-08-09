@@ -135,6 +135,22 @@ every refusal carries the name of the rule that produced it, which is what makes
 the decision explorer possible — neither FreeIPA nor Keycloak can answer "why
 was I denied?".
 
+It is answerable without a browser, which matters because the question gets
+asked while something is broken and the console is one of the things that may
+be broken:
+
+```
+cardinal decisions              # newest first, naming the deciding rule
+cardinal decisions alice        # one principal
+cardinal decisions -denied      # only refusals
+```
+
+A refusal with no rule named is reported as `(none matched: default-deny)`
+rather than as a blank column, because nothing having matched is the answer
+rather than missing data. `cardinal config` is the same idea for the other
+question asked at that moment — what this deployment is actually running, and
+which values came from the file, the environment or a default nobody chose.
+
 ## The four decision points
 
 Cedar is the only authorization engine, and it answers four questions. This list

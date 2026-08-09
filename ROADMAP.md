@@ -33,12 +33,24 @@ gone, replaced by
 presentation as well as documentation and has no reason to be versioned
 alongside the server.
 
-Everything that audit found has now been dealt with, and the table below is
-empty of open rows for the first time. The last three went in 0.2.0: the pool
-settings reach pgx, the two purge routines are called, and
+Everything that audit found has been dealt with. The last three went in 0.2.0:
+the pool settings reach pgx, the two purge routines are called, and
 `recovery.email_enabled` was removed rather than implemented — ADR 0009 rules
 out email as a recovery channel, so a flag enabling one could only ever have
 been a lie.
+
+That paragraph used to end "and the table below is empty of open rows for the
+first time", which lasted exactly until the next audit. A second pass before
+0.3.0 found four more, three of them the same shape and two of them
+security-relevant: signing out did not revoke the access tokens the session had
+issued, the key that signs every token could not be rotated at all, an erased
+account kept a working passkey, and an entity could be named `0` — which
+`getent passwd` reads as a user id, so shadow mode would have compared it
+against root. They are in the table below with the rest.
+
+The lesson is not that the audit missed things. It is that "the table is empty"
+is a statement about when somebody last looked, and reads as a statement about
+the code. Four of the six had a test that passed.
 
 The same audit run against the shipped policy set found a fourth variant of the
 pattern, and the worst one so far: not code wired to nothing, but code wired to
@@ -69,11 +81,27 @@ list is also the argument for running the audit again.
 | ~~Agent and server versions were invisible to each other~~ | **Fixed.** Every response carries `X-Cardinal-Version`, the agent sends its own in `User-Agent`, and `cardinal-agent doctor` compares them | A newer agent asking for a route the server lacks got a 404, reported it as a fetch failure and went on serving its cache. Everything on the host kept working, so nothing was reported until the cache was all that was left |
 | ~~Agents did not receive CA trust~~ | **Fixed.** The trusted authorities ride the assignment the agent already polls, and it writes `/etc/ssh/cardinal_user_ca.pub` plus the drop-in naming it | `TrustedUserCAKeys` was a manual step, so rotating the authority was a fleet-wide operation nobody performs — in practice the first key was the only key, and the rotation machinery had nothing to converge on |
 | ~~The console could not manage forwardAuth-only applications~~ | **Fixed.** The list is application entities, with hostnames and an optional OIDC registration | It was keyed on `client_id`, so an application behind the proxy appeared nowhere — and retiring went through the OIDC client, so one could be created from the console and never retired from it |
+| ~~Signing out left the tokens it had issued alive~~ | **Fixed.** Every path that closes a session revokes its OIDC tokens in the same transaction, through an unexported helper reachable no other way | `RevokeTokensForSession` was written, tested, and documented "Called on sign-out". Nothing called it, so signing out closed the session and left every access token minted from it valid for its full lifetime. The test that should have caught it called the helper directly, proving the helper worked while nothing used it |
+| ~~The OIDC signing key could not be rotated~~ | **Fixed.** `cardinal oidc key rotate`, with the grace period derived from the longest token lifetime any client is configured with | The SSH and X.509 authorities have had rotate commands since they were built. The key that can forge a token for every application and sign a security event to every receiver had none: the rotation existed, wrapped in a `Provider` method nothing called |
+| ~~An erased account kept a working passkey~~ | **Fixed.** Erasure deletes credentials and disables the account; the login path also refuses a redacted entity | Erasure stamped `redacted_at` and never set `disabled_at`, and the WebAuthn path gates on `disabled_at` alone. A public key is personal data in its own right, and [ADR 0010](docs/adr/0010-personal-data-and-erasure.md) had not listed it — the documentation gap *was* the bug |
+| ~~An entity could be named `0`~~ | **Fixed.** All-digit names are refused, and the package that validates them has tests for the first time | Measured: `getent passwd 0` prints root, and shadow mode runs exactly that with an entity's name — so the numbers offered for adoption would have been root's. Entity names reach sudoers, SSH principals and Cedar identifiers unescaped, and nothing held the pattern to that |
 
 How they are found: every HTTP route checked for a caller in the console, the
 CLI, the agent or the tests; every exported store method checked for a caller
-outside its own package; every config field checked for a read. Worth repeating
-before each release — `docs/` says how in the contributing notes.
+outside its own package; every config field checked for a read.
+
+Four of those checks no longer depend on anybody remembering. `internal/arch`
+fails the build when an exported method is called from nowhere but its own
+tests, when a handler is declared and never routed, when a console view is never
+imported, and when the shipped policy set names a group no migration creates —
+the last being the check that would have caught three of the eleven rules that
+shipped in 0.1.0. Each was verified by introducing exactly the fault it looks
+for, because a guard nobody has seen fail is a guard nobody should trust.
+
+What they cannot catch is the `audienceFor` variant. Code wired to a constant is
+reachable, routed and wrong, and no structural check sees it. That one still
+needs somebody reading, which is part of the argument for the security audit in
+the gaps below.
 
 ## Known gaps
 
@@ -86,6 +114,7 @@ Honest, and referenced from [the threat model](docs/threat-model.md) and
 | PostgreSQL 19 is not GA | The temporal model uses `FOR PORTION OF`, which is 19-only, and beta behaviour has already changed once between betas | blocks production |
 | No SCIM client | Cardinal receives provisioning but does not push it outward; downstream applications are still provisioned by hand | 5 |
 | SSF has no poll delivery and no stream management API | Cardinal pushes (RFC 8935) to streams an administrator configures. A receiver that expects to poll, or to create its own stream, cannot — the configuration document says so rather than leaving it to be discovered | 5 |
+| SSF streams are configured only from the CLI | The console has no view for them, so deciding which applications hear about a revocation is the one piece of administration that cannot be done from the browser. Unlike the row above this is a missing admin surface rather than a missing protocol half | 5 |
 | Single writer | PostgreSQL streaming replication with manual promotion. Deliberate — split-brain in an identity store means two primaries accepting credential writes | revisit with a team on call |
 | No automated failover | Same reason. A misconfigured automatic failover is more dangerous than none | revisit |
 | No N-1 compatibility test | Nothing runs the previous release against a schema migrated by the current one. The expand-only rule is what makes it safe, and the rule is enforced per migration — the pairing is checked by reading | when there are two releases |
