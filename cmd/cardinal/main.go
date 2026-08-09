@@ -111,6 +111,8 @@ func run(ctx context.Context, args []string) error {
 		return runPOSIX(ctx, rest)
 	case "x509":
 		return runX509(ctx, rest)
+	case "oidc":
+		return runOIDC(ctx, rest)
 	case "policy":
 		return runPolicy(ctx, rest)
 	case "serve":
@@ -296,6 +298,16 @@ CERTIFICATE AUTHORITY (X.509, over ACME)
 AUTHORIZATION
   policy test <file.cedar> [-dsn <url>]    Compile a policy file. Offline
                                            without -dsn; with one, also reports
+TOKEN SIGNING KEY
+  oidc key list                            Keys, and which one is signing
+  oidc key rotate [-grace <dur>]           Sign with a new key; the previous
+                                           one keeps verifying until every
+                                           token it signed has expired
+
+  This key signs ID tokens, access tokens and security events. The grace period
+  defaults to the longest token lifetime any registered client is configured
+  with, so the default is measured rather than assumed.
+
                                            groups and applications a rule names
                                            that do not exist. A rule naming a
                                            group that is not there never

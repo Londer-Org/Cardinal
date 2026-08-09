@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"time"
 
 	"github.com/zitadel/oidc/v3/pkg/oidc"
 	"github.com/zitadel/oidc/v3/pkg/op"
@@ -197,11 +196,11 @@ func (p *Provider) DiscoveryHandler() http.Handler {
 // authorization request once the user has signed in.
 func (p *Provider) Storage() *Storage { return p.storage }
 
-// RotateSigningKey generates a new signing key, retiring the current one after
-// a grace period during which it still verifies.
-func (p *Provider) RotateSigningKey(ctx context.Context, s *store.Store, sealKey string) error {
-	// The grace period must comfortably exceed the longest token lifetime, or
-	// tokens issued moments before the rotation stop verifying.
-	_, err := s.RotateSigningKey(ctx, sealKey, 48*time.Hour)
-	return err
-}
+// Rotation deliberately lives in the CLI rather than here.
+//
+// This package held a Provider.RotateSigningKey wrapper that hardcoded a
+// 48-hour grace period and had no caller — so the key that signs every token
+// could not in fact be rotated. `cardinal oidc key rotate` calls the store
+// directly and derives the grace period from the token lifetimes the
+// registered clients are actually configured with, which the 48 hours was
+// standing in for.
