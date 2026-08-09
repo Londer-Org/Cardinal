@@ -295,6 +295,25 @@ AUTHORIZATION
   policy list                              Published versions
   policy show                              The live policy set
 
+  policy rule list                         The live set, rule by rule, in words
+  policy rule remove <id>                  Drop one and publish the result
+  policy rule add <kind> <id> [flags]      Compose a rule without writing Cedar
+      <kind> is web-access, application-access, ssh-login or run-as-root
+      -group <name>                          who it applies to; omit for anyone
+      -to <group> | -app <name>              which applications or hosts
+      -anything                              every resource — deliberate, loud
+      -account <a>,<b>                       SSH only; the default is their own
+                                             login, and root is never one
+      -stage                                 publish without activating
+
+  A composed rule becomes text in the same document, published as an ordinary
+  version and rolled back with policy activate. Comments and anything the
+  builder does not recognise pass through untouched.
+
+  The forbids and the administration tiers stay hand-written. They are the
+  guardrails the other rules sit inside, so removing one goes through a policy
+  file, where the change is reviewed as text.
+
   The binary carries the default set, so init needs no files on disk. Once
   published, policy lives in the database: a deployment running the image edits
   it the same way a source checkout does.

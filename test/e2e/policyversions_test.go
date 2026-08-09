@@ -362,3 +362,115 @@ permit (
 // shape a rollback actually has: an earlier set that simply did not contain the
 // rule somebody added later.
 func restrictivePolicy() string { return adminRules }
+
+// TestAdminCanBuildARuleFromTheConsole.
+//
+// Composing policy without writing Cedar, through the API the console uses.
+// The property worth asserting is not that a row changed but that the rule
+// governs: it is published, activated, and the running server is enforcing it
+// before the response comes back.
+func TestAdminCanBuildARuleFromTheConsole(t *testing.T) {
+	defer publishPolicy(t, permissivePolicy())()
+
+	c, csrf := adminClient(t)
+	const ruleID = "e2e-built-rule"
+
+	// A group for it to name. A rule naming one that is not there never
+	// matches, and this is the API refusing that rather than storing it.
+	seedSQL(t, `UPDATE entities SET name = name || '-' || id WHERE name = 'e2e-built-group'`)
+	postJSON(t, c, "/api/directory/groups", csrf, map[string]any{ //nolint:bodyclose // postJSON closes the body before returning
+		"name": "e2e-built-group", "displayName": "Built by a test",
+	}, nil)
+
+	missing := postExpectingFailure(t, c, csrf, "/api/policy/rules", map[string]any{ //nolint:bodyclose // postExpectingFailure drains it
+		"id": ruleID, "kind": "web-access",
+		"principalGroup": "no-such-group-anywhere",
+		"resourceGroup":  "e2e-built-group",
+	})
+	if missing.StatusCode != http.StatusBadRequest {
+		t.Errorf("naming a group that does not exist returned %d, want 400 — "+
+			"storing it would produce a rule that can never match, which "+
+			"default-deny makes look like the rule working", missing.StatusCode)
+	}
+
+	var added struct {
+		Version int64 `json:"version"`
+	}
+	postJSON(t, c, "/api/policy/rules", csrf, map[string]any{ //nolint:bodyclose // postJSON closes the body before returning
+		"id": ruleID, "kind": "web-access",
+		"principalGroup": "e2e-built-group",
+		"resourceGroup":  "e2e-built-group",
+	}, &added)
+	if added.Version == 0 {
+		t.Fatal("adding a rule did not publish a version")
+	}
+
+	// It is in the live set, described in words rather than in Cedar, and with
+	// the group named rather than identified.
+	found := false
+	for _, rule := range listRules(t, c) {
+		if rule.ID != ruleID {
+			continue
+		}
+		found = true
+		if !rule.Composable {
+			t.Error("a rule the builder composed came back as hand-written; it " +
+				"could then never be removed the way it was added")
+		}
+		if !strings.Contains(rule.Summary, "e2e-built-group") {
+			t.Errorf("summary is %q — it should name the group, not identify it",
+				rule.Summary)
+		}
+		if len(rule.Missing) != 0 {
+			t.Errorf("a rule naming groups that exist reports %v missing", rule.Missing)
+		}
+	}
+	if !found {
+		t.Fatalf("%s was added and is not in the live set", ruleID)
+	}
+
+	// A guardrail is not removable from here. The step-up forbid is what makes
+	// membership of directory-admins insufficient on its own.
+	guardrail := requestWithCSRF(t, c, http.MethodDelete,
+		"/api/policy/rules/admin-requires-fresh-device-bound-auth", csrf)
+	drain(guardrail)
+	if guardrail.StatusCode != http.StatusBadRequest {
+		t.Errorf("removing a hand-written forbid returned %d, want 400",
+			guardrail.StatusCode)
+	}
+
+	// And the composed one is.
+	removed := requestWithCSRF(t, c, http.MethodDelete, "/api/policy/rules/"+ruleID, csrf)
+	drain(removed)
+	if removed.StatusCode != http.StatusOK {
+		t.Fatalf("removing returned %d, want 200", removed.StatusCode)
+	}
+	for _, rule := range listRules(t, c) {
+		if rule.ID == ruleID {
+			t.Fatal("it was removed and is still in the live set")
+		}
+	}
+}
+
+type builtRule struct {
+	ID         string   `json:"id"`
+	Kind       string   `json:"kind"`
+	Composable bool     `json:"composable"`
+	Summary    string   `json:"summary"`
+	Missing    []string `json:"missing"`
+}
+
+func listRules(t *testing.T, c *http.Client) []builtRule {
+	t.Helper()
+
+	resp := request(t, c, http.MethodGet, hostCardinal, "/api/policy/rules", "application/json")
+	defer drain(resp)
+
+	var body struct {
+		Rules []builtRule `json:"rules"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatal(err)
+	}
+	return body.Rules
+}

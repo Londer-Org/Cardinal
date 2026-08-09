@@ -223,6 +223,24 @@ export const createApplicationRequest = z.object({
 })
 export type CreateApplicationRequest = z.infer<typeof createApplicationRequest>
 
+/**
+ * A policy rule composed rather than written.
+ *
+ * Groups and applications are named, not identified: the console shows names
+ * and the server resolves them, so a rename cannot change what a stored rule
+ * means and nobody has to copy a UUID between two pages.
+ */
+export const addPolicyRuleRequest = z.object({
+  id: entityName,
+  kind: z.enum(['web-access', 'application-access', 'ssh-login', 'run-as-root']),
+  principalGroup: z.string(),
+  resourceGroup: z.string(),
+  resourceApplication: z.string(),
+  anything: z.boolean(),
+  localAccounts: z.array(z.string()),
+})
+export type AddPolicyRuleRequest = z.infer<typeof addPolicyRuleRequest>
+
 /** A hostname an application answers to through forwardAuth. */
 export const addHostnameRequest = z.object({
   hostname: z

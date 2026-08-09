@@ -80,6 +80,25 @@ names the command that fixes it.
 One hostname belongs to at most one application. Two claiming the same address
 would mean the request was authorized against whichever row happened to win.
 
+### Writing the rules
+
+Both doors are governed by Cedar in the database. A whole policy set belongs in
+git, tested with `cardinal policy test` before it governs anything — but the
+common rules can be composed instead of written, from the CLI or from **Access →
+Policy** in the console:
+
+```sh
+cardinal policy rule add web-access sre-may-reach-grafana -group sre -app grafana
+cardinal policy rule add ssh-login sre-may-log-into-prod \
+    -group sre -to env-prod -account deploy
+cardinal policy rule list
+```
+
+A composed rule is text in the same document, published as an ordinary version
+and rolled back with `cardinal policy activate`. Everything the builder does not
+recognise — the forbids, the administration tiers, anything with a condition it
+cannot express — passes through untouched and cannot be removed that way.
+
 > **Before v0.2.0** this section described a rough edge: `forwardAuth` used the
 > `Host` header as the resource name, so a rule about `Application::"aura"` did
 > not govern its URL. Worse, the shipped rule matched on a `context.audience`

@@ -516,6 +516,13 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("GET /api/audit/events", admin(s.handleListAuditEvents))
 	mux.Handle("POST /api/audit/verify", admin(s.handleVerifyAuditChain))
 
+	// Composing rules. The same tier as activating a version, and for the same
+	// reason: a rule decides who may reach what, including who may compose the
+	// next one.
+	mux.Handle("GET /api/policy/rules", admin(s.handleListRules))
+	mux.Handle("POST /api/policy/rules", admin(s.handleAddRule))
+	mux.Handle("DELETE /api/policy/rules/{id}", admin(s.handleRemoveRule))
+
 	mux.Handle("GET /api/policy/versions", admin(s.handleListPolicyVersions))
 	mux.Handle("GET /api/policy/versions/{version}", admin(s.handleGetPolicyVersion))
 	mux.Handle("POST /api/policy/versions/{version}/activate",

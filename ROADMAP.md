@@ -62,7 +62,7 @@ every test it has, and no user can get to it.
 | ~~`audienceFor` decided nothing~~ | **Fixed.** forwardAuth resolves the hostname to an application and asks about that entity's group membership | It returned `"staff"` for every hostname, so the shipped rule permitting staff applications permitted every authenticated principal to reach every protected URL — a rule that read as though it classified and was a constant |
 | ~~Five group identifiers no migration created~~ | **Fixed.** Migration 0027 creates them, and `cardinal policy test -dsn` reports any that go missing | Three of eleven shipped rules — SSH, sudo, web access — could never match. Cedar is default-deny, so they refused everyone and looked like policy working |
 | ~~`X-Auth-Request-Group-Ids` never arrived~~ | **Fixed.** Added to `authResponseHeaders` in the example Traefik config | Cardinal set it on every response and Traefik dropped it, so the header applications are told to branch on reached nothing. The test asserting it passed by reading Cardinal's response instead of the application's |
-| **The console cannot manage forwardAuth-only applications** | `/api/applications` is keyed on OIDC `client_id`, so an application with no OIDC client does not appear, and nothing exposes hostnames | `cardinal app hostname` is the only way to make a protected site reachable. Fine for a CLI deployment, wrong for the one the console exists to serve |
+| ~~The console could not manage forwardAuth-only applications~~ | **Fixed.** The list is application entities, with hostnames and an optional OIDC registration | It was keyed on `client_id`, so an application behind the proxy appeared nowhere — and retiring went through the OIDC client, so one could be created from the console and never retired from it |
 
 How they are found: every HTTP route checked for a caller in the console, the
 CLI, the agent or the tests; every exported store method checked for a caller
@@ -111,10 +111,17 @@ though it discriminated. Both are fixed: the groups are created by migration
 and `cardinal policy test -dsn` plus a warning on every policy load report a
 rule naming something the directory does not have.
 
-So the open part is narrower now. Editing Cedar by hand is still the price of
-policy-as-code, and it may be the honest one. Whether the console should offer
-help building the common rules — "these people may SSH to these machines" — is
-undecided.
+**Answered.** The console and the CLI now compose the four rules that carry the
+weight — who may reach a site, sign in to an application, log into machines, and
+become root — from a form. A composed rule becomes text in the same Cedar
+document, published as an ordinary version and rolled back like any other, so
+nothing here is a second source of truth. Everything the builder does not
+recognise passes through byte for byte, comments included.
+
+What stays hand-written is deliberate: the forbids and the administration tiers.
+Those are the guardrails the composable rules sit inside, and removing one from
+a form is not something a button should do. Publishing an edited policy file
+still does, which is the right amount of friction for changing a guardrail.
 
 Worth separating from a related misreading, because they have different answers:
 the forwardAuth endpoint is not Traefik-specific. It emits the `X-Auth-Request-*`

@@ -228,9 +228,26 @@ permit (
 );
 ```
 
-Then `cardinal policy publish policies/cardinal.cedar -activate` and restart.
-Someone outside the group now gets a plain "no access to Meridian" screen naming
-the rule, instead of a sign-in that appears to work and then stops.
+Then `cardinal policy publish policies/cardinal.cedar -activate`. Someone
+outside the group now gets a plain "no access to Meridian" screen naming the
+rule, instead of a sign-in that appears to work and then stops.
+
+Or say the same thing without writing Cedar, from the CLI or from **Access →
+Policy** in the console:
+
+```sh
+cardinal policy rule add application-access meridian-is-for-analysts \
+    -group analysts -app meridian
+```
+
+Both produce the same rule in the same document. The builder resolves the group
+name to its identifier, writes the sentence above the rule as a comment, and
+publishes a version that rolls back like any other — and everything else in the
+file, comments included, is left byte for byte alone.
+
+The forbids and the administration tiers cannot be composed or removed that way.
+They are the guardrails the other rules sit inside, so changing one goes through
+a policy file where it is reviewed as text.
 
 Each refusal names the policy that produced it, in the response and in
 **Access → decisions**. That is the demo worth showing someone: neither FreeIPA

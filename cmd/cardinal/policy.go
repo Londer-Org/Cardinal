@@ -15,7 +15,7 @@ import (
 
 func runPolicy(ctx context.Context, args []string) error {
 	if len(args) == 0 {
-		return fmt.Errorf("%w: cardinal policy <publish|activate|list|test|show>", errUsage)
+		return fmt.Errorf("%w: cardinal policy <publish|activate|list|test|show|rule>", errUsage)
 	}
 	switch args[0] {
 	case "publish":
@@ -28,8 +28,10 @@ func runPolicy(ctx context.Context, args []string) error {
 		return runPolicyTest(ctx, args[1:])
 	case "show":
 		return runPolicyShow(ctx, args[1:])
+	case "rule":
+		return runPolicyRule(ctx, args[1:])
 	default:
-		return fmt.Errorf("%w: cardinal policy <publish|activate|list|test|show>", errUsage)
+		return fmt.Errorf("%w: cardinal policy <publish|activate|list|test|show|rule>", errUsage)
 	}
 }
 

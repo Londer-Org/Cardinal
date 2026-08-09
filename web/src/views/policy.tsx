@@ -21,6 +21,7 @@ import {
   usePolicyDocument,
   usePolicyVersions,
 } from '@/features/policy/usePolicyVersions'
+import { PolicyRules } from '@/features/policy/PolicyRules'
 import { RequiresFreshAuth } from '@/features/auth/RequiresFreshAuth'
 import { ViewHeader } from '@/views/ViewHeader'
 import type { PolicyVersion } from '@/lib/api'
@@ -177,17 +178,24 @@ function PolicyViewBody() {
 
       <Alert>
         <FileWarningIcon />
-        <AlertTitle>Published from git, not from here</AlertTitle>
+        <AlertTitle>Rules here, whole sets from git</AlertTitle>
         <AlertDescription>
-          There is no editor on this page on purpose. A policy set typed into a
-          browser is one nobody reviewed, and the argument for policy-as-code is
-          that it is diffable and testable before it governs anything —{' '}
+          There is still no editor for the policy document on this page, and
+          that is deliberate: a set typed into a browser is one nobody reviewed,
+          and the argument for policy-as-code is that it is diffable and
+          testable before it governs anything —{' '}
           <code className="font-mono">cardinal policy test</code> compiles one
           without touching the database, and{' '}
           <code className="font-mono">cardinal policy publish</code> loads it.
-          Rolling back is here because that happens during an incident.
+          Composing a single rule below is a different thing: it names a group
+          and a resource that have to exist, says in a sentence what it will
+          mean before you press the button, and lands as an ordinary version
+          that rolls back like any other. The forbids and the administration
+          tiers stay hand-written, because those are the guardrails.
         </AlertDescription>
       </Alert>
+
+      <PolicyRules />
 
       <Card>
         <CardHeader>

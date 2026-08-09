@@ -153,6 +153,38 @@ export const registeredApplicationSchema = applicationSchema.extend({
 })
 export type RegisteredApplication = z.infer<typeof registeredApplicationSchema>
 
+/**
+ * One rule of the live policy set, structured where the builder recognises it.
+ *
+ * `composable` is false for the forbids and the administration tiers. Those are
+ * the guardrails the other rules sit inside, so the console shows them as text
+ * and offers no remove button — changing one goes through the policy file,
+ * where it is reviewed as text.
+ */
+export const policyRuleSchema = z.object({
+  id: z.string(),
+  kind: z.string(),
+  composable: z.boolean(),
+  summary: z.string(),
+  principalGroup: z.string(),
+  resource: z.string(),
+  resourceKind: z.string(),
+  localAccounts: z.array(z.string()),
+  /**
+   * What this rule names and the directory does not have. A rule naming a group
+   * that is not there never matches, and Cedar being default-deny makes that
+   * look exactly like the rule working.
+   */
+  missing: z.array(z.string()),
+  source: z.string(),
+})
+export type PolicyRule = z.infer<typeof policyRuleSchema>
+
+export const policyRulesSchema = z.object({
+  version: z.number(),
+  rules: z.array(policyRuleSchema),
+})
+
 export const invitationSchema = z.object({
   login: z.string(),
   displayName: z.string(),

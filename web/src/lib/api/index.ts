@@ -17,6 +17,7 @@ import {
   registerApplicationRequest,
   createApplicationRequest,
   addHostnameRequest,
+  addPolicyRuleRequest,
   updateProfileRequest,
   type CreateGroupRequest,
   type AdminProfileRequest,
@@ -28,6 +29,7 @@ import {
   type OpenRecoveryRequest,
   type RegisterApplicationRequest,
   type CreateApplicationRequest,
+  type AddPolicyRuleRequest,
   type UpdateProfileRequest,
 } from './requests'
 import {
@@ -72,6 +74,7 @@ import {
   policySchema,
   policyVersionsSchema,
   policyDocumentSchema,
+  policyRulesSchema,
   recoveryCodesSchema,
   registeredApplicationSchema,
 } from './schemas'
@@ -632,15 +635,49 @@ export const api = {
     /**
      * Rolls the live set to a published version.
      *
-     * There is deliberately no publish here. A policy set belongs in git,
-     * reviewed and tested before it governs anything; one typed into a browser
-     * is one nobody read. Rollback is the exception because it happens during
-     * an incident.
+     * There is still no way to publish a whole policy set from here, and that
+     * remains deliberate: a set belongs in git, reviewed and tested before it
+     * governs anything, and one typed into a browser is one nobody read.
+     * Rollback is the exception because it happens during an incident.
      */
     activate: (version: number) =>
       request(`/api/policy/versions/${String(version)}/activate`,
         z.object({ live: z.number(), policyCount: z.number() }),
         { method: 'POST' }),
+
+    /**
+     * The live set, rule by rule, structured where the builder recognises it.
+     *
+     * Adding one rule is not the same thing as publishing a set, which is why
+     * this exists alongside the rule above rather than against it. The
+     * difference is what can be reviewed: a set typed into a textarea is
+     * arbitrary text nobody read, while a rule composed here names a group and
+     * a resource chosen from the directory, is described as a sentence before
+     * it is made, and lands as an ordinary version that rolls back like any
+     * other. And for a deployment running the published image there is no file
+     * to edit — the alternative to this is not review, it is the CLI or
+     * nothing.
+     */
+    rules: () => request('/api/policy/rules', policyRulesSchema),
+
+    addRule: (input: AddPolicyRuleRequest) =>
+      request('/api/policy/rules', z.object({
+        version: z.number(),
+        rules: z.number(),
+      }), { method: 'POST', body: addPolicyRuleRequest.parse(input) }),
+
+    /**
+     * Removes a rule the builder composed.
+     *
+     * The server refuses this for the forbids and the administration tiers.
+     * They are the guardrails the other rules sit inside, and removing one goes
+     * through the policy file where the change is reviewed as text.
+     */
+    removeRule: (id: string) =>
+      request(`/api/policy/rules/${encodeURIComponent(id)}`, z.object({
+        version: z.number(),
+        rules: z.number(),
+      }), { method: 'DELETE' }),
   },
 
   recovery: {
@@ -717,6 +754,7 @@ export type {
   ChainReport,
   PolicyVersion,
   PolicyDocument,
+  PolicyRule,
   RecoveryCodes,
   RecoveryRequest,
   RegisteredApplication,
@@ -754,5 +792,6 @@ export const queryKeys = {
   auditEvents: (filter: { action: string; subject: string; before: number }) =>
     ['audit', 'events', filter] as const,
   policyVersions: ['policy', 'versions'] as const,
+  policyRules: ['policy', 'rules'] as const,
   policyDocument: (version: number) => ['policy', 'versions', version] as const,
 }
