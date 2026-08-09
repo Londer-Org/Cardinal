@@ -114,6 +114,13 @@ const (
 	// with it.
 	ActionClientSecretRotated = "application.secret_rotated"
 
+	// A hostname was attached to or removed from an application. Worth
+	// recording because it decides which application's group memberships govern
+	// a request arriving at that name — so moving a hostname between two
+	// applications silently moves who may reach it.
+	ActionApplicationHostnameAdded   = "application.hostname_added"
+	ActionApplicationHostnameRemoved = "application.hostname_removed"
+
 	ActionConsentGranted = "consent.granted"
 	ActionConsentRevoked = "consent.revoked"
 

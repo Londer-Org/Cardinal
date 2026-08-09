@@ -393,6 +393,28 @@ e2e-seed: ## Create the end-to-end user and activate the policy set
 	@$(COMPOSE_E2E) exec -T cardinal \
 		cardinal policy publish /tmp/cardinal.cedar -description 'e2e stack' -activate \
 		| sed 's/^/  /'
+	@# The application behind Traefik, and the hostname it answers to.
+	@#
+	@# forwardAuth is handed a hostname and resolves it to an application, whose
+	@# group membership decides who may reach it. Without these three commands
+	@# every request to app.cardinal.test is refused before policy is consulted
+	@# — which is the correct answer for an address nobody registered, and is
+	@# what the stack looked like before this existed.
+	@$(COMPOSE_E2E) exec -T cardinal \
+		cardinal application create protected-app -display 'Protected App' 2>&1 \
+		| grep -qE 'created|already exists' \
+		|| { echo 'ERROR: could not create the protected application'; exit 1; }
+	@$(COMPOSE_E2E) exec -T cardinal \
+		cardinal app hostname add protected-app app.cardinal.test 2>&1 \
+		| grep -qE 'answers for|already holds' \
+		|| { echo 'ERROR: could not register app.cardinal.test'; exit 1; }
+	@# Into staff-apps, which is what the shipped staff-web-access rule permits.
+	@# Empty on a fresh install on purpose: registering an application makes it
+	@# findable, and this is the deliberate act that makes it reachable.
+	@$(COMPOSE_E2E) exec -T cardinal \
+		cardinal grant staff-apps protected-app 2>&1 \
+		| grep -qE 'granted|already' \
+		|| { echo 'ERROR: could not put protected-app in staff-apps'; exit 1; }
 	@# An authority key, so host certificates can be issued. -activate because
 	@# nothing in the stack trusts an older key: the careful two-step ordering
 	@# exists for a fleet that already has one, and there is no fleet here.

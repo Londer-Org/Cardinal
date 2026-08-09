@@ -77,6 +77,35 @@ const (
 	SecurityAdminGroupID = "00000000-0000-7000-8000-00000000ad13"
 )
 
+// Groups the shipped access rules name, created by migration 0027.
+//
+// These identifiers were in policies/cardinal.cedar from the first release and
+// nothing created them, so the three rules using them — SSH, sudo, and web
+// access — never matched. Cedar is default-deny, so that read as a working deny
+// rather than as a broken rule, which is the failure the policy file's own
+// comment warns about and then committed.
+//
+// Unlike the admin groups above, membership of these confers nothing inside
+// Cardinal. They are ordinary groups that the default rules happen to name, and
+// an organisation with different words for these things should edit the rules
+// rather than keep the names.
+const (
+	// StaffAppsGroupID holds applications, not people: forwardAuth admits an
+	// authenticated principal to an application in this group. Empty on a fresh
+	// install, so nothing is reachable until an application is put in it.
+	StaffAppsGroupID = "00000000-0000-7000-8000-0000000e5be0"
+
+	SREGroupID       = "00000000-0000-7000-8000-0000000e5be1"
+	ProdHostsGroupID = "00000000-0000-7000-8000-0000000e5be2"
+	EngineersGroupID = "00000000-0000-7000-8000-0000000e5be3"
+	DevHostsGroupID  = "00000000-0000-7000-8000-0000000e5be4"
+
+	// PlatformAdminsGroupID confers root, via sudoers, on the machines in
+	// DevHostsGroupID. Named platform-admins rather than root-admins because
+	// what it grants is decided by the rule, not by the name.
+	PlatformAdminsGroupID = "00000000-0000-7000-8000-0000000e5be5"
+)
+
 // AdminGroupID is the built-in directory-admins group.
 //
 // Created by migration 0008 with a fixed identifier, because the permit rule

@@ -3,6 +3,7 @@ package policy_test
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -190,19 +191,6 @@ func TestDirectoryAdminsMayAdminister(t *testing.T) {
 	}
 }
 
-// TestAdminGroupIDMatchesTheShippedPolicy.
-//
-// Cheap insurance against the one-character edit that breaks administration
-// everywhere with no error to follow.
-func TestAdminGroupIDMatchesTheShippedPolicy(t *testing.T) {
-	source, err := os.ReadFile(filepath.Join(repoRoot(t), "policies", "cardinal.cedar"))
-	require.NoError(t, err)
-
-	assert.Contains(t, string(source), policy.AdminGroupID,
-		"policies/cardinal.cedar must reference policy.AdminGroupID; "+
-			"if this fails, migration 0008 needs checking too")
-}
-
 func TestSSHRequiresDeviceBoundCredential(t *testing.T) {
 	e := engine(t)
 
@@ -242,22 +230,62 @@ func TestRootRequiresRecentAuth(t *testing.T) {
 		"a recent authentication must clear the freshness forbid")
 }
 
-// TestStaffWebAccessGranted confirms a permit actually works, so the suite is
-// not merely proving that everything is denied.
-func TestStaffWebAccessGranted(t *testing.T) {
-	e := engine(t)
+// TestStaffWebAccess confirms a permit actually works, so the suite is not
+// merely proving that everything is denied — and, in the second half, that it
+// discriminates.
+//
+// The second half is the one that matters. This rule used to match on
+// `context.audience == "staff"`, where the audience was produced by a function
+// that ignored the hostname it was given and returned "staff" for all of them.
+// The test above passed, because it supplied the audience itself; nothing asked
+// what happened to an application that should not have been reachable, and the
+// answer for an entire release was "it was reachable".
+func TestStaffWebAccess(t *testing.T) {
+	inStaffApps := []claims.Group{{
+		ID:    uuid.MustParse(policy.StaffAppsGroupID),
+		Name:  "staff-apps",
+		Depth: 1,
+	}}
 
-	decision := e.Evaluate(policy.Request{
-		Subject:  subject(subjectOpts{deviceBound: true}),
-		Action:   policy.ActionAccessURL,
-		Resource: types.NewEntityUID(policy.TypeApplication, "grafana"),
-		Context: map[string]types.Value{
-			"audience": types.String("staff"),
-		},
+	t.Run("an application in staff-apps is reachable", func(t *testing.T) {
+		decision := engine(t).Evaluate(policy.Request{
+			Subject:        subject(subjectOpts{deviceBound: true}),
+			Action:         policy.ActionAccessURL,
+			Resource:       types.NewEntityUID(policy.TypeApplication, "grafana"),
+			ResourceGroups: inStaffApps,
+		})
+
+		require.True(t, decision.Allowed, decision.Explain())
+		assert.Contains(t, decision.Reasons, "staff-web-access")
 	})
 
-	require.True(t, decision.Allowed, decision.Explain())
-	assert.Contains(t, decision.Reasons, "staff-web-access")
+	t.Run("an application in no group is not", func(t *testing.T) {
+		decision := engine(t).Evaluate(policy.Request{
+			Subject:  subject(subjectOpts{deviceBound: true}),
+			Action:   policy.ActionAccessURL,
+			Resource: types.NewEntityUID(policy.TypeApplication, "payroll"),
+		})
+
+		require.False(t, decision.Allowed,
+			"registering an application must not by itself make it reachable; "+
+				"putting it in staff-apps is what does that")
+		assert.Empty(t, decision.Reasons,
+			"denied by default, not by a forbid — the explorer says different "+
+				"things for the two")
+	})
+
+	t.Run("membership of another group does not substitute", func(t *testing.T) {
+		decision := engine(t).Evaluate(policy.Request{
+			Subject:  subject(subjectOpts{deviceBound: true}),
+			Action:   policy.ActionAccessURL,
+			Resource: types.NewEntityUID(policy.TypeApplication, "payroll"),
+			ResourceGroups: []claims.Group{
+				{ID: uuid.New(), Name: "finance-apps", Depth: 1},
+			},
+		})
+
+		require.False(t, decision.Allowed, decision.Explain())
+	})
 }
 
 // TestNoEvaluationErrors: a policy that fails to evaluate never grants access,
@@ -519,21 +547,51 @@ func TestStepUpCoversEveryAdminAction(t *testing.T) {
 
 // TestBuiltInGroupIDsMatchTheShippedPolicy.
 //
-// Three copies of each identifier — this constant, the migration, and the
-// policy file. Cheap insurance against the one-character edit that silently
-// removes a tier's authority with no error anywhere.
+// Three copies of each identifier — this constant, a migration, and the policy
+// file — and all three have to agree or a rule quietly stops matching.
+//
+// This used to check the policy file only, and said "if this fails, the
+// migration needs checking too". Nothing checked the migration, and the five
+// identifiers below the admin tiers were in the policy file and in no migration
+// at all: three shipped rules governing SSH, sudo and web access could never
+// match, for an entire release. Checking both sides is what makes the comment
+// true.
 func TestBuiltInGroupIDsMatchTheShippedPolicy(t *testing.T) {
-	source, err := os.ReadFile(filepath.Join(repoRoot(t), "policies", "cardinal.cedar"))
+	root := repoRoot(t)
+
+	source, err := os.ReadFile(filepath.Join(root, "policies", "cardinal.cedar"))
 	require.NoError(t, err)
+
+	// Every migration concatenated. Which file creates a group does not matter
+	// and should not be pinned here — that a migration does is the whole claim.
+	migrationFiles, err := filepath.Glob(filepath.Join(root, "migrations", "*.sql"))
+	require.NoError(t, err)
+	require.NotEmpty(t, migrationFiles)
+
+	var schema strings.Builder
+	for _, path := range migrationFiles {
+		content, readErr := os.ReadFile(path)
+		require.NoError(t, readErr)
+		schema.Write(content)
+	}
 
 	for name, id := range map[string]string{
 		"directory-admins": policy.AdminGroupID,
 		"user-admins":      policy.UserAdminGroupID,
 		"security-admins":  policy.SecurityAdminGroupID,
+		"staff-apps":       policy.StaffAppsGroupID,
+		"sre":              policy.SREGroupID,
+		"env-prod":         policy.ProdHostsGroupID,
+		"engineers":        policy.EngineersGroupID,
+		"env-dev":          policy.DevHostsGroupID,
+		"platform-admins":  policy.PlatformAdminsGroupID,
 	} {
 		assert.Contains(t, string(source), id,
-			"policies/cardinal.cedar must reference %s (%s); if this fails, "+
-				"the migration needs checking too", name, id)
+			"policies/cardinal.cedar must reference %s (%s)", name, id)
+		assert.Contains(t, schema.String(), id,
+			"a migration must create %s (%s), or every rule naming it is inert "+
+				"and Cedar's default-deny makes that look like the rule working",
+			name, id)
 	}
 }
 

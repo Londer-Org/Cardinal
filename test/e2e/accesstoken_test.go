@@ -2,6 +2,7 @@ package e2e
 
 import (
 	"encoding/json"
+	"io"
 	"net/http"
 	"strings"
 	"testing"
@@ -163,6 +164,67 @@ func TestAccessTokenRefusalNamesThePolicy(t *testing.T) {
 	}
 }
 
+// protectedIdentity is what the application behind Traefik reports it received.
+type protectedIdentity struct {
+	UserID      string   `json:"userId"`
+	Login       string   `json:"login"`
+	Groups      []string `json:"groups"`
+	GroupIDs    []string `json:"groupIds"`
+	AuthMethod  string   `json:"authMethod"`
+	DeviceBound bool     `json:"deviceBound"`
+	Policy      string   `json:"policy"`
+}
+
+// tokenIdentityAtProtectedApp asks the application what a token-bearing request
+// looks like by the time it arrives.
+//
+// Through Traefik, rather than by calling /api/auth/verify with hand-written
+// X-Forwarded-* headers. Two things were wrong with doing that, and both hid a
+// real defect:
+//
+// Traefik overwrites X-Forwarded-Host with the host actually being requested,
+// so a test that set it to app.cardinal.test was in fact asking about
+// id.cardinal.test. That went unnoticed for as long as the answer did not
+// depend on the hostname — which it did not, because forwardAuth classified
+// every host identically and permitted them all.
+//
+// And a response header Cardinal sets only reaches an application if it is
+// listed in authResponseHeaders. Reading the header off Cardinal's own response
+// skips the one step that can drop it, which is how X-Auth-Request-Group-Ids
+// came to be emitted on every request, asserted by a passing test, and never
+// once delivered to anything.
+func tokenIdentityAtProtectedApp(t *testing.T) protectedIdentity {
+	t.Helper()
+	token := tokenFor(t)
+
+	req, err := http.NewRequest(http.MethodGet, //nolint:noctx // bounded by client timeout
+		origin(hostProtected)+"/whoami.json", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Accept", "application/json")
+
+	resp, err := client(t).Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer drain(resp)
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body) //nolint:errcheck // reported by the failure that follows
+		t.Fatalf("got %d — a token was refused access a session would have been "+
+			"granted, which leaves the proxy bypass as the only option: %s",
+			resp.StatusCode, body)
+	}
+
+	var identity protectedIdentity
+	if err := json.NewDecoder(resp.Body).Decode(&identity); err != nil {
+		t.Fatal(err)
+	}
+	return identity
+}
+
 // TestAccessTokenReachesAProtectedApplication.
 //
 // The point of the whole thing. A script presents a token to the same
@@ -170,28 +232,19 @@ func TestAccessTokenRefusalNamesThePolicy(t *testing.T) {
 // the same identity headers — so it needs no idea that tokens exist, and the
 // proxy needs no rule routing API traffic around the check.
 func TestAccessTokenReachesAProtectedApplication(t *testing.T) {
-	token := tokenFor(t)
+	identity := tokenIdentityAtProtectedApp(t)
 
-	resp := bearerRequest(t, http.MethodGet, "/api/auth/verify", token,
-		map[string]string{
-			"X-Forwarded-Host":   hostProtected,
-			"X-Forwarded-Uri":    "/",
-			"X-Forwarded-Method": http.MethodGet,
-		})
-	defer drain(resp)
-
-	if resp.StatusCode != http.StatusNoContent && resp.StatusCode != http.StatusOK {
-		t.Fatalf("got %d — a token was refused access a session would have been "+
-			"granted, which leaves the proxy bypass as the only option",
-			resp.StatusCode)
+	if identity.Login != tokenOwnerLogin {
+		t.Errorf("login = %q, want %q — the application behind the proxy reads "+
+			"this and nothing else", identity.Login, tokenOwnerLogin)
 	}
-	if got := resp.Header.Get("X-Auth-Request-Preferred-Username"); got != tokenOwnerLogin {
-		t.Errorf("identity header says %q, want %q — the application behind the "+
-			"proxy reads this and nothing else", got, tokenOwnerLogin)
+	if identity.AuthMethod != "access_token" {
+		t.Errorf("authMethod = %q; an application that wants to treat automation "+
+			"differently has only this to go on", identity.AuthMethod)
 	}
-	if got := resp.Header.Get("X-Auth-Request-Auth-Method"); got != "access_token" {
-		t.Errorf("auth-method header is %q; an application that wants to treat "+
-			"automation differently has only this to go on", got)
+	if identity.DeviceBound {
+		t.Error("a token reported itself device-bound; ADR 0018 rests on it " +
+			"never being one")
 	}
 }
 
@@ -243,35 +296,27 @@ func TestRevokedAccessTokenStopsWorking(t *testing.T) {
 // now: applications should be coupling to the stable thing *before* rename
 // exists, not migrating afterwards.
 func TestIdentityHeadersCarryStableGroupIdentifiers(t *testing.T) {
-	token := tokenFor(t)
+	identity := tokenIdentityAtProtectedApp(t)
 
-	resp := bearerRequest(t, http.MethodGet, "/api/auth/verify", token,
-		map[string]string{
-			"X-Forwarded-Host":   hostProtected,
-			"X-Forwarded-Uri":    "/",
-			"X-Forwarded-Method": http.MethodGet,
-		})
-	defer drain(resp)
-
-	names := resp.Header.Get("X-Auth-Request-Groups")
-	ids := resp.Header.Get("X-Auth-Request-Group-Ids")
-
-	if names == "" {
-		t.Fatal("no groups header at all")
+	if len(identity.Groups) == 0 {
+		t.Fatal("no groups reached the application at all")
 	}
-	if ids == "" {
-		t.Fatal("no group-ids header — an application has nothing stable to key on")
+	if len(identity.GroupIDs) == 0 {
+		t.Fatal("no group identifiers reached the application — an application " +
+			"has nothing stable to key on. If Cardinal sets the header, the " +
+			"missing piece is X-Auth-Request-Group-Ids in authResponseHeaders " +
+			"in examples/traefik/dynamic.yml")
 	}
 
-	nameCount := len(strings.Split(names, ","))
-	idCount := len(strings.Split(ids, ","))
+	nameCount := len(identity.Groups)
+	idCount := len(identity.GroupIDs)
 	if nameCount != idCount {
 		t.Fatalf("%d names but %d ids — they must line up, or an application "+
 			"cannot map one to the other", nameCount, idCount)
 	}
 
 	// Identifiers, not names repeated under a second header.
-	for _, id := range strings.Split(ids, ",") {
+	for _, id := range identity.GroupIDs {
 		if len(id) != 36 || strings.Count(id, "-") != 4 {
 			t.Errorf("group id %q is not a UUID", id)
 		}

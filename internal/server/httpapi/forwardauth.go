@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/cedar-policy/cedar-go/types"
+	"go.londer.be/cardinal/internal/server/claims"
 	"go.londer.be/cardinal/internal/server/policy"
 	"go.londer.be/cardinal/internal/store"
 )
@@ -72,6 +73,31 @@ func (s *Server) handleForwardAuth(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Which application this hostname belongs to.
+	//
+	// An unregistered hostname is refused here rather than described to policy,
+	// the same way an unenrolled machine is refused an SSH certificate: Cardinal
+	// decides about things the directory knows, and a rule matching on
+	// `resource == Cardinal::Application::"grafana"` must not also match a
+	// request whose Host header happens to say grafana.
+	app, err := s.store.ApplicationForHostname(ctx, original.Host)
+	if err != nil {
+		s.unregisteredHost(w, r, subject, original, err)
+		return
+	}
+
+	// The application's own group memberships, which are what a policy matches
+	// on. Resolved through the same path as a person's and a host's, because an
+	// application is an entity like any other and "which applications" should
+	// not be a third mechanism.
+	appSubject, err := s.claims.ResolveByID(ctx, app.ID)
+	if err != nil {
+		s.log.ErrorContext(ctx, "forwardAuth: resolving application memberships failed",
+			"application", app.Name, "error", err)
+		writeError(w, http.StatusServiceUnavailable, "authorization unavailable")
+		return
+	}
+
 	engine := s.policy.Load()
 	if engine == nil {
 		// No policy loaded means no basis for allowing anything. Failing closed
@@ -82,14 +108,14 @@ func (s *Server) handleForwardAuth(w http.ResponseWriter, r *http.Request) {
 	}
 
 	decision := engine.Evaluate(policy.Request{
-		Subject:  subject,
-		Action:   policy.ActionAccessURL,
-		Resource: types.NewEntityUID(policy.TypeApplication, types.String(original.Host)),
+		Subject:        subject,
+		Action:         policy.ActionAccessURL,
+		Resource:       types.NewEntityUID(policy.TypeApplication, types.String(app.Name)),
+		ResourceGroups: appSubject.Groups,
 		Context: map[string]types.Value{
-			"host":     types.String(original.Host),
-			"path":     types.String(original.Path),
-			"method":   types.String(original.Method),
-			"audience": types.String(s.audienceFor(original.Host)),
+			"host":   types.String(original.Host),
+			"path":   types.String(original.Path),
+			"method": types.String(original.Method),
 		},
 	})
 
@@ -108,6 +134,7 @@ func (s *Server) handleForwardAuth(w http.ResponseWriter, r *http.Request) {
 		PolicyVersion: decision.Version,
 		Context: map[string]any{
 			"method":       original.Method,
+			"application":  app.Name,
 			"auth_method":  subject.Auth.Method,
 			"device_bound": subject.Auth.DeviceBound,
 			"groups":       subject.GroupNames(),
@@ -248,12 +275,55 @@ func (s *Server) isAllowedReturnTarget(raw string) bool {
 	return false
 }
 
-// audienceFor classifies a host for policy.
+// unregisteredHost refuses a hostname no application claims.
 //
-// A placeholder until applications are first-class directory entities (Phase 3),
-// at which point the audience becomes an attribute of the application rather
-// than a property of its hostname.
-func (s *Server) audienceFor(string) string { return "staff" }
+// This is the one deny here that policy did not produce, and it replaces a
+// function that classified every hostname as "staff" — which made the shipped
+// rule permitting staff applications permit everything, while reading as though
+// it distinguished between them. Refusing is the same choice the SSH decision
+// point already makes for a machine nobody enrolled.
+//
+// Logged as a decision even though no policy was consulted, because "why was I
+// denied?" is answered from the decision log and an answer that is simply
+// missing sends whoever is asking to the wrong place. The reasons list is empty,
+// which the explorer already renders as default-deny, and the context says which
+// kind of default-deny this was.
+func (s *Server) unregisteredHost(
+	w http.ResponseWriter, r *http.Request,
+	subject *claims.Subject, original forwardedRequest, cause error,
+) {
+	ctx := r.Context()
+
+	s.log.WarnContext(ctx, "forwardAuth: no application is registered for this hostname",
+		"host", original.Host, "path", original.Path,
+		"subject", subject.Login, "error", cause)
+
+	principalID := subject.ID
+	if err := s.store.LogDecision(ctx, store.DecisionRecord{
+		DecisionPoint: "forwardAuth",
+		PrincipalID:   &principalID,
+		Action:        "AccessURL",
+		Resource:      original.Host + original.Path,
+		Allowed:       false,
+		Context: map[string]any{
+			"method":            original.Method,
+			"unregistered_host": true,
+			"auth_method":       subject.Auth.Method,
+			"device_bound":      subject.Auth.DeviceBound,
+		},
+	}); err != nil {
+		s.log.ErrorContext(ctx, "forwardAuth: decision log write failed", "error", err)
+	}
+
+	// The remedy is in the message because the alternative is an administrator
+	// reading a generic 403 and going looking for a policy bug that is not
+	// there. The person seeing it is signed in, so this tells them nothing about
+	// the deployment they could not learn by visiting the URL.
+	writeError(w, http.StatusForbidden,
+		"This address is not registered with Cardinal, so no policy governs it. "+
+			"An administrator can register it with "+
+			"`cardinal app hostname add <application> "+original.Host+"`.")
+}
 
 func acceptsHTML(r *http.Request) bool {
 	return strings.Contains(r.Header.Get("Accept"), "text/html")

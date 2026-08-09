@@ -15,15 +15,17 @@ import (
 
 func runApp(ctx context.Context, args []string) error {
 	if len(args) == 0 {
-		return fmt.Errorf("%w: cardinal app <register|list>", errUsage)
+		return fmt.Errorf("%w: cardinal app <register|list|hostname>", errUsage)
 	}
 	switch args[0] {
 	case "register":
 		return runAppRegister(ctx, args[1:])
 	case "list":
 		return runAppList(ctx, args[1:])
+	case "hostname":
+		return runAppHostname(ctx, args[1:])
 	default:
-		return fmt.Errorf("%w: cardinal app <register|list>", errUsage)
+		return fmt.Errorf("%w: cardinal app <register|list|hostname>", errUsage)
 	}
 }
 

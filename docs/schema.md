@@ -69,7 +69,7 @@ erDiagram
 
 ### `entities`
 
-Every principal, group, host and application. The group directory-admins (00000000-0000-7000-8000-00000000ad11) is created by migration and referenced by the default policy set; renaming it is safe, deleting it locks everyone out of administration.
+Every principal, group, host and application. The groups created by migration — directory-admins, user-admins, security-admins (0008, 0011) and staff-apps, sre, env-prod, engineers, env-dev, platform-admins (0027) — are referenced by the default policy set through their identifiers, so renaming one is safe and deleting one silently removes whatever the rule naming it was granting.
 
 | Column | Type | Null | Default | Notes |
 |---|---|---|---|---|
@@ -648,6 +648,7 @@ erDiagram
         text name PK
         text digest
         timestamp_with_time_zone applied_at
+        text breaking
     }
 ```
 
@@ -658,6 +659,7 @@ erDiagram
 | `name` | `text` | no |  |  |
 | `digest` | `text` | no |  |  |
 | `applied_at` | `timestamp with time zone` | no | `now()` |  |
+| `breaking` | `text` | yes |  |  |
 
 ## Other
 
@@ -709,6 +711,21 @@ erDiagram
         uuid ca_key_id FK
         text serial
     }
+    application_hostnames {
+        text hostname PK
+        uuid entity_id FK
+        timestamp_with_time_zone added_at
+        uuid added_by FK
+    }
+    cli_authorizations {
+        uuid id PK
+        text code_hash
+        text verifier_hash
+        uuid session_id FK
+        timestamp_with_time_zone created_at
+        timestamp_with_time_zone expires_at
+        timestamp_with_time_zone claimed_at
+    }
     host_aliases {
         uuid host_id PK
         text name PK
@@ -735,6 +752,40 @@ erDiagram
         timestamp_with_time_zone redeemed_at
         inet redeemed_ip
         timestamp_with_time_zone revoked_at
+    }
+    mail_outbox {
+        uuid id PK
+        uuid subject_id FK
+        text recipient
+        text kind
+        text subject_line
+        text body
+        timestamp_with_time_zone created_at
+        timestamp_with_time_zone next_attempt_at
+        integer attempts
+        timestamp_with_time_zone sent_at
+        text last_error
+    }
+    mail_settings {
+        boolean id PK
+        boolean enabled
+        text host
+        integer port
+        text username
+        bytea password_sealed
+        text from_address
+        text from_name
+        text reply_to
+        text tls_mode
+        timestamp_with_time_zone updated_at
+        uuid updated_by FK
+    }
+    mail_templates {
+        text kind PK
+        text subject
+        text body
+        timestamp_with_time_zone updated_at
+        uuid updated_by FK
     }
     posix_identities {
         uuid entity_id PK
@@ -786,11 +837,17 @@ erDiagram
     entities ||--o{ acme_eab_credentials : subject_id
     acme_accounts ||--o{ acme_orders : account_id
     x509_ca_keys ||--o{ acme_orders : ca_key_id
+    entities ||--o{ application_hostnames : added_by
+    entities ||--o{ application_hostnames : entity_id
+    sessions ||--o{ cli_authorizations : session_id
     entities ||--o{ host_aliases : added_by
     entities ||--o{ host_aliases : host_id
     entities ||--o{ host_credentials : host_id
     entities ||--o{ host_enrollment_tokens : host_id
     entities ||--o{ host_enrollment_tokens : issued_by
+    entities ||--o{ mail_outbox : subject_id
+    entities ||--o{ mail_settings : updated_by
+    entities ||--o{ mail_templates : updated_by
     entities ||--o{ posix_identities : entity_id
     ssh_ca_keys ||--o{ ssh_certificates : ca_key_id
     entities ||--o{ ssh_certificates : host_id
@@ -858,6 +915,29 @@ One per identifier. Always born valid: control of the name was established at en
 | `ca_key_id` | `uuid` | yes |  | → `x509_ca_keys.id` |
 | `serial` | `text` | yes |  |  |
 
+### `application_hostnames`
+
+Maps a hostname Traefik forwards to the application entity it belongs to. A hostname with no row here is refused by forwardAuth before policy is consulted, the same way an unenrolled machine is refused an SSH certificate: Cardinal decides about things the directory knows.
+
+| Column | Type | Null | Default | Notes |
+|---|---|---|---|---|
+| `hostname` | `text` | no |  |  |
+| `entity_id` | `uuid` | no |  | → `entities.id` |
+| `added_at` | `timestamp with time zone` | no | `now()` |  |
+| `added_by` | `uuid` | yes |  | → `entities.id` |
+
+### `cli_authorizations`
+
+| Column | Type | Null | Default | Notes |
+|---|---|---|---|---|
+| `id` | `uuid` | no | `uuidv7()` |  |
+| `code_hash` | `text` | no |  |  |
+| `verifier_hash` | `text` | no |  |  |
+| `session_id` | `uuid` | no |  | → `sessions.id` |
+| `created_at` | `timestamp with time zone` | no | `now()` |  |
+| `expires_at` | `timestamp with time zone` | no |  |  |
+| `claimed_at` | `timestamp with time zone` | yes |  |  |
+
 ### `host_aliases`
 
 Additional names a host may hold a certificate for. Unique across all hosts.
@@ -899,6 +979,49 @@ Single-use tokens that let a machine register its key once. Hashed at rest.
 | `redeemed_at` | `timestamp with time zone` | yes |  |  |
 | `redeemed_ip` | `inet` | yes |  |  |
 | `revoked_at` | `timestamp with time zone` | yes |  |  |
+
+### `mail_outbox`
+
+| Column | Type | Null | Default | Notes |
+|---|---|---|---|---|
+| `id` | `uuid` | no | `uuidv7()` |  |
+| `subject_id` | `uuid` | yes |  | → `entities.id` |
+| `recipient` | `text` | no |  |  |
+| `kind` | `text` | no |  |  |
+| `subject_line` | `text` | no |  |  |
+| `body` | `text` | no |  |  |
+| `created_at` | `timestamp with time zone` | no | `now()` |  |
+| `next_attempt_at` | `timestamp with time zone` | no | `now()` |  |
+| `attempts` | `integer` | no | `0` |  |
+| `sent_at` | `timestamp with time zone` | yes |  |  |
+| `last_error` | `text` | yes |  |  |
+
+### `mail_settings`
+
+| Column | Type | Null | Default | Notes |
+|---|---|---|---|---|
+| `id` | `boolean` | no | `true` |  |
+| `enabled` | `boolean` | no | `false` |  |
+| `host` | `text` | no | `''::text` |  |
+| `port` | `integer` | no | `587` |  |
+| `username` | `text` | no | `''::text` |  |
+| `password_sealed` | `bytea` | yes |  |  |
+| `from_address` | `text` | no | `''::text` |  |
+| `from_name` | `text` | no | `''::text` |  |
+| `reply_to` | `text` | no | `''::text` |  |
+| `tls_mode` | `text` | no | `'starttls'::text` |  |
+| `updated_at` | `timestamp with time zone` | no | `now()` |  |
+| `updated_by` | `uuid` | yes |  | → `entities.id` |
+
+### `mail_templates`
+
+| Column | Type | Null | Default | Notes |
+|---|---|---|---|---|
+| `kind` | `text` | no |  |  |
+| `subject` | `text` | no |  |  |
+| `body` | `text` | no |  |  |
+| `updated_at` | `timestamp with time zone` | no | `now()` |  |
+| `updated_by` | `uuid` | yes |  | → `entities.id` |
 
 ### `posix_identities`
 

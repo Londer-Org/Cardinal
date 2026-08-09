@@ -268,17 +268,23 @@ func TestPolicyVersionsNeedTheBroadTier(t *testing.T) {
 }
 
 // appAccess asks the forwardAuth endpoint the question an application asks.
+// appAccess asks whether the protected application is reachable right now.
+//
+// Through Traefik at the application's own address, rather than by calling
+// /api/auth/verify with X-Forwarded-* written by hand. Traefik overwrites
+// X-Forwarded-Host with the host being requested, so the hand-written version
+// was asking about id.cardinal.test while appearing to ask about the protected
+// app — invisible for as long as forwardAuth treated every hostname the same,
+// and wrong from the moment it stopped.
 func appAccess(t *testing.T, c *http.Client) int {
 	t.Helper()
 
 	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet,
-		origin(hostCardinal)+"/api/auth/verify", nil)
+		origin(hostProtected)+"/whoami.json", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	req.Header.Set("X-Forwarded-Host", hostProtected)
-	req.Header.Set("X-Forwarded-Uri", "/")
-	req.Header.Set("X-Forwarded-Method", http.MethodGet)
+	req.Header.Set("Accept", "application/json")
 
 	resp, err := c.Do(req)
 	if err != nil {
@@ -332,6 +338,13 @@ permit (
 );
 `
 
+// permissivePolicy grants web access to everything, unconditionally.
+//
+// Deliberately broader than the shipped rule, which permits an application only
+// if it is in staff-apps. What these tests toggle is whether *a* permit exists,
+// so the fixture should not also depend on the group membership of the seeded
+// application: a failure would then have two possible causes and the assertion
+// message would name the wrong one.
 func permissivePolicy() string {
 	return adminRules + `
 @id("staff-web-access")
@@ -339,10 +352,7 @@ permit (
     principal,
     action == Cardinal::Action::"AccessURL",
     resource
-)
-when {
-    context has audience && context.audience == "staff"
-};
+);
 `
 }
 

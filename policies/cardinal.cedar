@@ -15,20 +15,31 @@
 // Web access
 // ─────────────────────────────────────────────────────────────────────────────
 
-// Anyone authenticated may reach applications marked public-to-staff.
+// Anyone authenticated may reach an application in staff-apps.
 //
-// The forbid rules below still apply — in Cedar, a forbid always beats a
-// permit, which is what makes the freshness rules below trustworthy rather
-// than merely conventional.
+// The resource is the application the forwarded hostname belongs to, and
+// "which applications" is group membership — the same mechanism host access
+// uses below, so an application is admitted the same way a machine is, with the
+// same bounded, revocable, visible grant.
+//
+// This replaced a rule matching `context.audience == "staff"`, where the
+// audience was computed by a function that ignored its argument and returned
+// "staff" for every hostname. It read as a rule that classified applications
+// and was a constant, so it permitted every authenticated principal to reach
+// every protected URL. The group is created by migration 0027 and is empty:
+//
+//     cardinal app hostname add grafana grafana.example.com
+//     cardinal grant staff-apps grafana
+//
+// A hostname no application claims is refused before this rule is consulted —
+// forwardAuth decides about applications the directory knows, the same way SSH
+// certificates are only issued for enrolled machines.
 @id("staff-web-access")
 permit (
     principal,
     action == Cardinal::Action::"AccessURL",
-    resource
-)
-when {
-    context has audience && context.audience == "staff"
-};
+    resource in Cardinal::Group::"00000000-0000-7000-8000-0000000e5be0"
+);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Application access
@@ -179,17 +190,27 @@ unless {
 // visible beside every other grant rather than in a separate list, and a host
 // joins `env-prod` the same way a person joins a team.
 //
-// Both rules below are examples to edit, not defaults to inherit. They are
-// written narrow — a specific group, a specific account — because a permissive
-// starting point is one nobody revisits.
+// Both rules below are narrow on purpose — a specific group, a specific
+// account — because a permissive starting point is one nobody revisits.
+//
+// The groups they name are created by migration 0027 and are empty, so these
+// rules grant nothing until somebody is granted membership:
+//
+//     cardinal grant sre alice -for 720h
+//     cardinal grant env-prod web-01.prod
+//
+// They used to name identifiers no migration created. Every one of these rules
+// was therefore inert, and because Cedar is default-deny that was invisible:
+// host access was refused to everyone and looked like policy working. That is
+// the failure the paragraph below warns about, committed by the file containing
+// it. `cardinal policy test` now reports a rule naming a group that is not
+// there, which is what should have caught it.
 
 // Groups are named by their UUID here, as everywhere else in this file. A rule
 // matching on a name would silently change meaning the day someone renames the
 // group, which is the class of bug ADR 0002 exists to remove — and it fails
 // *open* in the worst direction, because a rule referring to a group that does
 // not exist simply never matches and looks like a working deny.
-//
-// Replace both identifiers below with real ones from `cardinal show group <name>`.
 @id("sre-may-log-into-production")
 permit (
     principal in Cardinal::Group::"00000000-0000-7000-8000-0000000e5be1",

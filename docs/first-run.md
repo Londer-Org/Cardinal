@@ -309,6 +309,22 @@ make e2e-up                    # PostgreSQL, Cardinal, Traefik, a protected app
 Open <https://app.cardinal.test:8443>. You are sent to Cardinal, and after signing in
 you land on a page showing the identity headers that arrived.
 
+`make e2e-up` did three things behind that, and they are the three any protected
+application needs:
+
+```sh
+cardinal application create protected-app       # an entity to write policy about
+cardinal app hostname add protected-app app.cardinal.test
+cardinal grant staff-apps protected-app         # what the shipped rule permits
+```
+
+Skip the last one and the page is refused — correctly, and this is the part
+worth pausing on. The shipped `staff-web-access` rule permits an application
+*in staff-apps*, and that group starts empty. Registering an application makes
+it findable; putting it in a group the policy names is the deliberate act that
+makes it reachable. Skip the middle one and the refusal comes earlier still,
+naming the hostname nothing claims.
+
 Then look at **Access** in the admin UI. Every request you just made is there,
 with the policy that admitted it. To see a denial explained, add a rule:
 

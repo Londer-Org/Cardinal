@@ -57,21 +57,35 @@ session cookie ──▶ forwardAuth      ──▶ 204 + identity headers
                └─▶ /oidc/authorize  ──▶ code, no interactive step
 ```
 
-### One wrinkle if you use both
-
-The two decision points name the application differently:
+### Both doors name the same application
 
 | Door | Cedar resource |
 |---|---|
-| `forwardAuth` | `Application::"<Host header>"` — e.g. `Application::"aura.example.com"` |
+| `forwardAuth` | `Application::"<registered name>"` — e.g. `Application::"aura"` |
 | OIDC (`AccessApplication`) | `Application::"<registered name>"` — e.g. `Application::"aura"` |
 
-So a policy granting access to `Application::"aura"` does **not** grant access
-to its URL, and vice versa. An application using both needs a rule for each,
-under each name. That is a rough edge rather than a design: nothing today links
-a registered application to the hostnames it answers on, so `forwardAuth` has
-only the `Host` header to key on. Worth knowing before writing policy, and
-recorded as a gap in the [roadmap](https://github.com/Londer-Org/Cardinal/blob/main/ROADMAP.md).
+`forwardAuth` is handed a hostname, so it has to be told which application that
+hostname belongs to:
+
+```sh
+cardinal application create aura -display 'Aura'
+cardinal app hostname add aura aura.example.com
+```
+
+A hostname no application claims is refused before policy is consulted, the same
+way an SSH certificate is refused for a machine nobody enrolled — the decision
+points here answer about things the directory knows. The refusal says so, and
+names the command that fixes it.
+
+One hostname belongs to at most one application. Two claiming the same address
+would mean the request was authorized against whichever row happened to win.
+
+> **Before v0.2.0** this section described a rough edge: `forwardAuth` used the
+> `Host` header as the resource name, so a rule about `Application::"aura"` did
+> not govern its URL. Worse, the shipped rule matched on a `context.audience`
+> that was a constant, so any authenticated user reached any protected URL. Both
+> are gone. If you wrote rules against a hostname, they now need the
+> application's name.
 
 ## Style 1 — the proxy asks, the app trusts headers
 
@@ -114,6 +128,14 @@ here by design ([ADR 0002](adr/0002-identity-is-an-immutable-uuid.md)), so an
 application branching on the string `"aura-admins"` has coupled itself to
 something Cardinal intends to be renameable — and the day it is renamed, people
 lose access with no error anywhere. The names are for showing a human.
+
+**Check your proxy forwards them.** Traefik copies only the response headers
+listed in `authResponseHeaders`, and drops the rest silently. Cardinal set
+`X-Auth-Request-Group-Ids` on every response for two releases while the example
+configuration omitted it from that list, so the header an application is told to
+branch on never arrived — and nothing anywhere reported a difference. If a
+header in the table above is missing at the application, that list is the first
+place to look.
 
 ### The trust boundary, stated plainly
 

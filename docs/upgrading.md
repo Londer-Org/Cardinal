@@ -69,6 +69,32 @@ of it, but it can read the row.
 Rolling back past a breaking migration is a restore from backup. That is the
 honest cost, it is stated up front, and it should be rare enough to be an event.
 
+### One change the expand-only rule does not cover: 0.2.0 and forwardAuth
+
+Not a schema change — a behaviour change, so it does not declare itself and no
+startup check finds it.
+
+Before 0.2.0, forwardAuth classified every hostname as the same audience and the
+shipped rule permitted that audience, so any authenticated principal reached any
+protected URL. It now resolves the hostname to an application entity and asks
+about *that*, and a hostname no application claims is refused.
+
+Two things to do before rolling to 0.2.0, in this order:
+
+```sh
+cardinal application create <name>                    # if it has no OIDC client
+cardinal app hostname add <name> <hostname>           # for every protected host
+cardinal grant staff-apps <name>                      # what staff-web-access permits
+```
+
+And any rule you wrote naming an application by hostname —
+`resource == Cardinal::Application::"aura.example.com"` — now needs the
+application's directory name. `cardinal policy test <file> -dsn <url>` reports
+every reference that will not resolve.
+
+Rolling back is still deploying the previous image: the hostnames and the group
+membership are additions, and the older build ignores them.
+
 ## What the server checks at startup
 
 Both checks live in the binary rather than in a deployment manifest, so they
