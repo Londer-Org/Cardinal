@@ -276,8 +276,7 @@ navy is `currentColor`, so it stays legible on a dark background.
 
 ## License
 
-Copyright 2026 Arthur Lonfils. Licensed under Apache-2.0 — see
-[LICENSE](LICENSE).
+Copyright 2026 Londer. Licensed under Apache-2.0 — see [LICENSE](LICENSE).
 
 Apache-2.0 rather than MIT for the **patent grant**. For a security product that
 is the difference that matters: contributors grant a patent licence covering
@@ -285,6 +284,5 @@ their contributions, and it terminates for anyone who brings a patent claim
 against the project. MIT says nothing on the subject, which is a poor silence to
 inherit in infrastructure people are asked to trust.
 
-Cardinal is a personal project. It is owned by its author, developed on personal
-time as well as work time, and no employer has a claim on it or a say in its
-direction.
+Cardinal is an independent project. The copyright is held by Londer; no client
+and no employer has a claim on it or a say in its direction.
