@@ -17,7 +17,7 @@
 package version
 
 // Number is the release this was built from.
-const Number = "0.1.0"
+const Number = "0.2.0"
 
 // Commit and Date are stamped at link time by goreleaser. Empty in a local
 // build, which is the honest answer rather than a guess.
