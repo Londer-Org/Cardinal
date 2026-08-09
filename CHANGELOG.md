@@ -12,6 +12,31 @@ the API can change in any release. Migrations are expand-only, so the previous
 build keeps working against a newer schema and rolling back is redeploying the
 old image.
 
+## 0.3.1 — 2026-08-09
+
+Documentation and metadata only. No code, no schema change, and no behaviour
+difference from 0.3.0 — so there is nothing to do on upgrade beyond taking the
+newer image if you want the corrected licence text in it.
+
+It exists because the things it corrects are read from the released artefact
+rather than from the repository's main branch, and 0.3.0 shipped with the
+copyright naming an individual and no changelog at all.
+
+### Changed
+
+- The copyright is held by **Londer** rather than by an individual. Apache-2.0
+  grants rights on behalf of whoever owns the work, so naming a person where
+  the owner is a company makes the grant ambiguous to a careful reader.
+- The README states plainly that Cardinal is **not a Londer product**: not
+  sold, not offered as a service, not covered by any support agreement, and
+  provided without warranty. It also says that development may stop at any
+  point, because "published by a company and looks active" is the inference
+  people otherwise make.
+- This changelog exists, covering 0.1.0 onward.
+- `.goreleaser.yaml` no longer filters commit subjects by Conventional Commits
+  prefixes, which this repository's convention forbids — so the filters
+  excluded nothing while making the generated notes look filtered.
+
 ## 0.3.0 — 2026-08-09
 
 An audit release. Nothing new was built for users; four security bugs were
