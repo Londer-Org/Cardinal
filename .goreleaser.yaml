@@ -192,5 +192,11 @@ checksum:
 changelog:
   use: github
   sort: asc
-  filters:
-    exclude: ['^docs:', '^test:', '^chore:']
+  # No exclude filters. They used to drop '^docs:', '^test:' and '^chore:',
+  # which are Conventional Commits prefixes — and CLAUDE.md forbids that style
+  # here, so no subject has ever matched one. Configuration that filters
+  # nothing still reads as a filtered list, which is worse than no filter.
+  #
+  # What these notes give you is the subjects since the last tag. What an
+  # operator needs — which entries are security fixes and what to do about them
+  # — is CHANGELOG.md, written by hand for exactly that reason.
