@@ -87,9 +87,6 @@ func (a *AuthRequest) PromptedFor(value string) bool {
 	return false
 }
 
-// Authenticated reports whether a user has completed sign-in for this request.
-func (a *AuthRequest) Authenticated() bool { return a.SubjectID != nil && a.Done }
-
 // CreateAuthRequest stores a new authorization request.
 //
 // Persisted rather than held in memory so any node can complete a flow another
@@ -305,19 +302,28 @@ func (s *Store) RevokeToken(ctx context.Context, id uuid.UUID) error {
 	return nil
 }
 
-// RevokeTokensForSession invalidates every token issued from a browser session.
+// revokeTokensForSessions invalidates every token issued from these sessions.
 //
-// Called on sign-out. Without it, signing out of Cardinal leaves live access
-// tokens behind for up to their lifetime, so "sign out" would not mean what
-// anyone assumes it means.
-func (s *Store) RevokeTokensForSession(ctx context.Context, sessionID uuid.UUID) (int64, error) {
-	tag, err := s.pool.Exec(ctx,
-		`UPDATE oidc_tokens SET revoked_at = now()
-		  WHERE session_id = $1 AND revoked_at IS NULL`, sessionID)
-	if err != nil {
-		return 0, fmt.Errorf("store: revoking session tokens: %w", err)
+// Takes the transaction rather than the pool, and is unexported, because both
+// facts are the fix for the bug it was written for. It existed as a public
+// method for months, documented as "called on sign-out", and nothing called it:
+// signing out closed the session and left the access tokens minted from it live
+// for their full lifetime. Ending a session and killing its tokens are one
+// change to one security boundary, so they commit together or not at all —
+// the same argument ADR 0003 makes for the journal.
+//
+// Being unexported means the only way to reach it is through a function that
+// also closes a session, so the two cannot drift apart again.
+func revokeTokensForSessions(ctx context.Context, tx pgx.Tx, sessionIDs []uuid.UUID) error {
+	if len(sessionIDs) == 0 {
+		return nil
 	}
-	return tag.RowsAffected(), nil
+	if _, err := tx.Exec(ctx,
+		`UPDATE oidc_tokens SET revoked_at = now()
+		  WHERE session_id = ANY($1) AND revoked_at IS NULL`, sessionIDs); err != nil {
+		return fmt.Errorf("store: revoking session tokens: %w", err)
+	}
+	return nil
 }
 
 // PurgeExpiredOIDCFlows clears abandoned requests and dead tokens.

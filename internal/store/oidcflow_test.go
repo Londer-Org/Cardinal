@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.londer.be/cardinal/internal/directory"
@@ -214,11 +215,92 @@ func TestSignOutRevokesIssuedTokens(t *testing.T) {
 	_, err := s.TokenByRefresh(ctx, "a-refresh-token")
 	require.NoError(t, err)
 
-	revoked, err := s.RevokeTokensForSession(ctx, sid)
-	require.NoError(t, err)
-	assert.EqualValues(t, 1, revoked)
+	// Through RevokeSession, which is what the sign-out handler calls, rather
+	// than through the revocation helper directly.
+	//
+	// This test previously called that helper, passed, and proved nothing: the
+	// helper worked and no caller existed, so signing out closed the session
+	// and left this token live. A test that reaches past the path the product
+	// takes is a test of an implementation detail wearing the name of a
+	// guarantee.
+	require.NoError(t, s.RevokeSession(ctx, sid, &user.ID))
 
 	_, err = s.TokenByRefresh(ctx, "a-refresh-token")
 	require.ErrorIs(t, err, store.ErrTokenNotFound,
 		"tokens issued from a session must die with it")
+}
+
+// TestEverySessionRevocationPathKillsTokens covers the other three doors.
+//
+// Four functions close a session and each one is a way to reach the same
+// security boundary; the sign-out bug was one of them being wired up and the
+// rest not being considered. Enumerating them here means a fifth door added
+// later is a failing test rather than a quiet gap.
+func TestEverySessionRevocationPathKillsTokens(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name   string
+		revoke func(t *testing.T, s *store.Store, subject, session uuid.UUID)
+	}{
+		{"RevokeSession", func(t *testing.T, s *store.Store, subject, session uuid.UUID) {
+			require.NoError(t, s.RevokeSession(t.Context(), session, &subject))
+		}},
+		{"RevokeSessionFor", func(t *testing.T, s *store.Store, subject, session uuid.UUID) {
+			require.NoError(t, s.RevokeSessionFor(t.Context(), session, subject, &subject))
+		}},
+		{"RevokeAllSessions", func(t *testing.T, s *store.Store, subject, _ uuid.UUID) {
+			_, err := s.RevokeAllSessions(t.Context(), subject, &subject)
+			require.NoError(t, err)
+		}},
+		{"RevokeOtherSessions", func(t *testing.T, s *store.Store, subject, session uuid.UUID) {
+			// Keeping a session that is not the one under test, so the session
+			// holding the token is among those revoked.
+			_, err := s.RevokeOtherSessions(t.Context(), subject, uuid.New(), &subject)
+			require.NoError(t, err)
+			_ = session
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s := newStore(t)
+			ctx := t.Context()
+
+			user := mustCreate(t, s, directory.TypeUser, "alice")
+			sid := insertSession(t, s, user.ID)
+
+			refresh := "refresh-" + tc.name
+			require.NoError(t, s.CreateToken(ctx, &store.Token{
+				ClientID:  "test-client",
+				SubjectID: user.ID,
+				SessionID: &sid,
+				Scopes:    []string{"openid"},
+				AuthTime:  time.Now(),
+				ExpiresAt: time.Now().Add(time.Hour),
+			}, refresh))
+
+			_, err := s.TokenByRefresh(ctx, refresh)
+			require.NoError(t, err, "the token must be live before revocation, or this proves nothing")
+
+			tc.revoke(t, s, user.ID, sid)
+
+			_, err = s.TokenByRefresh(ctx, refresh)
+			require.ErrorIs(t, err, store.ErrTokenNotFound,
+				"%s closed the session and left its access token usable", tc.name)
+		})
+	}
+}
+
+// insertSession creates a live session directly, since the paths under test
+// need one to exist and none of them create it.
+func insertSession(t *testing.T, s *store.Store, subjectID uuid.UUID) uuid.UUID {
+	t.Helper()
+
+	var id uuid.UUID
+	require.NoError(t, s.Pool().QueryRow(t.Context(), `
+		INSERT INTO sessions (subject_id, token_hash, valid_period, auth_method,
+		                      absolute_expiry)
+		VALUES ($1, $2, tstzrange(now(), now() + interval '1 hour'), 'passkey',
+		        now() + interval '7 days')
+		RETURNING id`, subjectID, []byte("hash-"+uuid.NewString())).Scan(&id))
+	return id
 }

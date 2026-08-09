@@ -376,6 +376,10 @@ func (s *Store) RevokeSession(ctx context.Context, id uuid.UUID, actorID *uuid.U
 			return fmt.Errorf("store: revoking session: %w", err)
 		}
 
+		if revokeErr := revokeTokensForSessions(ctx, tx, []uuid.UUID{id}); revokeErr != nil {
+			return revokeErr
+		}
+
 		ev, err := event.New(event.ActionSessionRevoked, &subjectID, actorID,
 			map[string]any{"session_id": id})
 		if err != nil {
@@ -390,16 +394,20 @@ func (s *Store) RevokeSession(ctx context.Context, id uuid.UUID, actorID *uuid.U
 func (s *Store) RevokeAllSessions(ctx context.Context, subjectID uuid.UUID, actorID *uuid.UUID) (int64, error) {
 	var count int64
 	err := s.InTx(ctx, func(tx pgx.Tx) error {
-		tag, err := tx.Exec(ctx, `
+		ids, err := revokeSessionRows(ctx, tx, `
 			UPDATE sessions
 			   SET valid_period = tstzrange(lower(valid_period), now())
-			 WHERE subject_id = $1 AND upper(valid_period) > now()`, subjectID)
+			 WHERE subject_id = $1 AND upper(valid_period) > now()
+			 RETURNING id`, subjectID)
 		if err != nil {
-			return fmt.Errorf("store: revoking sessions: %w", err)
+			return err
 		}
-		count = tag.RowsAffected()
+		count = int64(len(ids))
 		if count == 0 {
 			return nil
+		}
+		if revokeErr := revokeTokensForSessions(ctx, tx, ids); revokeErr != nil {
+			return revokeErr
 		}
 
 		ev, err := event.New(event.ActionSessionRevoked, &subjectID, actorID, nil)
@@ -539,6 +547,10 @@ func (s *Store) RevokeSessionFor(ctx context.Context, id, subjectID uuid.UUID, a
 			return ErrNoSuchSession
 		}
 
+		if revokeErr := revokeTokensForSessions(ctx, tx, []uuid.UUID{id}); revokeErr != nil {
+			return revokeErr
+		}
+
 		ev, err := event.New(event.ActionSessionRevoked, &subjectID, actorID,
 			map[string]any{"session_id": id})
 		if err != nil {
@@ -558,15 +570,18 @@ func (s *Store) RevokeSessionFor(ctx context.Context, id, subjectID uuid.UUID, a
 func (s *Store) RevokeOtherSessions(ctx context.Context, subjectID, keep uuid.UUID, actorID *uuid.UUID) (int64, error) {
 	var count int64
 	err := s.InTx(ctx, func(tx pgx.Tx) error {
-		tag, err := tx.Exec(ctx, `
+		ids, err := revokeSessionRows(ctx, tx, `
 			UPDATE sessions
 			   SET valid_period = tstzrange(lower(valid_period), now())
-			 WHERE subject_id = $1 AND id <> $2 AND upper(valid_period) > now()`,
-			subjectID, keep)
+			 WHERE subject_id = $1 AND id <> $2 AND upper(valid_period) > now()
+			 RETURNING id`, subjectID, keep)
 		if err != nil {
-			return fmt.Errorf("store: revoking sessions: %w", err)
+			return err
 		}
-		count = tag.RowsAffected()
+		count = int64(len(ids))
+		if revokeErr := revokeTokensForSessions(ctx, tx, ids); revokeErr != nil {
+			return revokeErr
+		}
 		if count == 0 {
 			return nil
 		}
@@ -578,6 +593,34 @@ func (s *Store) RevokeOtherSessions(ctx context.Context, subjectID, keep uuid.UU
 		return s.AppendEvent(ctx, tx, ev)
 	})
 	return count, err
+}
+
+// revokeSessionRows runs a session-closing UPDATE and collects the ids it
+// closed, so the caller can revoke the tokens those sessions issued.
+//
+// The statements it runs previously used Exec and reported only a count. The
+// ids are needed now because closing a session without killing its tokens
+// leaves the tokens usable, and there is no way to find them after the fact
+// from a count.
+func revokeSessionRows(ctx context.Context, tx pgx.Tx, sql string, args ...any) ([]uuid.UUID, error) {
+	rows, err := tx.Query(ctx, sql, args...)
+	if err != nil {
+		return nil, fmt.Errorf("store: revoking sessions: %w", err)
+	}
+	defer rows.Close()
+
+	var ids []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("store: revoking sessions: %w", err)
+		}
+		ids = append(ids, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("store: revoking sessions: %w", err)
+	}
+	return ids, nil
 }
 
 // lookupSessionByIDTx reads a session by its id, inside a transaction.
