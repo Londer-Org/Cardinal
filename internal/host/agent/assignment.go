@@ -40,6 +40,23 @@ type Assignment struct {
 	// for a login that policy allowed and the machine then refused.
 	Unnumbered []string `json:"unnumbered"`
 
+	// TrustedUserCAKeys are the authorities whose user certificates this host
+	// should accept, in authorized_keys format.
+	//
+	// Empty and absent are indistinguishable here — an older server omits the
+	// field, a server with no authority configured sends none, and both decode
+	// to nil. So the agent writes the trust file only when at least one key
+	// arrives, and otherwise leaves whatever is on disk alone.
+	//
+	// That asymmetry is deliberate rather than a limitation worked around. A
+	// fleet upgraded agent-first would have every host managed by a server that
+	// cannot send this yet, and an agent that deleted the file on an empty
+	// answer would remove trust an operator installed by hand — which is the
+	// agent changing how the machine authenticates people, the one thing it may
+	// not do. Withdrawing a compromised authority is a rotation, and a rotation
+	// sends a non-empty list.
+	TrustedUserCAKeys []string `json:"trustedUserCaKeys"`
+
 	// FetchedAt is stamped locally, not by the server. What matters when
 	// deciding whether to trust a cache is how long *this machine* has been
 	// out of contact, and a server timestamp answers a different question and

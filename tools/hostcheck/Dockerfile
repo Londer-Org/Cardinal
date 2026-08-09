@@ -5,11 +5,18 @@
 #   1. Does nss-systemd accept the varlink provider's records?
 #   2. Does *sudo* grant access to a user who exists only in that provider?
 #   3. Does a real ssh client accept the host certificate without prompting?
+#   4. Does a real sshd admit a user certificate through the trust file the
+#      agent itself wrote?
 #
 # The second is the integration between the two halves — a sudoers rule naming
 # `alice` is inert if sudo cannot resolve alice. The third is the claim the whole
 # host-certificate feature rests on, and one that cannot be made by any Go test:
 # whether trust-on-first-use is actually gone.
+#
+# The fourth is what `cardinal ssh` rests on, and it is here rather than in a Go
+# test for a measured reason: `sshd -t` accepts a TrustedUserCAKeys file
+# containing `not a key at all`, so validating the config proves nothing about
+# whether the file works. Only a login does.
 FROM golang:1.25-trixie AS build
 WORKDIR /src
 COPY go.mod go.sum ./

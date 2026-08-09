@@ -51,6 +51,12 @@ type Agent struct {
 	SSHDDropInPath   string
 	HostCertValidity time.Duration
 
+	// UserCAPath is where the authorities this host trusts are written. Empty
+	// leaves the file alone, which is what a test not about SSH wants — and what
+	// an operator managing trust by hand wants, since the agent may add a fact
+	// about this machine and may not change how it authenticates people.
+	UserCAPath string
+
 	Log *slog.Logger
 
 	// snapshot is swapped wholesale on each successful refresh, so a lookup
@@ -157,6 +163,22 @@ func (a *Agent) Refresh(ctx context.Context) (*Assignment, error) {
 			"error", err)
 	}
 
+	// The authorities this host accepts user certificates from, before the
+	// drop-in that names the file — `sshd -t` refuses a TrustedUserCAKeys path
+	// it cannot read, so the order is what keeps a first refresh valid.
+	//
+	// Independent of the refresh succeeding, like everything below it. Failing
+	// to update trust leaves the previous authorities in place, which is a host
+	// that keeps working; discarding a good assignment over it would not.
+	changed, caErr := a.writeUserCAKeys(fetched.TrustedUserCAKeys)
+	if caErr != nil {
+		a.log().Error("the trusted authorities were not updated; the previous ones are still in place",
+			"error", caErr)
+	} else if changed {
+		a.log().Info("trusted certificate authorities updated",
+			"count", len(fetched.TrustedUserCAKeys), "path", a.UserCAPath)
+	}
+
 	// Likewise independent of the refresh succeeding. A certificate that could
 	// not be renewed is a machine whose name will eventually stop being provable
 	// — days away, and no reason to discard identity records that are correct
@@ -164,6 +186,15 @@ func (a *Agent) Refresh(ctx context.Context) (*Assignment, error) {
 	if _, err := a.RefreshHostCertificate(ctx); err != nil {
 		a.log().Error("the host certificate was not renewed; the previous one is still installed",
 			"error", err)
+	}
+
+	// After both, because the drop-in names whichever of them landed. Called
+	// here as well as from the certificate path, because trust rotates on its
+	// own schedule and a drop-in only rewritten on renewal would name a file
+	// that appeared days earlier.
+	if dropInErr := a.writeSSHDDropIn(ctx); dropInErr != nil {
+		a.log().Error("the sshd drop-in was not updated; the previous one is still in place",
+			"error", dropInErr)
 	}
 
 	return fetched, nil

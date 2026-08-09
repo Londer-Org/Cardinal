@@ -108,7 +108,11 @@ func runSSHCAInit(ctx context.Context, args []string) error {
 		fmt.Println()
 	}
 
-	fmt.Println("  On each host, in /etc/ssh/sshd_config:")
+	fmt.Println("  Hosts running cardinal-agent pick this up on their own: the trusted")
+	fmt.Println("  authorities ride the assignment they already poll, so a rotation")
+	fmt.Println("  reaches the fleet within one interval and needs no fleet-wide step.")
+	fmt.Println()
+	fmt.Println("  For a host without the agent, in /etc/ssh/sshd_config:")
 	fmt.Println("    TrustedUserCAKeys /etc/ssh/cardinal_ca.pub")
 	fmt.Println()
 	fmt.Println("  `cardinal ssh ca trust` prints the file's full contents, including")
@@ -226,7 +230,14 @@ func runSSHCARotate(ctx context.Context, args []string) error {
 	fmt.Printf("  The previous key stops signing now and stays trusted for %s,\n", *grace)
 	fmt.Println("  so certificates issued moments ago keep working.")
 	fmt.Println()
-	fmt.Println("  Run `cardinal ssh ca trust` and redistribute before that expires,")
-	fmt.Println("  or hosts will reject the retired key while it is still in their file.")
+	fmt.Println("  Hosts running cardinal-agent converge on their own — the trusted")
+	fmt.Println("  authorities ride the assignment they already poll. Until a host has")
+	fmt.Println("  fetched, it rejects certificates signed by the new key, so the window")
+	fmt.Println("  to watch is one refresh interval rather than however long a fleet-wide")
+	fmt.Println("  copy takes.")
+	fmt.Println()
+	fmt.Println("  For hosts without the agent, `cardinal ssh ca trust` prints what has")
+	fmt.Println("  to reach them, and it has to reach them now rather than before the")
+	fmt.Println("  grace period ends: the new key is already signing.")
 	return nil
 }

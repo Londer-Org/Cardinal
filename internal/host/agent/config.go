@@ -49,6 +49,10 @@ type Config struct {
 	HostKeyPath    string `toml:"host_key_path"`
 	HostCertPath   string `toml:"host_cert_path"`
 	SSHDConfigPath string `toml:"sshd_config_path"`
+
+	// UserCAPath is where the authorities whose user certificates this host
+	// accepts are written. Empty leaves whatever is there alone.
+	UserCAPath string `toml:"user_ca_path"`
 }
 
 // Duration is a TOML-friendly time.Duration.
@@ -84,6 +88,7 @@ func LoadConfig(path string) (*Config, error) {
 		HostKeyPath:    DefaultHostKeyPath,
 		HostCertPath:   DefaultHostCertPath,
 		SSHDConfigPath: DefaultSSHDDropIn,
+		UserCAPath:     DefaultUserCAPath,
 	}
 
 	if _, err := toml.DecodeFile(path, &c); err != nil {

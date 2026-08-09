@@ -29,9 +29,11 @@ openssl rand -base64 32          # put this in ssh.ca_encryption_key
 # 2. Generate the authority. Created INACTIVE on purpose.
 cardinal ssh ca init
 
-# 3. Distribute the public key to every host, then:
+# 3. Wait for hosts to trust it. Anything running cardinal-agent does this on
+#    its own: the trusted authorities ride the assignment it already polls, so
+#    a host has them within one refresh interval.
+cardinal ssh ca trust                     # what a host without the agent needs
 #      /etc/ssh/sshd_config →  TrustedUserCAKeys /etc/ssh/cardinal_ca.pub
-cardinal ssh ca trust > cardinal_ca.pub
 
 # 4. Only once every host trusts it, start signing.
 cardinal ssh ca rotate <key-id>
@@ -51,16 +53,30 @@ must itself be trusted by every host.
 
 ```sh
 cardinal ssh ca init                        # publish the replacement
-cardinal ssh ca trust > cardinal_ca.pub     # now contains both
-#   … distribute to every host …
+#   … hosts running the agent pick both up within one refresh interval …
 cardinal ssh ca rotate <new-key-id>         # switch signing
 ```
 
 The previous key stops signing immediately and stays **trusted** for a grace
 period (48 hours by default), so certificates issued seconds before the switch
-keep working. Redistribute `cardinal ssh ca trust` before the grace period ends,
-or hosts will keep trusting a key Cardinal has withdrawn — harmless, but it
-means the file no longer says what you think it says.
+keep working.
+
+**Agents converge on their own.** `cardinal-agent` writes
+`/etc/ssh/cardinal_user_ca.pub` and the `TrustedUserCAKeys` drop-in that names
+it, from the same assignment it already fetches — so a rotation reaches the
+fleet on the ordinary interval and needs no fleet-wide copy. Until 0.3.0 this
+was a manual step, which made rotation a fleet-wide operation nobody performs:
+in practice the first key was the only key, and the machinery above had nothing
+to converge on.
+
+The window that remains is the interval itself. `rotate` starts signing at once,
+so a host that has not yet fetched rejects the new certificates until it does.
+
+One thing the agent will not do is *remove* trust. An empty list and an older
+server that sends no list at all are indistinguishable on the wire, so an agent
+that deleted the file on an empty answer would remove trust an operator
+installed by hand. Withdrawing an authority is a rotation, and a rotation sends
+a non-empty list.
 
 `cardinal ssh ca list` shows which key is in which state.
 

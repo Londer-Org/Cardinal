@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/cedar-policy/cedar-go/types"
@@ -63,6 +64,22 @@ type hostAssignment struct {
 	// here means the agent can log it and an operator can see it before anyone
 	// tries.
 	Unnumbered []string `json:"unnumbered"`
+
+	// TrustedUserCAKeys are the authorities this host should accept user
+	// certificates from, in authorized_keys format.
+	//
+	// Carried here rather than fetched separately because the agent already
+	// polls this endpoint, is already authenticated as this host, and the answer
+	// already changes at exactly the moments the rest of the assignment does.
+	// Distributing it was a manual operator step until 0.3.0, which made
+	// rotating the authority a manual fleet-wide operation — the kind nobody
+	// performs, so in practice the first key was the only key.
+	//
+	// Public keys, so nothing here is a secret. What it decides is whose
+	// certificates the machine believes, which is why it comes over the same
+	// authenticated channel as everything else rather than from a file somebody
+	// copied around.
+	TrustedUserCAKeys []string `json:"trustedUserCaKeys"`
 }
 
 // handleHostAssignment answers what this host should serve.
@@ -215,6 +232,24 @@ func (s *Server) handleHostAssignment(w http.ResponseWriter, r *http.Request) {
 
 	assignment.Unnumbered = s.permittedWithoutNumbers(
 		ctx, engine, cred, hostSubject, identities)
+
+	// Every trusted authority, signing or not. A host trusting only the signing
+	// key would reject certificates issued minutes before a rotation, which is
+	// what the retirement grace period exists to prevent.
+	//
+	// A failure here does not fail the request. The agent keeps the trust file
+	// it already has, which is the same rule the rest of the cache follows:
+	// being unable to *update* trust must never become being unable to log in.
+	trusted, trustErr := s.store.TrustedSSHCAKeys(ctx)
+	if trustErr != nil {
+		s.log.ErrorContext(ctx, "host assignment: listing trusted CA keys failed",
+			"host", cred.HostName, "error", trustErr)
+	} else {
+		for _, key := range trusted {
+			assignment.TrustedUserCAKeys = append(
+				assignment.TrustedUserCAKeys, strings.TrimSpace(key.PublicKey))
+		}
+	}
 
 	if len(assignment.Unnumbered) > 0 {
 		s.log.WarnContext(ctx, "host assignment: permitted users have no uid",

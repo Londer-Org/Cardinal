@@ -6,6 +6,12 @@
 # system expects.
 set -eu
 
+# A user authority, generated here so the agent's own writer is what installs it
+# and the certificate below is one a real client can present.
+ssh-keygen -q -t ed25519 -N '' -C cardinal-user-ca -f /tmp/user-ca >/dev/null
+CARDINAL_USER_CA="$(cat /tmp/user-ca.pub)"
+export CARDINAL_USER_CA
+
 hostcheck &
 server=$!
 trap 'kill $server 2>/dev/null || true' EXIT
@@ -229,6 +235,86 @@ case "$got" in
     *) fail "ssh accepted an unknown host, so the check above proved nothing" "$got" ;;
 esac
 echo "  correctly refused — so the acceptance above was the certificate, not luck"
+
+# ---------------------------------------------------------------------------
+# User certificates, through the trust file the agent wrote
+#
+# The claim `cardinal ssh` rests on, and one no Go test can make: that sshd
+# accepts a certificate signed by an authority the *agent* installed. The format
+# check in writeUserCAKeys passes on files `sshd -t` also accepts — measured —
+# so a login is the only thing that proves the file works.
+# ---------------------------------------------------------------------------
+
+echo "== the trust file the agent wrote"
+[ -f /etc/ssh/cardinal_user_ca.pub ] || fail "the agent wrote no trust file" "absent"
+grep -q "$(cut -d' ' -f2 /tmp/user-ca.pub)" /etc/ssh/cardinal_user_ca.pub \
+    || fail "the trust file does not contain the authority" "$(cat /etc/ssh/cardinal_user_ca.pub)"
+echo "  /etc/ssh/cardinal_user_ca.pub carries the authority"
+
+cat > /etc/ssh/sshd_config.d/50-cardinal.conf <<'CONF'
+HostCertificate /etc/ssh/ssh_host_ed25519_key-cert.pub
+TrustedUserCAKeys /etc/ssh/cardinal_user_ca.pub
+CONF
+timeout 10 sshd -t || fail "sshd rejected the drop-in naming the trust file" "sshd -t failed"
+echo "  sshd -t accepts the drop-in naming it"
+
+kill "$(cat /tmp/sshd.pid)" 2>/dev/null || true
+rm -f /tmp/sshd.pid
+/usr/sbin/sshd -o "ListenAddress=127.0.0.1:2222" -o "PidFile=/tmp/sshd.pid"
+i=0
+while [ ! -f /tmp/sshd.pid ]; do
+    i=$((i + 1))
+    [ "$i" -gt 50 ] && { echo "FAIL: sshd did not restart"; exit 1; }
+    sleep 0.1
+done
+
+# A certificate for root, because root is the account this container has. What
+# is under test is whether the signature and principal are honoured, which does
+# not depend on which account it names.
+ssh-keygen -q -t ed25519 -N '' -f /tmp/user-key >/dev/null
+ssh-keygen -q -s /tmp/user-ca -I cardinal-verify -n root -V +5m /tmp/user-key.pub
+echo "  signed a user certificate for root, valid five minutes"
+
+printf '@cert-authority cardinal-verify %s' "$(cat /tmp/cardinal-ca.pub)" > /root/.ssh/known_hosts
+chmod 600 /root/.ssh/known_hosts
+
+echo "== ssh with the certificate and no password, no authorized_keys"
+got=$(timeout 20 ssh -p 2222 -o StrictHostKeyChecking=yes -o BatchMode=yes \
+        -o UserKnownHostsFile=/root/.ssh/known_hosts \
+        -o HostKeyAlias=cardinal-verify \
+        -o IdentitiesOnly=yes -i /tmp/user-key \
+        root@127.0.0.1 'echo authenticated-by-certificate' 2>&1 || true)
+echo "$got" | sed 's/^/  /'
+case "$got" in
+    *authenticated-by-certificate*) ;;
+    *) fail "the certificate was refused, so the trust file does not work" "$got" ;;
+esac
+echo "  a certificate signed by the agent-installed authority was accepted"
+
+echo "== the same certificate with the authority removed from the trust file"
+# The control. Without it this would pass just as happily against an sshd that
+# was letting root in for some other reason entirely.
+printf '# emptied by the check\n' > /etc/ssh/cardinal_user_ca.pub
+kill "$(cat /tmp/sshd.pid)" 2>/dev/null || true
+rm -f /tmp/sshd.pid
+/usr/sbin/sshd -o "ListenAddress=127.0.0.1:2222" -o "PidFile=/tmp/sshd.pid"
+i=0
+while [ ! -f /tmp/sshd.pid ]; do
+    i=$((i + 1))
+    [ "$i" -gt 50 ] && { echo "FAIL: sshd did not restart"; exit 1; }
+    sleep 0.1
+done
+got=$(timeout 20 ssh -p 2222 -o StrictHostKeyChecking=yes -o BatchMode=yes \
+        -o UserKnownHostsFile=/root/.ssh/known_hosts \
+        -o HostKeyAlias=cardinal-verify \
+        -o IdentitiesOnly=yes -i /tmp/user-key \
+        root@127.0.0.1 'echo authenticated-by-certificate' 2>&1 || true)
+case "$got" in
+    *authenticated-by-certificate*)
+        fail "the login succeeded with no authority trusted, so the check above proved nothing" "$got" ;;
+    *) ;;
+esac
+echo "  correctly refused — so the acceptance above was the trust file, not luck"
 
 # ---------------------------------------------------------------------------
 # Shadow mode

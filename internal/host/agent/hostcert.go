@@ -203,19 +203,33 @@ func (a *Agent) verifyIssued(certificate string, hostKey []byte) error {
 	return nil
 }
 
-// writeSSHDDropIn points sshd at the certificate.
+// writeSSHDDropIn points sshd at the certificate and at the authorities.
 //
 // A drop-in, validated with `sshd -t` before it is moved into place, and
 // sshd_config itself is never touched. The rule is the one the sudoers renderer
 // follows: the agent may add a fact about this machine, and may not change how
 // the machine authenticates people.
+//
+// Both directives are conditional on the file they name existing, and the
+// reason is smaller than it looks. Measured against OpenSSH on Debian trixie:
+// `sshd -t` accepts a HostCertificate or TrustedUserCAKeys path that does not
+// exist, and sshd starts — the certificate one logs `Could not load host
+// certificate` and carries on. So this is not preventing a failure to boot.
+//
+// What it prevents is that warning, on every start, on a host that has simply
+// not been issued a certificate yet. A permanent error in the log of a machine
+// that is working is a thing somebody eventually investigates, and the answer
+// is "nothing is wrong" — which costs more than the branch does.
 func (a *Agent) writeSSHDDropIn(ctx context.Context) error {
 	if a.SSHDDropInPath == "" {
 		return nil
 	}
 
-	content := fmt.Sprintf(`# Managed by Cardinal. Edits are discarded on the next renewal.
-#
+	var b strings.Builder
+	b.WriteString("# Managed by Cardinal. Edits are discarded on the next refresh.\n")
+
+	if a.HostKeyPath != "" && fileExists(a.hostCertPath()) {
+		fmt.Fprintf(&b, `#
 # Presents the certificate Cardinal signed, so clients that trust the authority
 # verify this machine's name instead of being asked to accept a fingerprint they
 # cannot evaluate. On the client side:
@@ -224,6 +238,26 @@ func (a *Agent) writeSSHDDropIn(ctx context.Context) error {
 #
 HostCertificate %s
 `, a.hostCertPath())
+	}
+
+	if a.UserCAPath != "" && fileExists(a.UserCAPath) {
+		fmt.Fprintf(&b, `#
+# Accepts user certificates signed by these authorities, which is what makes
+# `+"`cardinal ssh`"+` work: sshd verifies the signature and the principals, and
+# consults nothing over the network to do it.
+#
+TrustedUserCAKeys %s
+`, a.UserCAPath)
+	}
+
+	content := b.String()
+
+	// Unchanged is the common case: this runs on every refresh and its content
+	// changes about as often as the authority rotates. Skipping the write keeps
+	// the file's mtime meaningful and avoids running `sshd -t` for nothing.
+	if existing, err := os.ReadFile(a.SSHDDropInPath); err == nil && string(existing) == content {
+		return nil
+	}
 
 	dir := filepath.Dir(a.SSHDDropInPath)
 	if err := os.MkdirAll(dir, 0o755); err != nil { //nolint:gosec // sshd's own directory mode
@@ -255,6 +289,16 @@ HostCertificate %s
 		return fmt.Errorf("agent: installing the sshd drop-in: %w", err)
 	}
 	return nil
+}
+
+// fileExists reports whether a path is readable, for deciding whether a
+// directive naming it may be written.
+func fileExists(path string) bool {
+	if path == "" {
+		return false
+	}
+	_, err := os.Stat(path)
+	return err == nil
 }
 
 // validateSSHDConfig runs `sshd -t` against a candidate.
