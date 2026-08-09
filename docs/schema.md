@@ -40,6 +40,7 @@ erDiagram
         timestamp_with_time_zone redacted_at
         boolean system
         uuid owner_id FK
+        text external_id
     }
     group_members {
         uuid group_id PK
@@ -81,9 +82,10 @@ Every principal, group, host and application. The groups created by migration �
 | `created_at` | `timestamp with time zone` | no | `now()` |  |
 | `updated_at` | `timestamp with time zone` | no | `now()` |  |
 | `disabled_at` | `timestamp with time zone` | yes |  |  |
-| `redacted_at` | `timestamp with time zone` | yes |  | When this entity's personal data was erased. The row survives so audit references still resolve, but name/display_name/attrs are tombstoned. |
+| `redacted_at` | `timestamp with time zone` | yes |  | When this entity's personal data was erased. The row survives so audit references still resolve, but name/display_name/attrs are tombstoned, the WebAuthn credentials are deleted and disabled_at is set — an erasure that leaves a working credential is not an erasure. See ADR 0010. |
 | `system` | `boolean` | no | `false` | Membership of this group confers authority within Cardinal itself. Granting or revoking it requires AdministerDirectory, not merely ManageUsers — otherwise a narrow tier can hand itself a broad one. |
 | `owner_id` | `uuid` | yes |  | → `entities.id` — The application a group exists for, if any. Organisational only: Cardinal treats an owned group exactly like any other. |
+| `external_id` | `text` | yes |  | The identity provider's own key for this entity, from SCIM. Null for everything Cardinal created itself. Unique where present, so two provisioned accounts cannot claim one upstream identity. |
 
 ### `group_members`
 
@@ -166,6 +168,7 @@ erDiagram
         timestamp_with_time_zone created_at
         uuid created_by FK
         timestamp_with_time_zone last_used_at
+        text_array scopes
     }
     recovery_codes {
         uuid id PK
@@ -265,6 +268,7 @@ Bearer credentials for scripts and automation. Never device-bound, so policy ref
 | `created_at` | `timestamp with time zone` | no | `now()` |  |
 | `created_by` | `uuid` | yes |  | → `entities.id` |
 | `last_used_at` | `timestamp with time zone` | yes |  |  |
+| `scopes` | `text[]` | no | `'{}'::text[]` | What this token may attempt. A ceiling, not a grant: policy still decides, and a scope can only narrow what the owner could already do. Empty means the token can authenticate and nothing else. |
 
 ### `recovery_codes`
 
@@ -795,6 +799,32 @@ erDiagram
         timestamp_with_time_zone assigned_at
         timestamp_with_time_zone first_served_at
     }
+    ssf_events {
+        uuid id PK
+        uuid stream_id FK
+        uuid subject_id FK
+        text event_type
+        text token
+        timestamp_with_time_zone created_at
+        timestamp_with_time_zone next_attempt_at
+        integer attempts
+        timestamp_with_time_zone delivered_at
+        text last_error
+    }
+    ssf_streams {
+        uuid id PK
+        uuid entity_id FK
+        text endpoint
+        text_array events
+        boolean enabled
+        timestamp_with_time_zone created_at
+        timestamp_with_time_zone updated_at
+        uuid created_by FK
+    }
+    ssf_watermark {
+        boolean id PK
+        bigint seq
+    }
     ssh_ca_keys {
         uuid id PK
         text algorithm
@@ -849,6 +879,10 @@ erDiagram
     entities ||--o{ mail_settings : updated_by
     entities ||--o{ mail_templates : updated_by
     entities ||--o{ posix_identities : entity_id
+    ssf_streams ||--o{ ssf_events : stream_id
+    entities ||--o{ ssf_events : subject_id
+    entities ||--o{ ssf_streams : created_by
+    oidc_clients ||--o{ ssf_streams : entity_id
     ssh_ca_keys ||--o{ ssh_certificates : ca_key_id
     entities ||--o{ ssh_certificates : host_id
     entities ||--o{ ssh_certificates : subject_id
@@ -1035,6 +1069,43 @@ uid and gid numbers. One allocator for both, never reused, never changed.
 | `login_shell` | `text` | yes |  |  |
 | `assigned_at` | `timestamp with time zone` | no | `now()` |  |
 | `first_served_at` | `timestamp with time zone` | yes |  | When a host was first told this number. NULL means it may still be changed; set means it is on a filesystem somewhere and is now permanent. |
+
+### `ssf_events`
+
+| Column | Type | Null | Default | Notes |
+|---|---|---|---|---|
+| `id` | `uuid` | no | `uuidv7()` |  |
+| `stream_id` | `uuid` | no |  | → `ssf_streams.id` |
+| `subject_id` | `uuid` | yes |  | → `entities.id` |
+| `event_type` | `text` | no |  |  |
+| `token` | `text` | no |  | A Security Event Token (RFC 8417), signed with the OIDC signing key so a receiver verifies it against the JWKS it already fetches. No new key distribution, and rotation is the one that already exists. |
+| `created_at` | `timestamp with time zone` | no | `now()` |  |
+| `next_attempt_at` | `timestamp with time zone` | no | `now()` |  |
+| `attempts` | `integer` | no | `0` |  |
+| `delivered_at` | `timestamp with time zone` | yes |  |  |
+| `last_error` | `text` | yes |  |  |
+
+### `ssf_streams`
+
+Receivers Cardinal pushes security events to. Configured by an administrator rather than by the receiver: stream management over the API is not implemented, and the SSF configuration document says so.
+
+| Column | Type | Null | Default | Notes |
+|---|---|---|---|---|
+| `id` | `uuid` | no | `uuidv7()` |  |
+| `entity_id` | `uuid` | no |  | → `oidc_clients.entity_id` |
+| `endpoint` | `text` | no |  |  |
+| `events` | `text[]` | no | `'{}'::text[]` |  |
+| `enabled` | `boolean` | no | `true` |  |
+| `created_at` | `timestamp with time zone` | no | `now()` |  |
+| `updated_at` | `timestamp with time zone` | no | `now()` |  |
+| `created_by` | `uuid` | yes |  | → `entities.id` |
+
+### `ssf_watermark`
+
+| Column | Type | Null | Default | Notes |
+|---|---|---|---|---|
+| `id` | `boolean` | no | `true` |  |
+| `seq` | `bigint` | no | `0` |  |
 
 ### `ssh_ca_keys`
 

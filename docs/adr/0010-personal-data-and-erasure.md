@@ -3,6 +3,13 @@
 - **Status:** Accepted
 - **Date:** 2026-08-05
 
+> **Amended 2026-08-09.** The table of where personal data lives was
+> incomplete, and the omission caused a bug rather than merely describing one:
+> `webauthn_credentials` was not listed, so erasure did not delete credentials,
+> and an erased account could still be signed into with its passkey. Erasure now
+> removes them and disables the account. The tombstone format recorded here was
+> also wrong — it uses the whole id, not a prefix. Both are corrected below.
+
 ## Context
 
 Two of Cardinal's commitments are in direct tension:
@@ -63,11 +70,38 @@ later it contains *"covering for Jan while he's on sick leave"*.
 | Name, display name, extension attributes | `entities` | Tombstoned in place |
 | Grant justification (`reason`) | `group_members` | Nulled |
 | IP address, user agent | `sessions` | Deleted outright (no append-only rule) |
+| Public key, AAGUID | `webauthn_credentials` | Deleted outright |
+| Home directory path | `posix_identities` | Rewritten to the tombstone |
 
-Redaction replaces `name` with a stable tombstone (`redacted-<short-id>`),
-clears `display_name` and `attrs`, and stamps `redacted_at`. The row survives
-so foreign keys from the journal still resolve — a dangling reference would
-break audit queries and, ironically, make the system *less* accountable.
+The last two rows were missing until 0.3.0, and their absence was not merely a
+documentation gap — it was the reason erasure did not remove them. A credential
+looks like a security artefact rather than personal data, so nothing deleted
+it. It is both: a public key is a unique, persistent identifier for a device a
+particular person physically holds, and it stays that way for the life of the
+authenticator.
+
+Leaving it behind also left the access it grants. Erasure stamped `redacted_at`
+and nothing else that mattered to authentication — it did not set `disabled_at`,
+and the WebAuthn login path admits any entity whose `disabled_at` is NULL — so
+an erased account could still be signed into with the passkey it always had.
+**Erasure therefore disables the account as well.** An erasure that leaves a
+working credential is not an erasure, for the same reason a reversible one is
+not.
+
+Redaction replaces `name` with a stable tombstone (`redacted-<id>`), clears
+`display_name` and `attrs`, and stamps `redacted_at` and `disabled_at`. The row
+survives so foreign keys from the journal still resolve — a dangling reference
+would break audit queries and, ironically, make the system *less* accountable.
+
+The tombstone carries the **whole** id, not a prefix of it. It took the first
+eight characters until a test erased two accounts and the second one failed:
+for a UUIDv7 those characters are the high bits of a millisecond timestamp and
+change roughly every seven weeks, so every entity of a type erased within the
+same window produced an identical tombstone and collided on
+`entities_name_unique_per_type`. A GDPR request failing with a constraint
+violation is not a class of bug to leave to chance. The id is already public —
+it appears in the journal, which erasure deliberately cannot reach — so using
+all of it discloses nothing.
 
 ## Alternatives considered
 
