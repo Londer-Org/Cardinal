@@ -171,6 +171,33 @@ it is the same assumption `X-Forwarded-For` rests on:
 Get those three wrong and the header model is an open door. Get them right and
 the application needs no security code at all, which is the whole point.
 
+### Access tokens, and what they are for
+
+A script gets a token rather than a passkey. It authenticates its owner and is
+never device-bound, so policy refuses it administration and SSH certificates
+([ADR 0018](adr/0018-access-tokens-are-a-weaker-credential.md)).
+
+That left everything else the owner could do without a hardware key, which for a
+credential living in a CI variable is a grant nobody would write down. So a
+token is issued for something:
+
+```sh
+cardinal token create ci -name "nightly export" -scope applications
+```
+
+| Scope | What it reaches |
+|---|---|
+| `identity` | Who the token belongs to. Almost every client needs it |
+| `applications` | Services behind the proxy. The reason most tokens exist |
+| `profile` | The owner's display name and email |
+| `decisions` | The decision log — who was refused what, by which rule |
+| `policy` | The active policy set |
+
+A scope only ever narrows. Policy still decides, and the token still cannot
+exceed its owner — this answers the question Cedar cannot ask, because Cedar
+sees a principal and not the credential that presented it. Scopes cannot be
+changed on an existing token, so narrowing one means issuing a new one.
+
 ## Style 2 — the application speaks OpenID Connect
 
 For applications that want their own session, or run somewhere the proxy does

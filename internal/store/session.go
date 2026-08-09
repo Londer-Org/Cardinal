@@ -104,6 +104,15 @@ type Session struct {
 	AuthAt      time.Time
 	DeviceBound bool
 
+	// Scopes is what an access token was issued for, and is empty for every
+	// other kind of session.
+	//
+	// On the session rather than beside it because every check that reads a
+	// session should be able to see how it was obtained. A scope list held
+	// somewhere else is one a middleware forgets to consult, and the symptom of
+	// forgetting is a token doing something it was not issued for.
+	Scopes []string
+
 	CredentialID *uuid.UUID
 
 	// AbsoluteExpiry is the hard end of this session, never extended.

@@ -52,6 +52,11 @@ type AccessToken struct {
 	// one. It is the leading characters, kept in clear on purpose.
 	Prefix string
 
+	// Scopes is what this token may attempt. A ceiling, not a grant: policy
+	// still decides, and a scope can only narrow what the owner could already
+	// do. Empty means the token authenticates and nothing else.
+	Scopes []string
+
 	ValidFrom  time.Time
 	ValidUntil time.Time
 	CreatedAt  time.Time
@@ -68,7 +73,8 @@ func (t *AccessToken) Expired() bool { return !t.ValidUntil.After(time.Now()) }
 // hand back later would make the database a place credentials can be read from,
 // which is the property the hash exists to remove.
 func (s *Store) CreateAccessToken(
-	ctx context.Context, subjectID uuid.UUID, name string, ttl time.Duration, actorID *uuid.UUID,
+	ctx context.Context, subjectID uuid.UUID, name string, ttl time.Duration,
+	scopes []string, actorID *uuid.UUID,
 ) (*AccessToken, error) {
 	name = strings.TrimSpace(name)
 	if name == "" {
@@ -103,11 +109,16 @@ func (s *Store) CreateAccessToken(
 	defer func() { _ = tx.Rollback(ctx) }() //nolint:errcheck // a rollback after a successful commit returns ErrTxClosed
 
 	err = tx.QueryRow(ctx, `
-		INSERT INTO access_tokens (subject_id, name, token_hash, prefix, valid_period, created_by)
-		VALUES ($1, $2, $3, $4, tstzrange(now(), now() + $5::interval), $6)
-		RETURNING id, lower(valid_period), upper(valid_period), created_at`,
-		subjectID, name, sum[:], prefix, ttl, actorID,
-	).Scan(&token.ID, &token.ValidFrom, &token.ValidUntil, &token.CreatedAt)
+		INSERT INTO access_tokens (subject_id, name, token_hash, prefix, valid_period, scopes, created_by)
+		VALUES ($1, $2, $3, $4, tstzrange(now(), now() + $5::interval), $6, $7)
+		RETURNING id, lower(valid_period), upper(valid_period), created_at, scopes`,
+		subjectID, name, sum[:], prefix, ttl, scopes, actorID,
+	).Scan(&token.ID, &token.ValidFrom, &token.ValidUntil, &token.CreatedAt,
+		// Returned by the database rather than copied from the argument. The
+		// first version set the column and left the struct's field empty, so
+		// `cardinal token create` printed a blank scope list for a token that
+		// had them — the one moment somebody reads what they just made.
+		&token.Scopes)
 	if err != nil {
 		return nil, fmt.Errorf("store: creating access token: %w", err)
 	}
@@ -158,22 +169,22 @@ func (s *Store) LookupAccessToken(ctx context.Context, presented string) (*Acces
 		 WHERE token_hash = $1
 		   AND valid_period @> now()
 		   AND (last_used_at IS NULL OR last_used_at < now() - interval '1 minute')
-		RETURNING id, subject_id, name, prefix,
+		RETURNING id, subject_id, name, prefix, scopes,
 		          lower(valid_period), upper(valid_period), created_at, last_used_at`,
 		sum[:],
-	).Scan(&t.ID, &t.SubjectID, &t.Name, &t.Prefix,
+	).Scan(&t.ID, &t.SubjectID, &t.Name, &t.Prefix, &t.Scopes,
 		&t.ValidFrom, &t.ValidUntil, &t.CreatedAt, &t.LastUsedAt)
 
 	if errors.Is(err, pgx.ErrNoRows) {
 		// Either invalid, or valid but used within the last minute so the
 		// throttle skipped the update. Read it plainly to tell them apart.
 		err = s.pool.QueryRow(ctx, `
-			SELECT id, subject_id, name, prefix,
+			SELECT id, subject_id, name, prefix, scopes,
 			       lower(valid_period), upper(valid_period), created_at, last_used_at
 			  FROM access_tokens
 			 WHERE token_hash = $1 AND valid_period @> now()`,
 			sum[:],
-		).Scan(&t.ID, &t.SubjectID, &t.Name, &t.Prefix,
+		).Scan(&t.ID, &t.SubjectID, &t.Name, &t.Prefix, &t.Scopes,
 			&t.ValidFrom, &t.ValidUntil, &t.CreatedAt, &t.LastUsedAt)
 	}
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -188,7 +199,7 @@ func (s *Store) LookupAccessToken(ctx context.Context, presented string) (*Acces
 // ListAccessTokens returns a subject's tokens, live ones first.
 func (s *Store) ListAccessTokens(ctx context.Context, subjectID uuid.UUID) ([]AccessToken, error) {
 	rows, err := s.pool.Query(ctx, `
-		SELECT id, subject_id, name, prefix,
+		SELECT id, subject_id, name, prefix, scopes,
 		       lower(valid_period), upper(valid_period), created_at, last_used_at
 		  FROM access_tokens
 		 WHERE subject_id = $1
@@ -201,7 +212,7 @@ func (s *Store) ListAccessTokens(ctx context.Context, subjectID uuid.UUID) ([]Ac
 	var out []AccessToken
 	for rows.Next() {
 		var t AccessToken
-		if err := rows.Scan(&t.ID, &t.SubjectID, &t.Name, &t.Prefix,
+		if err := rows.Scan(&t.ID, &t.SubjectID, &t.Name, &t.Prefix, &t.Scopes,
 			&t.ValidFrom, &t.ValidUntil, &t.CreatedAt, &t.LastUsedAt); err != nil {
 			return nil, fmt.Errorf("store: scanning access token: %w", err)
 		}

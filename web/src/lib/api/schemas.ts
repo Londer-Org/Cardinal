@@ -406,6 +406,11 @@ export const accessTokenSchema = z.object({
   expiresAt: z.string(),
   lastUsedAt: z.string().nullable(),
   expired: z.boolean(),
+  /**
+   * What this token may attempt. A ceiling, not a grant: policy still decides,
+   * and a scope can only narrow what the owner could already do.
+   */
+  scopes: z.array(z.string()),
 })
 export type AccessToken = z.infer<typeof accessTokenSchema>
 

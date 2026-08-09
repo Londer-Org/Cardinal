@@ -3,6 +3,7 @@ package httpapi
 import (
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 
 	"github.com/cedar-policy/cedar-go/types"
@@ -61,6 +62,20 @@ func (s *Server) handleForwardAuth(w http.ResponseWriter, r *http.Request) {
 		// Sending the browser to the login page and remembering where it was
 		// going is ordinary flow control.
 		s.redirectToLogin(w, r, original)
+		return
+	}
+
+	// An access token reaches applications only if it was issued for that. The
+	// check is here rather than in middleware because this endpoint is not
+	// behind requireAuth — an unauthenticated request is a redirect to sign in,
+	// not a refusal — so there is no wrapper to hang it on.
+	if session.AuthMethod == store.AuthMethodAccessToken &&
+		!slices.Contains(session.Scopes, ScopeApplications) {
+		s.log.InfoContext(ctx, "forwardAuth: token has no applications scope",
+			"host", original.Host, "path", original.Path)
+		writeError(w, http.StatusForbidden,
+			"this access token was not issued with the applications scope, so it "+
+				"cannot reach sites through the proxy")
 		return
 	}
 

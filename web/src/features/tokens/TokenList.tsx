@@ -114,6 +114,15 @@ function TokenRow({ token }: { token: AccessToken }) {
         <p className="truncate font-mono text-xs text-muted-foreground">
           {token.prefix}…
         </p>
+        {/* What it may attempt. The question somebody has when deciding whether
+            the token in a pipeline is the one they meant to create. */}
+        <p className="mt-0.5 flex flex-wrap gap-1">
+          {token.scopes.map((scope) => (
+            <Badge key={scope} variant="outline" className="font-normal">
+              {scope}
+            </Badge>
+          ))}
+        </p>
         <p className="mt-0.5 text-xs text-muted-foreground">
           {token.expired ? 'Expired' : 'Expires'} {when(token.expiresAt)}
           {' · '}
@@ -163,6 +172,41 @@ function TokenRow({ token }: { token: AccessToken }) {
  * administrator able to mint one could act as them, and nothing in any log
  * would distinguish it from the person themselves.
  */
+/**
+ * The closed vocabulary, with what each one actually reaches.
+ *
+ * MIRRORS the constants in internal/server/httpapi/scope.go. Described by
+ * consequence rather than by endpoint: "reads the decision log" is a sentence
+ * somebody can decide about, and `GET /api/decisions` is not.
+ */
+const SCOPES = [
+  {
+    value: 'identity' as const,
+    title: 'Know who it is',
+    description: 'Reads your login and display name. Almost every client needs this.',
+  },
+  {
+    value: 'applications' as const,
+    title: 'Reach applications',
+    description: 'Calls services behind the proxy. The reason most tokens exist.',
+  },
+  {
+    value: 'profile' as const,
+    title: 'Edit your profile',
+    description: 'Changes your display name and email. Rarely wanted for a script.',
+  },
+  {
+    value: 'decisions' as const,
+    title: 'Read the decision log',
+    description: 'Who was refused what, and by which rule.',
+  },
+  {
+    value: 'policy' as const,
+    title: 'Read the policy set',
+    description: 'Every rule governing every door.',
+  },
+]
+
 export function TokenList() {
   const { data, isPending, error } = useTokens()
   const create = useCreateToken()
@@ -171,7 +215,7 @@ export function TokenList() {
 
   const form = useForm<CreateTokenRequest>({
     resolver: zodResolver(createTokenRequest),
-    defaultValues: { name: '', days: 90 },
+    defaultValues: { name: '', days: 90, scopes: ['identity'] },
   })
 
   const tokens = data?.tokens ?? []
@@ -275,6 +319,51 @@ export function TokenList() {
                   )}
                 />
               </div>
+
+              <FormField
+                control={form.control}
+                name="scopes"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>What it may do</FormLabel>
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      {SCOPES.map((scope) => {
+                        const on = field.value.includes(scope.value)
+                        return (
+                          <button
+                            key={scope.value}
+                            type="button"
+                            aria-pressed={on}
+                            onClick={() => {
+                              field.onChange(
+                                on
+                                  ? field.value.filter((v) => v !== scope.value)
+                                  : [...field.value, scope.value],
+                              )
+                            }}
+                            className={
+                              'rounded-md border p-3 text-left transition-colors ' +
+                              (on ? 'border-primary bg-primary/5' : 'hover:bg-muted/50')
+                            }
+                          >
+                            <span className="block text-sm font-medium">{scope.title}</span>
+                            <span className="mt-1 block text-xs text-muted-foreground">
+                              {scope.description}
+                            </span>
+                          </button>
+                        )
+                      })}
+                    </div>
+                    <FormDescription>
+                      A ceiling, not a grant: policy still decides, and a token
+                      can never do more than you can. This is what it may
+                      attempt — and cannot be changed afterwards, so a narrower
+                      token is a new one.
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
 
               <Button type="submit" size="sm" disabled={create.isPending}>
                 {create.isPending ? 'Creating…' : 'Create token'}

@@ -195,13 +195,22 @@ APPLICATIONS
   cardinal grant staff-apps <app>.
 
 ACCESS TOKENS (scripts and automation)
-  token create <login> -name <text>         Issue a bearer token, shown once
+  token create <login> -name <text> -scope <a>,<b>
+                                            Issue a bearer token, shown once
+      -scope                                  required: identity, applications,
+                                              profile, decisions, policy
       -for <duration>                         default 90d; bounded like a grant
   token list <login>                        Tokens, live ones first
   token revoke <login> <token-id>           End one, keeping its history
 
   A token authenticates its owner but is never device-bound, so existing policy
   refuses it administrative actions and SSH certificates.
+
+  A scope narrows further, and can never widen: policy still decides, and a
+  token still cannot exceed its owner. It answers what Cedar cannot ask, because
+  Cedar sees a principal and not the credential that presented it — was this
+  token issued for this? Scopes cannot be changed, so a narrower token is a new
+  one.
 
 NOTIFICATION EMAIL
   mail settings                            How this deployment sends

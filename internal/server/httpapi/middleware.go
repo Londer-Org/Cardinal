@@ -204,8 +204,12 @@ func sessionForToken(token *store.AccessToken) *store.Session {
 		AuthMethod:  store.AuthMethodAccessToken,
 		AuthAt:      token.CreatedAt,
 		DeviceBound: false,
-		ValidFrom:   token.ValidFrom,
-		ValidUntil:  token.ValidUntil,
+		// What this token was issued for. A ceiling checked by requireScope,
+		// never a grant — policy still decides, and the token still cannot
+		// exceed its owner.
+		Scopes:     token.Scopes,
+		ValidFrom:  token.ValidFrom,
+		ValidUntil: token.ValidUntil,
 	}
 }
 

@@ -274,6 +274,16 @@ export const createTokenRequest = z.object({
     .int()
     .positive('Must be at least a day.')
     .max(365, 'A token may not last more than a year.'),
+
+  // MIRRORS the handler, which refuses a token with no scope.
+  //
+  // Required rather than defaulted, deliberately. What a token used to carry —
+  // everything its owner can do without a hardware key — is a grant nobody
+  // would write down on purpose, and a default is how it would go on being
+  // carried.
+  scopes: z
+    .array(z.enum(['identity', 'applications', 'profile', 'decisions', 'policy']))
+    .min(1, 'Say what this token is for. One with no scope can authenticate and nothing else.'),
 })
 export type CreateTokenRequest = z.infer<typeof createTokenRequest>
 

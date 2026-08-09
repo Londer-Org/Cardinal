@@ -35,7 +35,12 @@ func tokenFor(t *testing.T) string {
 	// the refusals below meaningful.
 	adminClient(t)
 
-	out := cardinalCLI(t, "token", "create", tokenOwnerLogin, "-name", "e2e", "-for", "1h")
+	// Every scope, deliberately. These tests are about what *policy* refuses a
+	// token — administration, SSH certificates, credential self-service — and a
+	// narrow scope would refuse them first, for a different reason, and the
+	// assertions would pass while proving nothing.
+	out := cardinalCLI(t, "token", "create", tokenOwnerLogin, "-name", "e2e",
+		"-for", "1h", "-scope", "identity,applications,profile,decisions,policy")
 	for _, field := range strings.Fields(out) {
 		if strings.HasPrefix(field, "crd_pat_") {
 			return field
@@ -320,5 +325,85 @@ func TestIdentityHeadersCarryStableGroupIdentifiers(t *testing.T) {
 		if len(id) != 36 || strings.Count(id, "-") != 4 {
 			t.Errorf("group id %q is not a UUID", id)
 		}
+	}
+}
+
+// TestAScopeNarrowsWhatATokenMayAttempt.
+//
+// The gap this closes. A token authenticates its owner and is never
+// device-bound, so policy refuses it administration and SSH certificates
+// (ADR 0018) — but everything the owner can do *without* a hardware key was
+// still on the table: the decision log, the active policy set, the owner's own
+// profile, and every application they can reach. For a credential living in a
+// CI variable that is a grant nobody would write down on purpose.
+//
+// A scope only narrows. Policy still decides, and the token still cannot exceed
+// its owner — so the check below is what a token was *issued for*, a question
+// Cedar cannot ask because it sees a principal and not the credential.
+func TestAScopeNarrowsWhatATokenMayAttempt(t *testing.T) {
+	adminClient(t)
+
+	out := cardinalCLI(t, "token", "create", tokenOwnerLogin, "-name", "e2e-narrow",
+		"-for", "1h", "-scope", "identity")
+	var narrow string
+	for _, field := range strings.Fields(out) {
+		if strings.HasPrefix(field, "crd_pat_") {
+			narrow = field
+		}
+	}
+	if narrow == "" {
+		t.Fatalf("no token in output: %s", out)
+	}
+
+	// The scope it has.
+	resp := bearerRequest(t, http.MethodGet, "/api/auth/me", narrow, nil)
+	drain(resp)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("identity scope did not reach /api/auth/me: %d", resp.StatusCode)
+	}
+
+	// The ones it does not, each of which the owner could reach with a passkey.
+	for _, tc := range []struct{ method, path, scope string }{
+		{http.MethodGet, "/api/decisions", "decisions"},
+		{http.MethodGet, "/api/policy", "policy"},
+		{http.MethodPatch, "/api/auth/me", "profile"},
+	} {
+		t.Run(tc.scope, func(t *testing.T) {
+			refused := bearerRequest(t, tc.method, tc.path, narrow, nil)
+			body, _ := io.ReadAll(refused.Body) //nolint:errcheck // reported by the assertion below
+			drain(refused)
+
+			if refused.StatusCode != http.StatusForbidden {
+				t.Fatalf("got %d, want 403 — a token reached %s without the %s scope",
+					refused.StatusCode, tc.path, tc.scope)
+			}
+			// Named, because a 403 in a pipeline log at 3am that reads as "this
+			// account lost access" sends somebody to the directory rather than
+			// to the token.
+			if !strings.Contains(string(body), tc.scope) {
+				t.Errorf("the refusal does not name the missing scope: %s", body)
+			}
+		})
+	}
+}
+
+// TestATokenWithNoScopeIsRefusedAtIssue.
+//
+// Rather than issued and refused everything at use. A token with a missing or
+// misspelled scope authenticates and is then turned away wherever it is used —
+// usually an unattended pipeline, hours later, with a message about permissions
+// rather than about spelling.
+func TestATokenWithNoScopeIsRefusedAtIssue(t *testing.T) {
+	c, csrf := tokenUser(t, "e2e-noscope", "e2e-noscope-session-with-plenty-of-entropy-0123")
+
+	_, status := createToken(t, c, csrf, map[string]any{"name": "unscoped", "days": 30})
+	if status != http.StatusBadRequest {
+		t.Fatalf("creating a token with no scope returned %d, want 400", status)
+	}
+
+	_, status = createToken(t, c, csrf,
+		map[string]any{"name": "typo", "days": 30, "scopes": []string{"identty"}})
+	if status != http.StatusBadRequest {
+		t.Fatalf("a misspelled scope returned %d, want 400", status)
 	}
 }

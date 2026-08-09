@@ -158,7 +158,7 @@ func TestATokenCreatedInTheConsoleActuallyWorks(t *testing.T) {
 	c, csrf := tokenUser(t, "e2e-tokens", "e2e-tokens-session-with-plenty-of-entropy-01234567")
 
 	created, status := createToken(t, c, csrf,
-		map[string]any{"name": "nightly export", "days": 30})
+		map[string]any{"name": "nightly export", "days": 30, "scopes": []string{"identity"}})
 	if status != http.StatusCreated {
 		t.Fatalf("creating a token returned %d, want 201", status)
 	}
@@ -196,7 +196,7 @@ func TestATokenCreatedInTheConsoleActuallyWorks(t *testing.T) {
 func TestTheTokenValueIsReturnedExactlyOnce(t *testing.T) {
 	c, csrf := tokenUser(t, "e2e-tokens-once", "e2e-tokens-once-session-with-entropy-0123456789ab")
 
-	created, status := createToken(t, c, csrf, map[string]any{"name": "once", "days": 30})
+	created, status := createToken(t, c, csrf, map[string]any{"name": "once", "days": 30, "scopes": []string{"identity"}})
 	if status != http.StatusCreated {
 		t.Fatalf("creating a token returned %d", status)
 	}
@@ -233,7 +233,7 @@ func TestOnePersonCannotSeeOrRevokeAnothersTokens(t *testing.T) {
 		"e2e-tokens-bob-session-with-entropy-0123456789abcde")
 
 	hers, status := createToken(t, alice, aliceCSRF,
-		map[string]any{"name": "alice production", "days": 30})
+		map[string]any{"name": "alice production", "days": 30, "scopes": []string{"identity"}})
 	if status != http.StatusCreated {
 		t.Fatalf("creating returned %d", status)
 	}
@@ -282,6 +282,7 @@ func TestAnAdministratorHasNoWayToMintSomebodyElseAToken(t *testing.T) {
 	created, status := createToken(t, admin, adminCSRF, map[string]any{
 		"name":      "on behalf of somebody else",
 		"days":      30,
+		"scopes":    []string{"identity"},
 		"subject":   victimID,
 		"subjectId": victimID,
 		"login":     "e2e-tokens-victim",
@@ -325,7 +326,7 @@ func TestRevokingYourOwnTokenStopsItImmediately(t *testing.T) {
 	c, csrf := tokenUser(t, "e2e-tokens-revoke",
 		"e2e-tokens-revoke-session-with-entropy-0123456789ab")
 
-	created, status := createToken(t, c, csrf, map[string]any{"name": "leaked", "days": 30})
+	created, status := createToken(t, c, csrf, map[string]any{"name": "leaked", "days": 30, "scopes": []string{"identity"}})
 	if status != http.StatusCreated {
 		t.Fatalf("creating returned %d", status)
 	}
@@ -360,9 +361,9 @@ func TestATokenCannotBeAskedToLastForever(t *testing.T) {
 		body map[string]any
 		want int
 	}{
-		{"a decade", map[string]any{"name": "forever", "days": 3650}, http.StatusBadRequest},
-		{"no name", map[string]any{"name": "   ", "days": 30}, http.StatusBadRequest},
-		{"a year exactly", map[string]any{"name": "a year", "days": 365}, http.StatusCreated},
+		{"a decade", map[string]any{"name": "forever", "days": 3650, "scopes": []string{"identity"}}, http.StatusBadRequest},
+		{"no name", map[string]any{"name": "   ", "days": 30, "scopes": []string{"identity"}}, http.StatusBadRequest},
+		{"a year exactly", map[string]any{"name": "a year", "days": 365, "scopes": []string{"identity"}}, http.StatusCreated},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			if _, status := createToken(t, c, csrf, tc.body); status != tc.want {
@@ -399,7 +400,7 @@ func TestATokenCannotTouchTheCredentialsThatAuthenticateItsOwner(t *testing.T) {
 	c, csrf := tokenUser(t, "e2e-tokens-chain",
 		"e2e-tokens-chain-session-with-entropy-0123456789abc")
 
-	created, status := createToken(t, c, csrf, map[string]any{"name": "seed", "days": 30})
+	created, status := createToken(t, c, csrf, map[string]any{"name": "seed", "days": 30, "scopes": []string{"identity"}})
 	if status != http.StatusCreated {
 		t.Fatalf("creating returned %d", status)
 	}

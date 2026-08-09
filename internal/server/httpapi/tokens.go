@@ -48,6 +48,11 @@ type tokenResponse struct {
 	ExpiresAt  time.Time  `json:"expiresAt"`
 	LastUsedAt *time.Time `json:"lastUsedAt"`
 	Expired    bool       `json:"expired"`
+
+	// Scopes is what it may attempt. Shown in the listing because "what is this
+	// token allowed to do" is the question somebody has when deciding whether
+	// the one in a pipeline is the one they meant to create.
+	Scopes []string `json:"scopes"`
 }
 
 func (s *Server) handleListTokens(w http.ResponseWriter, r *http.Request) {
@@ -67,6 +72,7 @@ func (s *Server) handleListTokens(w http.ResponseWriter, r *http.Request) {
 			ID: t.ID.String(), Name: t.Name, Prefix: t.Prefix,
 			CreatedAt: t.CreatedAt, ExpiresAt: t.ValidUntil,
 			LastUsedAt: t.LastUsedAt, Expired: t.Expired(),
+			Scopes: t.Scopes,
 		})
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"tokens": out})
@@ -78,6 +84,12 @@ type createTokenRequest struct {
 	// Days rather than a duration string. The field is filled in by a select in
 	// the console, and a free-text duration is a way to typo "90d" into "90m".
 	Days int `json:"days"`
+
+	// Scopes is what this token may attempt. Required, and deliberately: the
+	// grant a token used to carry — everything its owner can do without a
+	// hardware key — is one nobody would write down on purpose, and a default
+	// is how it would go on being carried.
+	Scopes []string `json:"scopes"`
 }
 
 // handleCreateToken issues one, shown once.
@@ -107,8 +119,26 @@ func (s *Server) handleCreateToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if len(req.Scopes) == 0 {
+		writeError(w, http.StatusBadRequest,
+			"say what this token is for: one or more of "+strings.Join(AllScopes, ", ")+
+				". A token with no scope can authenticate and nothing else")
+		return
+	}
+	for _, scope := range req.Scopes {
+		if !ValidScope(scope) {
+			// Refused at issue rather than at use. A misspelled scope produces a
+			// token that authenticates and is then refused everything, wherever
+			// it is used — usually an unattended pipeline, hours later, with a
+			// message about permissions rather than about spelling.
+			writeError(w, http.StatusBadRequest,
+				"no such scope "+scope+"; Cardinal knows "+strings.Join(AllScopes, ", "))
+			return
+		}
+	}
+
 	subjectID := session.SubjectID
-	token, err := s.store.CreateAccessToken(ctx, subjectID, req.Name, ttl, &subjectID)
+	token, err := s.store.CreateAccessToken(ctx, subjectID, req.Name, ttl, req.Scopes, &subjectID)
 	if err != nil {
 		s.log.ErrorContext(ctx, "creating an access token failed", "error", err)
 		writeError(w, http.StatusInternalServerError, "could not create the token")
@@ -116,7 +146,7 @@ func (s *Server) handleCreateToken(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.log.InfoContext(ctx, "access token created",
-		"subject", session.SubjectID, "token", token.ID)
+		"subject", session.SubjectID, "token", token.ID, "scopes", token.Scopes)
 
 	writeJSON(w, http.StatusCreated, map[string]any{
 		"id":        token.ID.String(),

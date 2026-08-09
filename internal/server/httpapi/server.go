@@ -205,7 +205,8 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("POST /api/auth/login/finish",
 		s.rateLimit(store.LimitLoginFinish)(http.HandlerFunc(s.handleLoginFinish)))
 
-	mux.Handle("GET /api/auth/me", s.requireAuth(http.HandlerFunc(s.handleMe)))
+	mux.Handle("GET /api/auth/me",
+		s.requireAuth(s.requireScope(ScopeIdentity, http.HandlerFunc(s.handleMe))))
 
 	// Tiered: people go to user-admins, applications to security-admins, and
 	// directory-admins holds both. An endpoint added without a tier in mind
@@ -222,7 +223,8 @@ func (s *Server) Handler() http.Handler {
 	// typo in your own display name is not administering the directory, and
 	// demanding a fresh security key for it would make the step-up rule
 	// something people resent rather than respect.
-	mux.Handle("PATCH /api/auth/me", s.requireAuth(http.HandlerFunc(s.handleUpdateProfile)))
+	mux.Handle("PATCH /api/auth/me",
+		s.requireAuth(s.requireScope(ScopeProfile, http.HandlerFunc(s.handleUpdateProfile))))
 
 	// Step-up. Rate-limited like login, because it is a login in everything but
 	// the session it does not create.
@@ -413,7 +415,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/auth/verify", s.handleForwardAuth)
 
 	// ── Decision explorer ──────────────────────────────────────────────────
-	mux.Handle("GET /api/decisions", s.requireAuth(http.HandlerFunc(s.handleDecisions)))
+	mux.Handle("GET /api/decisions",
+		s.requireAuth(s.requireScope(ScopeDecisions, http.HandlerFunc(s.handleDecisions))))
 
 	// Application management. Behind requireAdmin, which evaluates
 	// Cardinal::Action::"AdministerDirectory" — anyone who can register a client
@@ -487,7 +490,8 @@ func (s *Server) Handler() http.Handler {
 	// them would duplicate the lookup and the audit line.
 	mux.Handle("POST /api/applications/{name}/{state}",
 		apps(s.handleSetApplicationEnabled))
-	mux.Handle("GET /api/policy", s.requireAuth(http.HandlerFunc(s.handlePolicy)))
+	mux.Handle("GET /api/policy",
+		s.requireAuth(s.requireScope(ScopePolicy, http.HandlerFunc(s.handlePolicy))))
 
 	// Policy versions and rollback.
 	//
