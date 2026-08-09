@@ -483,6 +483,18 @@ e2e-seed-oidc: ## Register the relying party and start it with its client id
 
 .PHONY: e2e
 e2e: ## Run the end-to-end tests against the running stack
+	@# Rate-limit counters are cleared first, so the suite is repeatable.
+	@#
+	@# Several tests deliberately spend failed attempts — redeeming a recovery
+	@# code with the wrong code is the point of one of them — and the limiter
+	@# has no idea it is being tested. Run twice in a row without this and the
+	@# second run fails with 429s that look like a bug in what is being tested
+	@# rather than in the fixture, which cost an hour once.
+	@#
+	@# Deliberately not making the limits looser for the stack: the thing being
+	@# exercised should be the one that ships.
+	@$(COMPOSE_E2E) exec -T postgres \
+		psql -U cardinal -d cardinal -q -c "TRUNCATE rate_limits" >/dev/null
 	go test ./test/e2e/... -count=1 -v
 
 .PHONY: e2e-down
