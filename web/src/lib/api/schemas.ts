@@ -110,7 +110,28 @@ export const applicationSchema = z.object({
 })
 export type Application = z.infer<typeof applicationSchema>
 
-export const applicationsSchema = z.array(applicationSchema)
+/**
+ * One application as the console lists them.
+ *
+ * An application entity, which may or may not also be an OIDC relying party.
+ * This list used to be the relying parties alone, so an application that only
+ * sits behind the proxy — no client id, nothing to sign in with — did not
+ * appear at all, while being exactly the kind that needs a hostname adding.
+ *
+ * `oidc` is null rather than an object of zero values, because "public client"
+ * and "no client" are different facts and a `public: false` in that position
+ * would assert the first.
+ */
+export const applicationSummarySchema = z.object({
+  name: z.string(),
+  displayName: z.string(),
+  disabled: z.boolean(),
+  hostnames: z.array(z.string()),
+  oidc: applicationSchema.nullable(),
+})
+export type ApplicationSummary = z.infer<typeof applicationSummarySchema>
+
+export const applicationsSchema = z.array(applicationSummarySchema)
 
 /** What an application currently holds — the answer to "may I disable this?" */
 export const applicationDetailSchema = applicationSchema.extend({

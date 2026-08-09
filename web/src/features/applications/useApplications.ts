@@ -1,5 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { api, queryKeys, type RegisterApplicationRequest } from '@/lib/api'
+import {
+  api,
+  queryKeys,
+  type CreateApplicationRequest,
+  type RegisterApplicationRequest,
+} from '@/lib/api'
 
 export function useApplications() {
   return useQuery({
@@ -30,6 +35,66 @@ export function useRegisterApplication() {
     mutationFn: (input: RegisterApplicationRequest) => api.applications.register(input),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: queryKeys.applications })
+    },
+  })
+}
+
+/**
+ * An application with no OIDC client, for something behind the proxy.
+ *
+ * A separate hook from registering a relying party because the two produce
+ * different things: this one creates an entity for policy to name and a
+ * hostname to belong to, and nothing that can complete a login.
+ */
+export function useCreateApplication() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (input: CreateApplicationRequest) => api.applications.create(input),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: queryKeys.applications })
+    },
+  })
+}
+
+export function useAddHostname() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: ({ name, hostname }: { name: string; hostname: string }) =>
+      api.applications.addHostname(name, hostname),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: queryKeys.applications })
+    },
+  })
+}
+
+export function useRemoveHostname() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: ({ name, hostname }: { name: string; hostname: string }) =>
+      api.applications.removeHostname(name, hostname),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: queryKeys.applications })
+    },
+  })
+}
+
+/** Retires an application, or brings one back. Reaches both kinds. */
+export function useSetApplicationEnabled() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: ({ name, enabled }: { name: string; enabled: boolean }) =>
+      api.applications.setEnabled(name, enabled),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.applications }),
+        // Disabling revoked whatever standing consent the current user had
+        // granted it, so the account page is now showing something stale.
+        queryClient.invalidateQueries({ queryKey: queryKeys.consents }),
+      ])
     },
   })
 }

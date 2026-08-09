@@ -475,6 +475,18 @@ func (s *Server) Handler() http.Handler {
 	// one — which changes the client id, so it is a reconfiguration anyway.
 	mux.Handle("POST /api/applications/{clientID}/secret",
 		apps(s.handleRotateClientSecret))
+	// Hostnames are keyed on the application's directory name, not its client
+	// id. An application that only sits behind the proxy has no client id, and
+	// it is the one that most needs a hostname.
+	mux.Handle("POST /api/applications/{name}/hostnames",
+		apps(s.handleAddApplicationHostname))
+	mux.Handle("DELETE /api/applications/{name}/hostnames/{hostname}",
+		apps(s.handleRemoveApplicationHostname))
+	// Retiring, also by name and for the same reason. {state} is enable or
+	// disable — one handler, because the two differ by a boolean and splitting
+	// them would duplicate the lookup and the audit line.
+	mux.Handle("POST /api/applications/{name}/{state}",
+		apps(s.handleSetApplicationEnabled))
 	mux.Handle("GET /api/policy", s.requireAuth(http.HandlerFunc(s.handlePolicy)))
 
 	// Policy versions and rollback.

@@ -15,6 +15,8 @@ import {
   nameCredentialRequest,
   openRecoveryRequest,
   registerApplicationRequest,
+  createApplicationRequest,
+  addHostnameRequest,
   updateProfileRequest,
   type CreateGroupRequest,
   type AdminProfileRequest,
@@ -25,11 +27,13 @@ import {
   type GrantRequest,
   type OpenRecoveryRequest,
   type RegisterApplicationRequest,
+  type CreateApplicationRequest,
   type UpdateProfileRequest,
 } from './requests'
 import {
   applicationDetailSchema,
   applicationsSchema,
+  applicationSummarySchema,
   ceremonySchema,
   consentsSchema,
   createdUserSchema,
@@ -218,8 +222,59 @@ export const api = {
   },
 
   applications: {
-    /** Every registered relying party. Admin-only, enforced server-side. */
+    /**
+     * Every application, whether or not it speaks OIDC. Admin-only, enforced
+     * server-side.
+     */
     list: () => request('/api/applications', applicationsSchema),
+
+    /**
+     * An application with no OIDC client, for something behind the proxy.
+     *
+     * The server takes this branch when no redirect URIs are sent, so the same
+     * endpoint registers both kinds — which one you get is decided by whether
+     * the thing has anywhere to redirect to.
+     */
+    create: (input: CreateApplicationRequest) =>
+      request('/api/applications', applicationSummarySchema, {
+        method: 'POST',
+        body: createApplicationRequest.parse(input),
+      }),
+
+    /**
+     * Attaches an address, so forwardAuth can find the application from the
+     * hostname it is handed.
+     *
+     * Keyed on the directory name, not a client id: the applications that need
+     * this most do not have one.
+     */
+    addHostname: (name: string, hostname: string) =>
+      request(`/api/applications/${encodeURIComponent(name)}/hostnames`,
+        z.undefined(), {
+          method: 'POST',
+          body: addHostnameRequest.parse({ hostname }),
+        }),
+
+    /** Withdraws one. Effective at once — forwardAuth asks on every request. */
+    removeHostname: (name: string, hostname: string) =>
+      request(
+        `/api/applications/${encodeURIComponent(name)}` +
+          `/hostnames/${encodeURIComponent(hostname)}`,
+        z.undefined(), { method: 'DELETE' }),
+
+    /**
+     * Retires an application, or brings one back.
+     *
+     * By directory name so it reaches both kinds — an application behind the
+     * proxy has no client id. Disabling revokes whatever tokens and standing
+     * consents it holds; enabling does not restore them, because a revocation
+     * that undoes itself is not one.
+     */
+    setEnabled: (name: string, enabled: boolean) =>
+      request(
+        `/api/applications/${encodeURIComponent(name)}/` +
+          (enabled ? 'enable' : 'disable'),
+        z.undefined(), { method: 'POST' }),
 
     /** One application, including what it currently holds. */
     get: (clientID: string) =>
@@ -630,6 +685,7 @@ export type {
   MailTemplate,
   Application,
   ApplicationDetail,
+  ApplicationSummary,
   Consent,
   CreatedUser,
   Credential,

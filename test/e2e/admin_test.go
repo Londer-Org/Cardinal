@@ -199,6 +199,170 @@ func adminClient(t *testing.T) (*http.Client, string) {
 // these tests fail loudly rather than quietly testing nothing.
 const adminGroupID = "00000000-0000-7000-8000-00000000ad11"
 
+// postExpectingFailure posts a body and returns the response whatever it is.
+//
+// postJSON fails the test on a non-2xx, which is right almost everywhere and
+// wrong for the refusals worth asserting — a hostname another application
+// already holds is one of them.
+func postExpectingFailure(
+	t *testing.T, c *http.Client, csrf, path string, body any,
+) *http.Response {
+	t.Helper()
+
+	encoded, err := json.Marshal(body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req, err := http.NewRequest(http.MethodPost, //nolint:noctx // bounded by client timeout
+		origin(hostCardinal)+path, strings.NewReader(string(encoded)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Cardinal-CSRF", csrf)
+
+	resp, err := c.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer drain(resp)
+	return resp
+}
+
+// applicationEntry is one row of /api/applications.
+//
+// An application entity, which may or may not also be an OIDC relying party.
+// oidc is null for something that only sits behind the proxy — the case the
+// console could not see at all until it was keyed on the entity.
+type applicationEntry struct {
+	Name      string   `json:"name"`
+	Disabled  bool     `json:"disabled"`
+	Hostnames []string `json:"hostnames"`
+	OIDC      *struct {
+		ClientID string `json:"clientId"`
+	} `json:"oidc"`
+}
+
+func listApplications(t *testing.T, c *http.Client) []applicationEntry {
+	t.Helper()
+
+	resp := request(t, c, http.MethodGet, hostCardinal, "/api/applications", "application/json")
+	defer drain(resp)
+
+	var out []applicationEntry
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		t.Fatal(err)
+	}
+	return out
+}
+
+func findApplication(t *testing.T, c *http.Client, name string) applicationEntry {
+	t.Helper()
+
+	for _, a := range listApplications(t, c) {
+		if a.Name == name {
+			return a
+		}
+	}
+	t.Fatalf("%s is not in the application list", name)
+	return applicationEntry{}
+}
+
+// TestAdminCanManageAProxiedApplication.
+//
+// The gap this closes. An application behind forwardAuth speaks no OIDC, so it
+// has no redirect URIs and no client id — and the console listed OIDC clients,
+// which meant the commonest kind of protected thing could not be created,
+// found, given a hostname, or retired from the admin API at all. `cardinal app
+// hostname` was the only route.
+func TestAdminCanManageAProxiedApplication(t *testing.T) {
+	c, csrf := adminClient(t)
+	name := "e2e-proxied-app"
+	hostname := "e2e-proxied.cardinal.test"
+
+	// Idempotent across runs, the way the test above is: an application is
+	// never deleted, so a previous run's is renamed out of the way and its
+	// hostname released. Without the second statement the run after the first
+	// would collide on the address rather than on the name, which is a more
+	// confusing way to fail.
+	seedSQL(t, `DELETE FROM application_hostnames WHERE hostname = '`+hostname+`'`)
+	seedSQL(t, `UPDATE entities SET name = name || '-' || id WHERE name = '`+name+`'`)
+
+	// Registered with no redirect URIs, which is what says "this one is behind
+	// the proxy" rather than being an incomplete form.
+	var created applicationEntry
+	//nolint:bodyclose // postJSON closes the body before returning
+	postJSON(t, c, "/api/applications", csrf, map[string]any{
+		"name":        name,
+		"displayName": "Proxied by the admin API",
+	}, &created)
+
+	if created.Name != name {
+		t.Fatalf("registered %q, got %q", name, created.Name)
+	}
+
+	listed := findApplication(t, c, name)
+	if listed.OIDC != nil {
+		t.Error("an application registered with no redirect URIs came back with " +
+			"an OIDC client; the two kinds must stay distinguishable")
+	}
+	if len(listed.Hostnames) != 0 {
+		t.Errorf("a new application already answers to %v", listed.Hostnames)
+	}
+
+	// A hostname, which is what makes forwardAuth able to find it at all.
+	//nolint:bodyclose // postJSON closes the body before returning
+	postJSON(t, c, "/api/applications/"+name+"/hostnames", csrf,
+		map[string]any{"hostname": hostname}, nil)
+
+	withHostname := findApplication(t, c, name)
+	if len(withHostname.Hostnames) != 1 || withHostname.Hostnames[0] != hostname {
+		t.Fatalf("hostnames are %v, want [%s]", withHostname.Hostnames, hostname)
+	}
+
+	// Two applications cannot hold one address: whichever won would decide
+	// which application's group memberships govern requests arriving there.
+	//nolint:bodyclose // postExpectingFailure drains it before returning
+	conflict := postExpectingFailure(t, c, csrf,
+		"/api/applications/protected-app/hostnames",
+		map[string]any{"hostname": hostname})
+	if conflict.StatusCode != http.StatusConflict {
+		t.Errorf("claiming a taken hostname returned %d, want 409", conflict.StatusCode)
+	}
+
+	// Retiring reaches it, which disabling-by-client-id could not.
+	retire := requestWithCSRF(t, c, http.MethodPost,
+		"/api/applications/"+name+"/disable", csrf)
+	drain(retire)
+	if retire.StatusCode != http.StatusNoContent {
+		t.Fatalf("retiring returned %d, want 204", retire.StatusCode)
+	}
+	if !findApplication(t, c, name).Disabled {
+		t.Error("it was retired and the list still says otherwise")
+	}
+
+	// An unrecognised action must not mean disable. Deriving the boolean from
+	// `== "enable"` would make every typo in this URL retire an application
+	// and report success.
+	nonsense := requestWithCSRF(t, c, http.MethodPost,
+		"/api/applications/"+name+"/frobnicate", csrf)
+	drain(nonsense)
+	if nonsense.StatusCode != http.StatusNotFound {
+		t.Errorf("an unknown action returned %d, want 404", nonsense.StatusCode)
+	}
+
+	// And back.
+	restore := requestWithCSRF(t, c, http.MethodPost,
+		"/api/applications/"+name+"/enable", csrf)
+	drain(restore)
+	if restore.StatusCode != http.StatusNoContent {
+		t.Fatalf("restoring returned %d, want 204", restore.StatusCode)
+	}
+	if findApplication(t, c, name).Disabled {
+		t.Error("it was restored and the list still says retired")
+	}
+}
+
 // TestAdminCanManageApplications is the allowed path, end to end.
 func TestAdminCanManageApplications(t *testing.T) {
 	c, csrf := adminClient(t)
@@ -246,19 +410,16 @@ func TestAdminCanManageApplications(t *testing.T) {
 	}
 
 	// It appears in the list.
-	listResp := request(t, c, http.MethodGet, hostCardinal, "/api/applications", "application/json")
-	var applications []struct {
-		ClientID string `json:"clientId"`
-		Name     string `json:"name"`
-	}
-	if err := json.NewDecoder(listResp.Body).Decode(&applications); err != nil {
-		t.Fatal(err)
-	}
-	drain(listResp)
+	//
+	// The list is applications, not OIDC clients, so the client id is nested
+	// under oidc and is null for something that only sits behind the proxy.
+	// That distinction is the point: the flat version made an entire category
+	// invisible in the console.
+	applications := listApplications(t, c)
 
 	found := false
 	for _, a := range applications {
-		if a.ClientID == registered.ClientID {
+		if a.OIDC != nil && a.OIDC.ClientID == registered.ClientID {
 			found = true
 		}
 	}

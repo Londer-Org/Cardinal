@@ -129,3 +129,64 @@ func TestRemovingAHostnameTakesEffectAtOnce(t *testing.T) {
 	_, err := s.ApplicationForHostname(ctx, "grafana.example.com")
 	require.ErrorIs(t, err, directory.ErrNotFound)
 }
+
+// TestListApplicationsIncludesTheOnesWithNoClient.
+//
+// The gap this closes: the console listed OIDC relying parties, so an
+// application behind the proxy — no client id, nothing to sign in with —
+// appeared nowhere, while being precisely the kind that needs a hostname
+// adding before anything can reach it.
+func TestListApplicationsIncludesTheOnesWithNoClient(t *testing.T) {
+	s := newStore(t)
+	ctx := t.Context()
+
+	proxied := mustCreate(t, s, directory.TypeApplication, "intranet")
+	require.NoError(t, s.AddApplicationHostname(ctx, proxied.ID, "intranet.example.com", nil))
+	mustCreate(t, s, directory.TypeApplication, "grafana")
+
+	apps, err := s.ListApplications(ctx)
+	require.NoError(t, err)
+	require.Len(t, apps, 2)
+
+	byName := map[string]store.ApplicationEntry{}
+	for _, a := range apps {
+		byName[a.Name] = a
+	}
+
+	assert.Equal(t, []string{"intranet.example.com"}, byName["intranet"].Hostnames)
+	assert.Empty(t, byName["grafana"].Hostnames,
+		"an application reached only over OIDC has no hostnames, which is not an error")
+}
+
+// TestRetiringAnApplicationReachesBothKinds.
+//
+// Disabling used to go through the OIDC client, so an application with no
+// client could be created from the console and never retired from it — half a
+// feature, which is the shape this project keeps finding.
+func TestRetiringAnApplicationReachesBothKinds(t *testing.T) {
+	s := newStore(t)
+	ctx := t.Context()
+
+	app := mustCreate(t, s, directory.TypeApplication, "intranet")
+	require.NoError(t, s.AddApplicationHostname(ctx, app.ID, "intranet.example.com", nil))
+
+	require.NoError(t, s.SetApplicationEnabled(ctx, "intranet", false, nil))
+
+	_, err := s.ApplicationForHostname(ctx, "intranet.example.com")
+	require.ErrorIs(t, err, directory.ErrNotFound,
+		"retiring must close the door through the proxy, not only the OIDC one")
+
+	require.NoError(t, s.SetApplicationEnabled(ctx, "intranet", true, nil))
+	found, err := s.ApplicationForHostname(ctx, "intranet.example.com")
+	require.NoError(t, err)
+	assert.Equal(t, app.ID, found.ID,
+		"the hostname survives being retired — it is the application that was disabled")
+}
+
+// TestRetiringSomethingThatIsNotThere reports rather than succeeding quietly.
+func TestRetiringSomethingThatIsNotThere(t *testing.T) {
+	s := newStore(t)
+
+	err := s.SetApplicationEnabled(t.Context(), "no-such-application", false, nil)
+	require.ErrorIs(t, err, directory.ErrNotFound)
+}

@@ -205,6 +205,38 @@ export const registerApplicationRequest = z.object({
 export type RegisterApplicationRequest = z.infer<typeof registerApplicationRequest>
 
 /**
+ * An application that speaks no OpenID Connect.
+ *
+ * Everything behind the proxy: it is protected by forwardAuth and never
+ * redirects anywhere, so it has no redirect URIs and no client id. It still
+ * needs to be an entity, because that is what policy names and what a hostname
+ * belongs to.
+ *
+ * A separate request rather than making redirectUris optional above, so the
+ * OIDC form keeps its "at least one — a client with none can never complete a
+ * login" rule. Relaxing that would let somebody submit the OIDC form
+ * incompletely and get something that silently is not an OIDC client.
+ */
+export const createApplicationRequest = z.object({
+  name: entityName,
+  displayName,
+})
+export type CreateApplicationRequest = z.infer<typeof createApplicationRequest>
+
+/** A hostname an application answers to through forwardAuth. */
+export const addHostnameRequest = z.object({
+  hostname: z
+    .string()
+    .trim()
+    .min(1, 'A hostname is required.')
+    // Deliberately loose. The server normalises case and strips a port, and the
+    // addresses people actually protect include single labels on an internal
+    // network and, in a lab, a literal address.
+    .refine((v) => !v.includes('/'), 'A hostname, not a URL — no scheme and no path.'),
+})
+export type AddHostnameRequest = z.infer<typeof addHostnameRequest>
+
+/**
  * A new access token.
  *
  * The lifetime bound MIRRORS `maxTokenTTL` in internal/httpapi/tokens.go: long

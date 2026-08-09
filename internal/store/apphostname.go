@@ -167,6 +167,99 @@ func (s *Store) AllApplicationHostnames(ctx context.Context) ([]ApplicationHostn
 	return out, rows.Err()
 }
 
+// ApplicationEntry is an application as the console lists them.
+//
+// Every application entity, not every OIDC client. The two are not the same set
+// and treating them as one made an entire category invisible: an application
+// behind the proxy speaks no OIDC, has no client id, and appeared nowhere —
+// while being exactly the kind of thing somebody needs to add a hostname to.
+type ApplicationEntry struct {
+	ID          uuid.UUID
+	Name        string
+	DisplayName string
+	Disabled    bool
+	Hostnames   []string
+}
+
+// ListApplications returns every application entity with the hostnames it
+// answers to.
+//
+// Disabled ones are included and flagged. Retiring an application is a soft
+// delete here as everywhere else, and a console that simply stopped showing it
+// would leave somebody wondering where it went — and unable to enable it again.
+func (s *Store) ListApplications(ctx context.Context) ([]ApplicationEntry, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT e.id, e.name, coalesce(e.display_name, ''),
+		       e.disabled_at IS NOT NULL,
+		       coalesce(
+		           array_agg(h.hostname ORDER BY h.hostname)
+		               FILTER (WHERE h.hostname IS NOT NULL),
+		           '{}') AS hostnames
+		  FROM entities e
+		  LEFT JOIN application_hostnames h ON h.entity_id = e.id
+		 WHERE e.type = 'application'
+		 GROUP BY e.id, e.name, e.display_name, e.disabled_at
+		 ORDER BY e.name`)
+	if err != nil {
+		return nil, fmt.Errorf("store: listing applications: %w", err)
+	}
+	defer rows.Close()
+
+	out := []ApplicationEntry{}
+	for rows.Next() {
+		var a ApplicationEntry
+		if err := rows.Scan(&a.ID, &a.Name, &a.DisplayName,
+			&a.Disabled, &a.Hostnames); err != nil {
+			return nil, fmt.Errorf("store: scanning application: %w", err)
+		}
+		out = append(out, a)
+	}
+	return out, rows.Err()
+}
+
+// SetApplicationEnabled retires an application, or brings one back.
+//
+// By directory name, because an application behind the proxy has no client id
+// and this has to reach both kinds. When it does have one, its tokens and
+// standing consents go with it — the same thing DisableOIDCClient does, and for
+// the same reason: an application that can no longer sign anyone in should not
+// leave live tokens behind it.
+//
+// Enabling deliberately does not restore them. They were revoked, and a
+// revocation that undoes itself is not one.
+func (s *Store) SetApplicationEnabled(
+	ctx context.Context, name string, enabled bool, actorID *uuid.UUID,
+) error {
+	app, err := s.LookupEntity(ctx, directory.TypeApplication, name)
+	if err != nil {
+		return err
+	}
+
+	if enabled {
+		return s.EnableEntity(ctx, app.ID, actorID)
+	}
+	if err := s.DisableEntity(ctx, app.ID, actorID); err != nil {
+		return err
+	}
+
+	// After the disable rather than inside it. If this fails the application is
+	// already unable to obtain anything new, which is the property that matters
+	// most; a retry cleans up the rest.
+	if _, err := s.pool.Exec(ctx, `
+		UPDATE oidc_tokens SET revoked_at = now()
+		 WHERE client_id IN (SELECT client_id FROM oidc_clients WHERE entity_id = $1)
+		   AND revoked_at IS NULL`, app.ID); err != nil {
+		return fmt.Errorf("store: revoking tokens for a disabled application: %w", err)
+	}
+	if _, err := s.pool.Exec(ctx, `
+		UPDATE oidc_consents SET revoked_at = now()
+		 WHERE client_id IN (SELECT client_id FROM oidc_clients WHERE entity_id = $1)
+		   AND revoked_at IS NULL`, app.ID); err != nil {
+		return fmt.Errorf("store: revoking consents for a disabled application: %w", err)
+	}
+	return nil
+}
+
 // ApplicationForHostname resolves what forwardAuth was asked about.
 //
 // A disabled application resolves to nothing, so disabling one closes access to

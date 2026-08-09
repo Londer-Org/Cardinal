@@ -27,7 +27,7 @@ import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
 import { ErrorMessage } from '@/components/ErrorMessage'
 import { entityName, redirectURI, type RegisteredApplication } from '@/lib/api'
-import { useRegisterApplication } from './useApplications'
+import { useCreateApplication, useRegisterApplication } from './useApplications'
 
 const DEFAULT_SCOPES = 'openid, profile, email, groups'
 
@@ -47,42 +47,53 @@ function splitList(value: string): string[] {
  * browser ends up permitting a wildcard the server refuses, which reads as the
  * server being broken at exactly the moment somebody is registering a client.
  */
-const applicationForm = z.object({
-  name: entityName,
-  displayName: z.string().trim().max(200, 'At most 200 characters.'),
-  redirects: z
-    .string()
-    .superRefine((value, ctx) => {
-      const parts = splitList(value)
-      if (parts.length === 0) {
+const applicationForm = z
+  .object({
+    // Which kind this is. Not a detail: an application behind the proxy has no
+    // redirect URIs, no scopes and no client id, so asking for them would be
+    // asking for fields that do not apply to the commonest case.
+    kind: z.enum(['proxy', 'oidc']),
+    name: entityName,
+    displayName: z.string().trim().max(200, 'At most 200 characters.'),
+    redirects: z.string(),
+    scopes: z.string(),
+    confidential: z.boolean(),
+    requireConsent: z.boolean(),
+    devMode: z.boolean(),
+  })
+  // Checked on the object rather than per field, because whether these are
+  // required depends on the kind — and a per-field rule cannot see it.
+  .superRefine((values, ctx) => {
+    if (values.kind !== 'oidc') return
+
+    const parts = splitList(values.redirects)
+    if (parts.length === 0) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['redirects'],
+        message: 'At least one — a client with none can never complete a login.',
+      })
+    }
+    for (const part of parts) {
+      const checked = redirectURI.safeParse(part)
+      if (!checked.success) {
+        // Named, because "one of these is wrong" in a comma-separated field
+        // of four is not something anybody can act on.
         ctx.addIssue({
           code: 'custom',
-          message: 'At least one — a client with none can never complete a login.',
+          path: ['redirects'],
+          message: `${part} — ${checked.error.issues[0]?.message ?? 'invalid'}`,
         })
-        return
       }
-      for (const part of parts) {
-        const checked = redirectURI.safeParse(part)
-        if (!checked.success) {
-          // Named, because "one of these is wrong" in a comma-separated field
-          // of four is not something anybody can act on.
-          ctx.addIssue({
-            code: 'custom',
-            message: `${part} — ${checked.error.issues[0]?.message ?? 'invalid'}`,
-          })
-        }
-      }
-    }),
-  scopes: z
-    .string()
-    .refine((value) => splitList(value).length > 0, 'At least one scope.'),
-  confidential: z.boolean(),
-  requireConsent: z.boolean(),
-  devMode: z.boolean(),
-})
+    }
+    if (splitList(values.scopes).length === 0) {
+      ctx.addIssue({ code: 'custom', path: ['scopes'], message: 'At least one scope.' })
+    }
+  })
 type ApplicationForm = z.infer<typeof applicationForm>
 
 const EMPTY: ApplicationForm = {
+  kind: 'proxy',
   name: '',
   displayName: '',
   redirects: '',
@@ -105,16 +116,20 @@ export function RegisterApplication() {
   const [registered, setRegistered] = useState<RegisteredApplication | null>(null)
 
   const register = useRegisterApplication()
+  const create = useCreateApplication()
 
   const form = useForm<ApplicationForm>({
     resolver: zodResolver(applicationForm),
     defaultValues: EMPTY,
   })
 
+  const kind = form.watch('kind')
+
   function reset() {
     form.reset(EMPTY)
     setRegistered(null)
     register.reset()
+    create.reset()
   }
 
   return (
@@ -138,7 +153,9 @@ export function RegisterApplication() {
             <DialogHeader>
               <DialogTitle>Register an application</DialogTitle>
               <DialogDescription>
-                Creates a directory entity and an OIDC client registration.
+                Creates a directory entity, which is what policy names — and an
+                OIDC client registration too, if the application signs users in
+                itself.
               </DialogDescription>
             </DialogHeader>
 
@@ -147,6 +164,16 @@ export function RegisterApplication() {
                 className="space-y-4"
                 onSubmit={(event) => {
                   void form.handleSubmit((values) => {
+                    if (values.kind === 'proxy') {
+                      // Nothing to show afterwards: there is no client id and no
+                      // secret. The row appears in the list saying it has no
+                      // hostname yet, which is the next thing to do.
+                      create.mutate(
+                        { name: values.name, displayName: values.displayName },
+                        { onSuccess: () => { setOpen(false); reset() } },
+                      )
+                      return
+                    }
                     register.mutate(
                       {
                         name: values.name,
@@ -162,6 +189,38 @@ export function RegisterApplication() {
                   })(event)
                 }}
               >
+                <FormField
+                  control={form.control}
+                  name="kind"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>What is it</FormLabel>
+                      <FormControl>
+                        <div className="grid gap-2 sm:grid-cols-2">
+                          <KindChoice
+                            selected={field.value === 'proxy'}
+                            onSelect={() => { field.onChange('proxy') }}
+                            title="Behind the proxy"
+                            description="The proxy asks Cardinal on every request and the application implements nothing. Most internal applications."
+                          />
+                          <KindChoice
+                            selected={field.value === 'oidc'}
+                            onSelect={() => { field.onChange('oidc') }}
+                            title="Signs users in itself"
+                            description="OpenID Connect: the application runs its own login and owns its session."
+                          />
+                        </div>
+                      </FormControl>
+                      <FormDescription>
+                        Both are directory entities and both are governed by
+                        policy. This decides whether there is also an OIDC client
+                        registration — which one it is can be changed later only
+                        by registering again.
+                      </FormDescription>
+                    </FormItem>
+                  )}
+                />
+
                 <FormField
                   control={form.control}
                   name="name"
@@ -194,88 +253,100 @@ export function RegisterApplication() {
                   )}
                 />
 
-                <FormField
-                  control={form.control}
-                  name="redirects"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Redirect URIs</FormLabel>
-                      <FormControl>
-                        <Input
-                          placeholder="https://grafana.example.com/login/generic_oauth"
-                          {...field}
+                {kind === 'oidc' && (
+                  <>
+                    <FormField
+                      control={form.control}
+                      name="redirects"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Redirect URIs</FormLabel>
+                          <FormControl>
+                            <Input
+                              placeholder="https://grafana.example.com/login/generic_oauth"
+                              {...field}
+                            />
+                          </FormControl>
+                          <FormDescription>
+                            Comma-separated, exact matches. No wildcards — anyone
+                            controlling a matching host could receive authorization
+                            codes.
+                          </FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name="scopes"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Scopes</FormLabel>
+                          <FormControl>
+                            <Input {...field} />
+                          </FormControl>
+                          <FormDescription>Comma-separated.</FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name="confidential"
+                      render={({ field }) => (
+                        <Toggle
+                          label="Issue a client secret"
+                          description="Only for applications running on a server that can keep one. A browser or mobile app cannot, and a secret shipped to every user is worse than none."
+                          checked={field.value}
+                          onChange={field.onChange}
                         />
-                      </FormControl>
-                      <FormDescription>
-                        Comma-separated, exact matches. No wildcards — anyone
-                        controlling a matching host could receive authorization
-                        codes.
-                      </FormDescription>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="scopes"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Scopes</FormLabel>
-                      <FormControl>
-                        <Input {...field} />
-                      </FormControl>
-                      <FormDescription>Comma-separated.</FormDescription>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="confidential"
-                  render={({ field }) => (
-                    <Toggle
-                      label="Issue a client secret"
-                      description="Only for applications running on a server that can keep one. A browser or mobile app cannot, and a secret shipped to every user is worse than none."
-                      checked={field.value}
-                      onChange={field.onChange}
+                      )}
                     />
-                  )}
-                />
 
-                <FormField
-                  control={form.control}
-                  name="requireConsent"
-                  render={({ field }) => (
-                    <Toggle
-                      label="Ask the user for consent"
-                      description="For third-party applications. A prompt in front of something your own organisation runs is one more thing people learn to dismiss unread."
-                      checked={field.value}
-                      onChange={field.onChange}
+                    <FormField
+                      control={form.control}
+                      name="requireConsent"
+                      render={({ field }) => (
+                        <Toggle
+                          label="Ask the user for consent"
+                          description="For third-party applications. A prompt in front of something your own organisation runs is one more thing people learn to dismiss unread."
+                          checked={field.value}
+                          onChange={field.onChange}
+                        />
+                      )}
                     />
-                  )}
-                />
 
-                <FormField
-                  control={form.control}
-                  name="devMode"
-                  render={({ field }) => (
-                    <Toggle
-                      label="Development mode"
-                      description="Permits plain http redirect URIs, so authorization codes cross the network in the clear. Never in production."
-                      checked={field.value}
-                      onChange={field.onChange}
-                      danger
+                    <FormField
+                      control={form.control}
+                      name="devMode"
+                      render={({ field }) => (
+                        <Toggle
+                          label="Development mode"
+                          description="Permits plain http redirect URIs, so authorization codes cross the network in the clear. Never in production."
+                          checked={field.value}
+                          onChange={field.onChange}
+                          danger
+                        />
+                      )}
                     />
-                  )}
-                />
+                  </>
+                )}
 
-                <ErrorMessage error={register.error} />
+                {kind === 'proxy' && (
+                  <p className="text-sm text-muted-foreground">
+                    Nothing else is needed here. Add the address it answers to
+                    from its row afterwards — until it has one, forwardAuth
+                    refuses every request to it.
+                  </p>
+                )}
+
+                <ErrorMessage error={register.error ?? create.error} />
 
                 <DialogFooter>
-                  <Button type="submit" disabled={register.isPending}>
-                    {register.isPending ? 'Registering…' : 'Register'}
+                  <Button type="submit" disabled={register.isPending || create.isPending}>
+                    {register.isPending || create.isPending ? 'Registering…' : 'Register'}
                   </Button>
                 </DialogFooter>
               </form>
@@ -369,6 +440,41 @@ function Secret({ label, value }: { label: string; value: string }) {
         </Button>
       </div>
     </div>
+  )
+}
+
+/**
+ * One of the two kinds, as a card rather than a dropdown.
+ *
+ * The choice decides which half of this form applies, and it is the one thing
+ * on the page somebody unfamiliar with Cardinal has to get right — so it is
+ * two visible options with their consequences written out, not a select whose
+ * second entry nobody scrolls to.
+ */
+function KindChoice({
+  selected,
+  onSelect,
+  title,
+  description,
+}: {
+  selected: boolean
+  onSelect: () => void
+  title: string
+  description: string
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      aria-pressed={selected}
+      className={
+        'rounded-md border p-3 text-left transition-colors ' +
+        (selected ? 'border-primary bg-primary/5' : 'hover:bg-muted/50')
+      }
+    >
+      <span className="block text-sm font-medium">{title}</span>
+      <span className="mt-1 block text-xs text-muted-foreground">{description}</span>
+    </button>
   )
 }
 
