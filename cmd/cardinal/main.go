@@ -117,6 +117,10 @@ func run(ctx context.Context, args []string) error {
 		return runPolicy(ctx, rest)
 	case "serve":
 		return runServe(ctx, rest)
+	case "decisions":
+		return runDecisions(ctx, rest)
+	case "config":
+		return runConfig(ctx, rest)
 	case "redact":
 		return runRedact(ctx, rest)
 	case "audit":
@@ -320,6 +324,19 @@ AUTHORIZATION
   policy list                              Published versions
   policy show                              The live policy set
 
+  decisions [<principal>] [-denied]        Why access was allowed or refused,
+                                           newest first, naming the deciding
+                                           rule. The question asked during an
+                                           incident, so it does not need the
+                                           console to be reachable.
+      -limit <n>                             default 20
+
+DIAGNOSIS
+  config [-config <file>] [-all]           The effective configuration and where
+                                           each value came from. Settings that
+                                           are accepted but read by nothing are
+                                           always listed: those are the ones
+                                           somebody tunes without effect.
 
   policy rule list                         The live set, rule by rule, in words
   policy rule remove <id>                  Drop one and publish the result
