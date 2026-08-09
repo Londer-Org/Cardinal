@@ -20,6 +20,7 @@ import (
 	"go.londer.be/cardinal/internal/server/mail"
 	"go.londer.be/cardinal/internal/server/oidcprovider"
 	"go.londer.be/cardinal/internal/server/policy"
+	"go.londer.be/cardinal/internal/server/ssf"
 	"go.londer.be/cardinal/internal/store"
 	"go.londer.be/cardinal/internal/version"
 	"go.londer.be/cardinal/web"
@@ -178,6 +179,25 @@ func runServe(ctx context.Context, args []string) error {
 	// need a restart.
 	notifier := mail.NewNotifier(st, cfg.Server.PublicURL, cfg.WebAuthn.RPDisplayName, log)
 
+	// The Shared Signals transmitter.
+	//
+	// The signing key is fetched per event rather than held, because it rotates:
+	// a transmitter holding the one it read at startup would sign with a retired
+	// key until the process restarted, and receivers would reject everything
+	// while an incident was in progress.
+	signals := &ssf.Notifier{
+		Store:  st,
+		Issuer: strings.TrimRight(cfg.Server.PublicURL, "/"),
+		Log:    log,
+		Keys: func(ctx context.Context) (any, string, error) {
+			key, keyErr := st.ActiveSigningKey(ctx, cfg.OIDC.SigningKeyEncryptionKey)
+			if keyErr != nil {
+				return nil, "", keyErr
+			}
+			return key.Private, key.KeyID, nil
+		},
+	}
+
 	apiServer, err := httpapi.New(st, authSvc, cfg, httpapi.Options{
 		DevMode:  *dev,
 		UI:       ui,
@@ -185,6 +205,7 @@ func runServe(ctx context.Context, args []string) error {
 		OIDC:     oidcProvider,
 		SSHCA:    hostCA,
 		Notifier: notifier,
+		Signals:  signals,
 		X509CA:   certificateAuthority,
 	})
 	if err != nil {
@@ -222,6 +243,7 @@ func runServe(ctx context.Context, args []string) error {
 
 	go backgroundMaintenance(ctx, st, log)
 	go deliverMail(ctx, notifier, cfg.Mail.EncryptionKey, log)
+	go deliverSignals(ctx, signals, log)
 	go watchPolicy(ctx, st, apiServer, log)
 
 	errCh := make(chan error, 1)
@@ -355,6 +377,47 @@ func watchPolicy(ctx context.Context, st *store.Store, server *httpapi.Server, l
 				continue
 			}
 			server.ReloadPolicy(ctx, engine)
+		}
+	}
+}
+
+// deliverSignals pushes queued security events to receivers.
+//
+// Its own loop on a much shorter interval than the mail one, and the difference
+// is what a delay costs. A notification arriving ten minutes late is a
+// notification; a session-revoked arriving ten minutes late is ten minutes of
+// an application believing a compromised account is good.
+func deliverSignals(ctx context.Context, signals *ssf.Notifier, log *slog.Logger) {
+	const (
+		interval = 5 * time.Second
+		batch    = 50
+	)
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			// Read the journal first, so anything that just happened is queued
+			// before this tick tries to deliver. A revocation and its delivery
+			// in the same cycle is the difference between five seconds and ten.
+			if _, err := signals.Follow(ctx, batch); err != nil {
+				log.WarnContext(ctx, "could not read the journal for security events",
+					"error", err)
+			}
+
+			sent, err := signals.Deliver(ctx, batch)
+			if err != nil {
+				// Not per-event: this is the queue being unreadable, which is
+				// worth saying once a cycle rather than staying silent.
+				log.WarnContext(ctx, "could not deliver security events", "error", err)
+				continue
+			}
+			if sent > 0 {
+				log.DebugContext(ctx, "security events delivered", "count", sent)
+			}
 		}
 	}
 }

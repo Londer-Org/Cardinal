@@ -105,6 +105,8 @@ func run(ctx context.Context, args []string) error {
 		return runMail(ctx, rest)
 	case "ssh":
 		return runSSH(ctx, rest)
+	case "ssf":
+		return runSSF(ctx, rest)
 	case "posix":
 		return runPOSIX(ctx, rest)
 	case "x509":
@@ -326,6 +328,21 @@ AUTHORIZATION
   The binary carries the default set, so init needs no files on disk. Once
   published, policy lives in the database: a deployment running the image edits
   it the same way a source checkout does.
+
+SECURITY EVENTS (SSF / CAEP)
+  ssf stream add <app> -endpoint <url>      Push events to a receiver
+      -events <a>,<b>                         default: all of them
+  ssf stream list                           Configured receivers
+  ssf stream pause|resume <app>             Stop or restart delivery, keeping
+                                            the queue — resuming sends what
+                                            was missed
+  ssf stream remove <app>                   Forget a receiver entirely
+  ssf status                                What is queued, and what is failing
+
+  Revoking a session here ends it here. An application that issued its own
+  session from an OIDC login learns nothing until its token expires, which for
+  a compromised account is the whole incident. Tokens are signed with the OIDC
+  signing key, so a receiver verifies them against the JWKS it already fetches.
 
 PROVISIONING (SCIM 2.0)
   Base URL: <public-url>/scim/v2 — point Entra, Okta or anything else at it.

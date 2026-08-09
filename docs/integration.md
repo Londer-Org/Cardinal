@@ -242,6 +242,45 @@ single `attribute eq "value"`, which is what reconciliation sends; anything
 compound is refused rather than approximated, because a filter silently misread
 returns the wrong people and the client acts on the answer.
 
+### Telling applications when access changes
+
+Revoking a session in Cardinal ends it in Cardinal. An application that issued
+its own session from an OIDC login learns nothing until its token expires —
+fifteen minutes at best, a refresh cycle at worst. For a compromised account
+that gap is the whole incident.
+
+Cardinal transmits [Shared Signals](https://openid.net/wg/sharedsignals/) events
+to receivers you configure:
+
+```sh
+cardinal app register aura -redirect https://aura.example.com/callback
+cardinal ssf stream add aura -endpoint https://aura.example.com/events
+cardinal ssf status
+```
+
+| Event | When |
+|---|---|
+| `session-revoked` | A session was revoked, or the account was disabled |
+| `credential-change` | A passkey was registered or removed |
+| `assurance-level-change` | The account was disabled |
+
+Tokens are Security Event Tokens (RFC 8417) signed with the **OIDC signing
+key**, so a receiver verifies them against the JWKS it already fetches — no new
+key distribution, and rotation is the one that already happens. Each token names
+one audience, so a receiver cannot replay it to another.
+
+`GET /.well-known/ssf-configuration` describes the transmitter, including what
+is not implemented: **push delivery only** (RFC 8935), and **streams are
+configured by a Cardinal administrator** rather than by the receiver over the
+API. A receiver that expects to poll or to create its own stream finds that out
+there rather than from a 404 mid-synchronisation.
+
+Events are read from Cardinal's hash-chained journal rather than emitted by each
+handler. That is the reason `cardinal user disable` on the server reaches your
+applications: every path commits its journal entry in the same transaction as
+the change ([ADR 0003](adr/0003-events-commit-with-state.md)), so the CLI, the
+API and SCIM are all covered without any of them knowing the transmitter exists.
+
 ## Style 2 — the application speaks OpenID Connect
 
 For applications that want their own session, or run somewhere the proxy does

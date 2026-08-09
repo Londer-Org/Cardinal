@@ -53,8 +53,6 @@ services:
         condition: service_healthy
       migrate:
         condition: service_completed_successfully
-    volumes:
-      - ./cardinal.e2e.toml:/etc/cardinal/cardinal.toml:ro
     # No -dev. The stack is served over TLS with a certificate the browser
     # trusts, so cookies are Secure and the full CSP applies — which is the
     # production shape rather than a relaxed one.
@@ -72,6 +70,15 @@ services:
       CARDINAL_PUBLIC_URL: "https://id.cardinal.test:${CARDINAL_PORT:-8443}"
       CARDINAL_WEBAUTHN_ORIGINS: "https://id.cardinal.test:${CARDINAL_PORT:-8443}"
       CARDINAL_X509_PUBLIC_URL: "https://id.cardinal.test:${CARDINAL_PORT:-8443}"
+
+      # Cardinal makes outbound TLS calls now: a Shared Signals stream endpoint
+      # must be https, so the transmitter dials one. A container inherits
+      # nothing from the host's trust store, and this is the same work every
+      # workload needs against an internal CA rather than a stack quirk.
+      SSL_CERT_FILE: /etc/ssl/local-ca.pem
+    volumes:
+      - ./cardinal.e2e.toml:/etc/cardinal/cardinal.toml:ro
+      - ./traefik/tls/local-ca.pem:/etc/ssl/local-ca.pem:ro
     healthcheck:
       test: ["CMD", "/usr/local/bin/cardinal", "audit", "verify",
              "-dsn", "postgres://cardinal:cardinal@postgres:5432/cardinal?sslmode=disable"]
@@ -96,9 +103,11 @@ services:
           - id.cardinal.test
           - app.cardinal.test
           - client.cardinal.test
+          - events.cardinal.test
     depends_on:
       - cardinal
       - protected-app
+      - ssf-receiver
     command:
       # A directory rather than a filename, so an edit that replaces the file
       # is picked up. See the volume below for why that is not a nicety.
@@ -185,6 +194,33 @@ services:
       #
       # It is a public root certificate. The directory is gitignored anyway,
       # because the leaf's private key lives beside it.
+      - ./traefik/tls/local-ca.pem:/etc/ssl/local-ca.pem:ro
+    expose:
+      - "8000"
+
+  # A Shared Signals receiver, which is deliberately not Cardinal.
+  #
+  # Everything else in this stack proves Cardinal agrees with itself. This
+  # fetches the JWKS like any receiver would, verifies signatures against it,
+  # and records what arrived — so "a revocation reaches the applications" is a
+  # claim something external checked.
+  ssf-receiver:
+    build:
+      context: ..
+      dockerfile: examples/ssf-receiver/Dockerfile
+    depends_on:
+      cardinal:
+        condition: service_started
+    environment:
+      CARDINAL_ISSUER: "https://id.cardinal.test:${CARDINAL_PORT:-8443}"
+      CARDINAL_JWKS: "https://id.cardinal.test:${CARDINAL_PORT:-8443}/oidc/keys"
+      # The audience it will accept, written by `make e2e-seed` alongside the
+      # relying party's. A receiver that accepted any audience could not tell a
+      # token meant for it from one replayed from elsewhere.
+      CARDINAL_CLIENT_ID: "${OIDC_CLIENT_ID:-}"
+      LISTEN: "0.0.0.0:8000"
+      SSL_CERT_FILE: /etc/ssl/local-ca.pem
+    volumes:
       - ./traefik/tls/local-ca.pem:/etc/ssl/local-ca.pem:ro
     expose:
       - "8000"

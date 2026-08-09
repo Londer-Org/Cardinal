@@ -251,7 +251,7 @@ hosts-line: ## Print only the /etc/hosts entry, for scripting
 	@# Its own target so a caller can pipe it. `make hosts | head -1` gives make
 	@# a broken pipe and a non-zero exit, which in CI is a failed step reporting
 	@# nothing useful.
-	@echo '127.0.0.1  id.cardinal.test app.cardinal.test client.cardinal.test open.cardinal.test'
+	@echo '127.0.0.1  id.cardinal.test app.cardinal.test client.cardinal.test open.cardinal.test events.cardinal.test'
 
 .PHONY: hosts
 hosts: ## Print the /etc/hosts line the example stack needs, and what to do with it
@@ -303,12 +303,22 @@ e2e-up: e2e-check ## Build and start the end-to-end stack (Traefik + a protected
 	@# installed. Generated rather than committed: it is a certificate for a
 	@# domain anybody can claim on their own machine, and committing a private
 	@# key is a bad habit even when the key is worthless.
+	@# Regenerated when it does not cover every name the stack serves. Traefik
+	@# answers with its own self-signed default for a host the certificate omits,
+	@# and the failure names an internal Traefik hostname rather than the missing
+	@# one — which is a genuinely confusing half hour.
+	@if [ -f examples/traefik/tls/cardinal.test.crt ] && \
+	    ! openssl x509 -in examples/traefik/tls/cardinal.test.crt -noout -text 2>/dev/null \
+	      | grep -q events.cardinal.test; then \
+		rm -f examples/traefik/tls/cardinal.test.crt examples/traefik/tls/cardinal.test.key; \
+		echo "  the TLS certificate predates events.cardinal.test — reissuing"; \
+	fi
 	@if [ ! -f examples/traefik/tls/cardinal.test.crt ]; then \
 		mkdir -p examples/traefik/tls; \
 		(cd examples/traefik/tls && mkcert \
 			-cert-file cardinal.test.crt -key-file cardinal.test.key \
 			id.cardinal.test app.cardinal.test client.cardinal.test \
-			open.cardinal.test cardinal.test) 2>/dev/null; \
+			open.cardinal.test events.cardinal.test cardinal.test) 2>/dev/null; \
 		echo "  issued a TLS certificate for *.cardinal.test"; \
 	fi
 	@# The root, for workloads inside the network. A container inherits nothing
@@ -394,6 +404,24 @@ e2e-seed: ## Create the end-to-end user and activate the policy set
 		cardinal grant staff-apps protected-app 2>&1 \
 		| grep -qE 'granted|already' \
 		|| { echo 'ERROR: could not put protected-app in staff-apps'; exit 1; }
+	@# The Shared Signals receiver, which is deliberately not Cardinal: it
+	@# fetches the JWKS like any receiver would and verifies what arrives. The
+	@# stream is configured here because stream management over the API is not
+	@# implemented, and the SSF configuration document says so.
+	@# Registered as a relying party rather than created as a bare application:
+	@# a stream's audience is an OIDC client id, so the receiver needs one. Its
+	@# redirect URI is never used — nobody signs in to a receiver.
+	@$(COMPOSE_E2E) exec -T cardinal \
+		cardinal app register ssf-receiver \
+		-redirect https://events.cardinal.test/unused 2>&1 \
+		| grep -qE 'client_id|already exists' \
+		|| { echo 'ERROR: could not register the receiver'; \
+		     $(COMPOSE_E2E) exec -T cardinal cardinal app register ssf-receiver \
+		       -redirect https://events.cardinal.test/unused; exit 1; }
+	@$(COMPOSE_E2E) exec -T cardinal \
+		cardinal ssf stream add ssf-receiver \
+		-endpoint https://events.cardinal.test:$(CARDINAL_PORT)/events >/dev/null 2>&1 \
+		|| { echo 'ERROR: could not configure the signals stream'; exit 1; }
 	@# An authority key, so host certificates can be issued. -activate because
 	@# nothing in the stack trusts an older key: the careful two-step ordering
 	@# exists for a fleet that already has one, and there is no fleet here.

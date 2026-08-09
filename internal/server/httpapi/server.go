@@ -21,6 +21,7 @@ import (
 	"go.londer.be/cardinal/internal/server/mail"
 	"go.londer.be/cardinal/internal/server/oidcprovider"
 	"go.londer.be/cardinal/internal/server/policy"
+	"go.londer.be/cardinal/internal/server/ssf"
 	"go.londer.be/cardinal/internal/store"
 	"go.londer.be/cardinal/internal/version"
 )
@@ -50,6 +51,11 @@ type Server struct {
 	// for no reason, so it stays off until asked for.
 	sshCA    *sshca.CA
 	notifier *mail.Notifier
+
+	// signals tells applications when access changes. Nil leaves the
+	// transmitter off, which is what a deployment with no receivers configured
+	// gets — and the server behaves identically without it.
+	signals *ssf.Notifier
 
 	// x509CA is nil unless X.509 issuance is configured. Optional in exactly
 	// the same way and for the same reason: a deployment that already has a CA
@@ -158,6 +164,9 @@ type Options struct {
 	// notifications off, which is what a deployment with no relay configured
 	// gets, and the server works identically without it.
 	Notifier *mail.Notifier
+
+	// Signals transmits security events to applications. Nil leaves it off.
+	Signals *ssf.Notifier
 }
 
 // New builds a Server and wires its routes.
@@ -190,6 +199,7 @@ func New(s *store.Store, a *auth.Service, cfg *config.Config, opts Options) (*Se
 		oidc:          opts.OIDC,
 		sshCA:         opts.SSHCA,
 		notifier:      opts.Notifier,
+		signals:       opts.Signals,
 		x509CA:        opts.X509CA,
 	}
 	return srv, nil
@@ -523,6 +533,10 @@ func (s *Server) Handler() http.Handler {
 	// Composing rules. The same tier as activating a version, and for the same
 	// reason: a rule decides who may reach what, including who may compose the
 	// next one.
+	// The Shared Signals configuration document, unauthenticated like the OIDC
+	// one beside it: a receiver reads it before it holds any credential.
+	mux.HandleFunc("GET /.well-known/ssf-configuration", s.handleSSFConfiguration)
+
 	// ── SCIM 2.0 ────────────────────────────────────────────────────────────
 	//
 	// Its own path prefix rather than /api, because identity providers are

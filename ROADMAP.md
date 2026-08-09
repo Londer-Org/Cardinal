@@ -85,7 +85,7 @@ Honest, and referenced from [the threat model](docs/threat-model.md) and
 | No security audit | Nobody outside this project has looked at the cryptography, the session handling or the policy evaluation | before 1.0 |
 | PostgreSQL 19 is not GA | The temporal model uses `FOR PORTION OF`, which is 19-only, and beta behaviour has already changed once between betas | blocks production |
 | No SCIM client | Cardinal receives provisioning but does not push it outward; downstream applications are still provisioned by hand | 5 |
-| No SSF/CAEP | A revocation here does not propagate to applications; they learn at their next token refresh | 5 |
+| SSF has no poll delivery and no stream management API | Cardinal pushes (RFC 8935) to streams an administrator configures. A receiver that expects to poll, or to create its own stream, cannot — the configuration document says so rather than leaving it to be discovered | 5 |
 | Single writer | PostgreSQL streaming replication with manual promotion. Deliberate — split-brain in an identity store means two primaries accepting credential writes | revisit with a team on call |
 | No automated failover | Same reason. A misconfigured automatic failover is more dangerous than none | revisit |
 | No N-1 compatibility test | Nothing runs the previous release against a schema migrated by the current one. The expand-only rule is what makes it safe, and the rule is enforced per migration — the pairing is checked by reading | when there are two releases |

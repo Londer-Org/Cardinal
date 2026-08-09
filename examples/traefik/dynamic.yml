@@ -71,6 +71,15 @@ http:
           X-Cardinal-Policy: ""
 
   routers:
+    # The Shared Signals receiver. Reachable over https because a stream
+    # endpoint must be — Cardinal refuses a plain-http one, and a receiver
+    # accepting security events over cleartext is a receiver anybody can feed.
+    ssf-receiver:
+      rule: "Host(`events.cardinal.test`)"
+      service: ssf-receiver
+      entryPoints: [websecure]
+      tls: {}
+
     # Everything is TLS now, and that is not a nicety.
     #
     # WebAuthn needs a secure context, and the only http origins browsers treat
@@ -127,6 +136,11 @@ http:
       middlewares: [https-redirect]
 
   services:
+    ssf-receiver:
+      loadBalancer:
+        servers:
+          - url: "http://ssf-receiver:8000"
+
     cardinal:
       loadBalancer:
         servers:
