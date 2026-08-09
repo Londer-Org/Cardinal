@@ -18,6 +18,24 @@ import (
 // device-bound credential — a session minted from one could not register the
 // passkey the whole exercise exists to register.
 
+// clearRecoveryRateLimit lets these tests run twice in fifteen minutes.
+//
+// Redemption is limited to five attempts per client address per fifteen
+// minutes, which is the right bound for an endpoint that accepts a printed
+// string — but every test here arrives from the same address, and between them
+// they make almost exactly five attempts. So the suite passed once and then
+// returned 429 for the rest of the window, which reads as a broken recovery
+// path rather than as a limiter doing its job.
+//
+// Clearing the scope rather than raising the limit: the limit is a security
+// control that production depends on, and a test that needs it weakened is a
+// test asking for the wrong thing. This resets the window instead, which is
+// what a fifteen-minute wait would do.
+func clearRecoveryRateLimit(t *testing.T) {
+	t.Helper()
+	seedSQL(t, "DELETE FROM rate_limits WHERE scope = 'recovery'")
+}
+
 // generateCodes gives the seeded account a fresh set and returns them.
 func generateCodes(t *testing.T) []string {
 	t.Helper()
@@ -53,6 +71,8 @@ func freshenSession(t *testing.T) {
 
 // TestARecoveryCodeGetsYouBackIn.
 func TestARecoveryCodeGetsYouBackIn(t *testing.T) {
+	clearRecoveryRateLimit(t)
+
 	codes := generateCodes(t)
 
 	var enrollment struct {
@@ -84,6 +104,8 @@ func TestARecoveryCodeGetsYouBackIn(t *testing.T) {
 
 // TestARecoveryCodeWorksOnce.
 func TestARecoveryCodeWorksOnce(t *testing.T) {
+	clearRecoveryRateLimit(t)
+
 	codes := generateCodes(t)
 
 	anon := client(t)
@@ -111,6 +133,8 @@ func TestARecoveryCodeWorksOnce(t *testing.T) {
 // bounds how fast, and the answer being identical is what makes the question
 // pointless.
 func TestRedeemingDoesNotSayWhoExists(t *testing.T) {
+	clearRecoveryRateLimit(t)
+
 	cases := []struct{ name, login, code string }{
 		{"real account, wrong code", "e2e-user", "AAAAA-BBBBB-CCCCC"},
 		{"no such account", "nobody-by-that-name", "AAAAA-BBBBB-CCCCC"},
