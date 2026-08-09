@@ -222,9 +222,8 @@ release binary would have carried no version at all, indefinitely, because
 nothing anywhere asked a binary what it was. `cardinal version`, `/api/health`
 and the console's sidebar all report it now.
 
-`make bump` refuses on a dirty tree, and builds the documentation site before
-snapshotting it — a snapshot freezes whatever the docs say at that moment, so a
-broken link committed there is broken in that version forever.
+`make bump` refuses on a dirty tree, so a bump commit cannot sweep up unrelated
+changes and put them in a release nobody reviewed.
 
 ### Documentation
 
@@ -239,9 +238,11 @@ broken link committed there is broken in that version forever.
 | [adr/](docs/adr/) | Why things are the way they are |
 | [ROADMAP.md](ROADMAP.md) | What works, what does not, and what is deliberately not being built |
 
-The published site is at <https://londer-org.github.io/Cardinal/>, built from
-this same `docs/` directory with a version picker — the sources are not copied
-into `website/`, because a second copy is the one that goes stale.
+`docs/` is the documentation. It is read in a checkout and on GitHub, and a
+presentation site is being built separately in
+[cardinal-website](https://github.com/Londer-Org/cardinal-website) — which will
+render these same files rather than hold a copy of them, because a second copy
+is the one that goes stale.
 
 The development tools have their own notes: [tools/uishot/](tools/uishot/) covers
 the screenshot and contrast checker, including the two bugs that once had it

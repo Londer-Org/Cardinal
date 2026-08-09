@@ -25,8 +25,13 @@ access.
 | **5 — Consolidation** | Usable by somebody who is not the author | in progress |
 
 Phase 5 is SCIM, SSF/CAEP events, an audit explorer with point-in-time queries,
-a documentation site, hardening and coverage work, and a stated API-stability
-policy for 1.0. The documentation site is built; the audit explorer is built.
+a presentation and documentation site, hardening and coverage work, and a stated
+API-stability policy for 1.0. The audit explorer is built. The site moved out of
+this repository: a Docusaurus build on GitHub Pages lived in `website/` and is
+gone, replaced by
+[cardinal-website](https://github.com/Londer-Org/cardinal-website), which is
+presentation as well as documentation and has no reason to be versioned
+alongside the server.
 
 Two of the three things that audit found have been built: redeeming a recovery
 code, and `cardinal ssh`. What remains from that list is deciding what

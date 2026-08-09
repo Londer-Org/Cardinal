@@ -194,14 +194,6 @@ release: ui build ## Build the UI and a binary containing it
 serve: build ## Run the server in development mode
 	./bin/cardinal serve -config cardinal.toml -dev
 
-.PHONY: docs
-docs: ## Serve the documentation site locally
-	@cd website && npm install --silent && npm start
-
-.PHONY: docs-build
-docs-build: ## Build the documentation site, failing on any broken link
-	@cd website && npm ci --silent && npm run build
-
 .PHONY: version
 version: ## Print the version this tree builds
 	@echo $(VERSION)
@@ -246,21 +238,8 @@ bump:
 	esac; \
 	next="$$major.$$minor.$$patch"; \
 	echo "$$next" > VERSION; \
-	echo "  checking the documentation builds"; \
 	$(MAKE) --no-print-directory version-file VERSION=$$next; \
-	$(MAKE) --no-print-directory docs-build >/dev/null \
-		|| { echo; echo '  the documentation site does not build.'; \
-		     echo '  Run `make docs-build` to see why.'; \
-		     echo; \
-		     echo '  Checked before the snapshot rather than after, because a'; \
-		     echo '  snapshot freezes whatever the docs say at this moment — a'; \
-		     echo '  broken link committed here is broken in this version'; \
-		     echo '  forever, and every later build of the site fails on it.'; \
-		     git checkout -- VERSION; exit 1; }; \
-	echo "  snapshotting the docs as $$current"; \
-	(cd website && npm run docs:version -- "$$current" >/dev/null); \
-	git add VERSION internal/version/version.go website/versioned_docs \
-		website/versioned_sidebars website/versions.json; \
+	git add VERSION internal/version/version.go; \
 	git commit -q -m "Release $$next"; \
 	git tag -a "v$$next" -m "v$$next"; \
 	echo; \
