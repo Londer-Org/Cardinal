@@ -11,7 +11,9 @@
 package main
 
 import (
+	"bytes"
 	"context"
+	"flag"
 	"fmt"
 	"io"
 	"os"
@@ -111,7 +113,23 @@ func main() {
 	}
 }
 
+// docPath is where the generated document lives, relative to the repository
+// root. The tool is run from there, by `make schema`.
+const docPath = "docs/schema.md"
+
 func run() error {
+	// check renders and compares instead of writing.
+	//
+	// It exists because the document was three migrations stale before anybody
+	// noticed — missing the Shared Signals tables, SCIM's external_id and token
+	// scopes — and the thing that noticed was a person regenerating it for an
+	// unrelated reason. The header of the document warns that a schema document
+	// maintained separately from the schema is worse than absent because
+	// someone believes it. Nothing enforced that, so it happened.
+	check := flag.Bool("check", false,
+		"exit non-zero if "+docPath+" differs from the database, instead of rewriting it")
+	flag.Parse()
+
 	dsn := os.Getenv("CARDINAL_DSN")
 	if dsn == "" {
 		// The development database, whose password is "cardinal" and is in the
@@ -133,25 +151,77 @@ func run() error {
 		return err
 	}
 
-	file, err := os.Create("docs/schema.md")
-	if err != nil {
-		return err
-	}
-
-	out := &doc{w: file}
+	// Rendered into memory first, so writing and checking share one renderer.
+	// Two paths that each produce "the document" would eventually disagree,
+	// and that disagreement would be a check passing against a file nobody
+	// could regenerate.
+	var rendered bytes.Buffer
+	out := &doc{w: &rendered}
 	write(out, tables)
 	if out.err != nil {
-		// Reported before Close, because this is the error that says which
-		// write failed; Close would only report that the file was already bad.
-		return fmt.Errorf("writing docs/schema.md: %w", out.err)
+		return fmt.Errorf("rendering %s: %w", docPath, out.err)
 	}
 
-	// Closed explicitly, and its error returned: this writes a file, so a
-	// failure to flush is the difference between a document and half of one.
-	if err := file.Close(); err != nil {
-		return fmt.Errorf("writing docs/schema.md: %w", err)
+	if *check {
+		return compare(rendered.Bytes())
+	}
+
+	// Written whole rather than streamed: a failure part-way through is the
+	// difference between a document and half of one.
+	if err := os.WriteFile(docPath, rendered.Bytes(), 0o644); err != nil { //nolint:gosec // a generated document that is committed and read by everybody
+		return fmt.Errorf("writing %s: %w", docPath, err)
 	}
 	return nil
+}
+
+// compare reports whether the committed document still matches the database.
+//
+// It names the first line that differs rather than printing a diff. The
+// document is thousands of lines of generated Mermaid and tables, a full diff
+// in CI output is something people scroll past, and the action it supports is
+// the same either way.
+func compare(want []byte) error {
+	have, err := os.ReadFile(docPath)
+	if err != nil {
+		return fmt.Errorf("reading %s: %w", docPath, err)
+	}
+	if bytes.Equal(have, want) {
+		return nil
+	}
+
+	haveLines := strings.Split(string(have), "\n")
+	wantLines := strings.Split(string(want), "\n")
+
+	line, detail := 0, "one document is longer than the other"
+	for i := range max(len(haveLines), len(wantLines)) {
+		var h, w string
+		if i < len(haveLines) {
+			h = haveLines[i]
+		}
+		if i < len(wantLines) {
+			w = wantLines[i]
+		}
+		if h != w {
+			line = i + 1
+			detail = fmt.Sprintf("committed: %s\n  database:  %s", clip(h), clip(w))
+			break
+		}
+	}
+
+	return fmt.Errorf(
+		"%s is out of date, from line %d:\n  %s\n\n"+
+			"  Run `make schema` against a database with every migration applied.\n"+
+			"  The document is generated — editing it by hand is how it gets here",
+		docPath, line, detail)
+}
+
+// clip keeps a reported line short enough to read in CI output.
+func clip(s string) string {
+	const limit = 100
+	if len(s) <= limit {
+		return s
+	}
+	return s[:limit] + "…"
 }
 
 // readTables asks the database what it actually contains.

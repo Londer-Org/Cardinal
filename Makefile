@@ -83,6 +83,11 @@ schema: ## Regenerate docs/schema.md from the running database
 	@go run ./tools/schemadoc
 	@echo "==> docs/schema.md regenerated from the live schema"
 
+.PHONY: schema-check
+schema-check: ## Fail if docs/schema.md no longer matches the database
+	@go run ./tools/schemadoc -check
+	@echo "==> docs/schema.md matches the live schema"
+
 .PHONY: package
 package: ## Build .deb and .rpm for cardinal-agent (a snapshot, unsigned)
 	@# --snapshot because there is no tag: this is for looking at and for
