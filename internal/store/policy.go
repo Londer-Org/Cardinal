@@ -158,6 +158,19 @@ type DecisionRecord struct {
 // because a log write failed would turn an observability outage into an
 // availability one.
 func (s *Store) LogDecision(ctx context.Context, d DecisionRecord) error {
+	// Both columns are NOT NULL, and a nil slice reaches PostgreSQL as NULL
+	// rather than as an empty array. Normalised here rather than at each call
+	// site because the two are indistinguishable in Go and the difference only
+	// appears as a failed insert — which, for a log that must never fail a
+	// request, means the decision is simply lost. That is precisely what
+	// happened to the one caller that had no policy to name.
+	if d.Reasons == nil {
+		d.Reasons = []string{}
+	}
+	if d.Errors == nil {
+		d.Errors = []string{}
+	}
+
 	_, err := s.pool.Exec(ctx, `
 		INSERT INTO decisions (decision_point, principal_id, action, resource,
 		                       allowed, reasons, errors, policy_version,
