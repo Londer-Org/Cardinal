@@ -57,6 +57,10 @@ func (t Type) String() string { return string(t) }
 // problems later, and loosening a rule is far easier than tightening one.
 var namePattern = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]{0,62}$`)
 
+// allDigits catches names a POSIX tool would read as a user id. See the case in
+// ValidateName that uses it for what was measured.
+var allDigits = regexp.MustCompile(`^[0-9]+$`)
+
 // Entity is a principal or resource. Its ID is the only true identifier.
 type Entity struct {
 	// ID is immutable for the entity's entire existence and is never reused,
@@ -136,6 +140,18 @@ func ValidateName(name string) error {
 			"%w: %q must start with a letter or digit and contain only "+
 				"lowercase letters, digits, dot, underscore or hyphen",
 			ErrInvalidName, name)
+	case allDigits.MatchString(name):
+		// A name made only of digits is ambiguous with a uid to the tools that
+		// consume it. Measured on Debian trixie with glibc 2.42: `getent passwd
+		// 0` prints root's entry, and shadow mode runs exactly that command with
+		// an entity's name — so an entity called "0" would be compared against
+		// root, and the numbers offered for adoption would be root's.
+		//
+		// useradd refuses these for the same reason. Cheaper to refuse the name
+		// than to make every consumer disambiguate.
+		return fmt.Errorf(
+			"%w: %q is only digits, which POSIX tools read as a user id rather "+
+				"than a name", ErrInvalidName, name)
 	}
 	return nil
 }
