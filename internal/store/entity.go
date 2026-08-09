@@ -17,6 +17,58 @@ const entityColumns = `id, type, name, coalesce(display_name, ''), attrs,
                        system, owner_id,
                        created_at, updated_at, disabled_at, redacted_at`
 
+// PolicyReferenceExists reports whether an entity a policy names is there.
+//
+// The signature is deliberately plain strings: internal/server/policy cannot
+// import this package without a cycle, so it defines the question and this
+// answers it.
+//
+// A disabled entity counts as existing. Disabling a group is not the same
+// mistake as never creating one — the rule still resolves, membership still
+// resolves through it, and reporting it as missing would bury the case this
+// check exists to find under one that is deliberate.
+func (s *Store) PolicyReferenceExists(ctx context.Context, kind, identifier string) (bool, error) {
+	column := "id"
+	var value any
+
+	switch kind {
+	case "application":
+		// Named by directory name, which is what the OIDC and forwardAuth
+		// decision points put in the request. Deliberate, and stated in the
+		// policy file: policy has to be readable by whoever maintains it.
+		column, value = "name", identifier
+
+	case "group", "host", "user":
+		// Named by immutable UUID, because names are mutable (ADR 0002).
+		//
+		// A non-UUID here is not a lookup to attempt by name — it is a rule that
+		// can never match whatever the directory contains, because the decision
+		// points build these identifiers from the entity's id. Reporting it as
+		// absent is therefore correct rather than a near miss, and it catches
+		// the likelier authoring mistake: writing the group's name where its
+		// identifier belongs, which produces a rule that looks obviously right
+		// and never fires.
+		id, err := uuid.Parse(identifier)
+		if err != nil {
+			//nolint:nilerr // not a lookup failure: an identifier that is not a UUID cannot name one of these, so "absent" is the answer rather than an error
+			return false, nil
+		}
+		value = id
+
+	default:
+		return false, fmt.Errorf("store: %q is not an entity type policy can name", kind)
+	}
+
+	var found bool
+	err := s.pool.QueryRow(ctx,
+		`SELECT EXISTS (SELECT 1 FROM entities WHERE `+column+` = $1 AND type = $2)`,
+		value, kind).Scan(&found)
+	if err != nil {
+		return false, fmt.Errorf("store: checking for %s %q: %w", kind, identifier, err)
+	}
+	return found, nil
+}
+
 // CreateEntity persists a new entity and its audit event atomically.
 //
 // actorID is who is performing the creation. It is a pointer because

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -134,6 +135,57 @@ func applyMigrations(ctx context.Context, dsn string) error {
 		}
 	}
 	return nil
+}
+
+// freshInstall returns a Store against a database that has only ever had
+// migrations run against it.
+//
+// Distinct from newStore, and the distinction is the point: newStore truncates
+// every table, which also removes the groups migrations create — so a test
+// asking "what does a new deployment look like?" would be answered by a
+// deployment whose built-in groups had been deleted. That is not a state any
+// installation can be in, and it is precisely the state in which a rule naming
+// a built-in group looks broken.
+//
+// A separate database on the same server rather than a second container: the
+// cost is one CREATE DATABASE, and the alternative is either an unrepresentable
+// fixture or ninety seconds of PostgreSQL startup.
+func freshInstall(t *testing.T) *store.Store {
+	t.Helper()
+	ctx := t.Context()
+
+	name := "fresh_" + strings.ReplaceAll(uuid.New().String()[:8], "-", "")
+
+	admin, err := pgx.Connect(ctx, sharedDSN)
+	require.NoError(t, err)
+	_, err = admin.Exec(ctx, "CREATE DATABASE "+pgx.Identifier{name}.Sanitize())
+	require.NoError(t, err)
+	require.NoError(t, admin.Close(ctx))
+
+	u, err := url.Parse(sharedDSN)
+	require.NoError(t, err)
+	u.Path = "/" + name
+	dsn := u.String()
+
+	require.NoError(t, applyMigrations(ctx, dsn))
+
+	s, err := store.Open(ctx, dsn)
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		s.Close()
+		// Dropped on a connection to the original database, since the one being
+		// dropped cannot be the one connected to it.
+		cleanup, connErr := pgx.Connect(context.WithoutCancel(ctx), sharedDSN)
+		if connErr != nil {
+			return
+		}
+		//nolint:errcheck // a scratch database left behind dies with the container
+		defer cleanup.Close(context.WithoutCancel(ctx))
+		//nolint:errcheck // as above: the drop is tidiness, and its failure must not fail a passing test
+		cleanup.Exec(context.WithoutCancel(ctx),
+			"DROP DATABASE IF EXISTS "+pgx.Identifier{name}.Sanitize()+" WITH (FORCE)")
+	})
+	return s
 }
 
 // newStore returns a Store against a clean database.

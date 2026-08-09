@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -9,6 +10,7 @@ import (
 	"net/http"
 	"strings"
 	"sync/atomic"
+	"time"
 
 	"go.londer.be/cardinal/internal/ca/sshca"
 	"go.londer.be/cardinal/internal/ca/x509ca"
@@ -68,7 +70,11 @@ type Server struct {
 }
 
 // ReloadPolicy swaps in a new policy version.
-func (s *Server) ReloadPolicy(engine *policy.Engine) {
+//
+// The context is only for the diagnostics below — the swap itself is a pointer
+// store and cannot fail. A caller passing a request context that is cancelled
+// therefore loses a warning and nothing else.
+func (s *Server) ReloadPolicy(ctx context.Context, engine *policy.Engine) {
 	s.policy.Store(engine)
 	if engine != nil {
 		s.log.Info("policy set loaded",
@@ -89,6 +95,44 @@ func (s *Server) ReloadPolicy(engine *policy.Engine) {
 				"policies/cardinal.cedar if this deployment was upgraded",
 				"actions", missing, "version", engine.Version())
 		}
+
+		s.reportDanglingReferences(ctx, engine)
+	}
+}
+
+// reportDanglingReferences names the rules that can never match.
+//
+// The sibling of the check above and the harder of the two to notice. An action
+// no rule mentions produces a refusal somebody eventually reports; a rule naming
+// a group that does not exist produces a refusal that looks *correct* — the
+// person is not in the group, because the group is not there.
+//
+// Checked on every load rather than only at publication, because the reference
+// can go missing long after the policy did not change: deleting a group is what
+// silently removes whatever the rule naming it was granting, and nothing about
+// that moment involves the policy set.
+//
+// A warning, never a refusal. A deployment running a trimmed policy set with
+// rules for groups it has not made yet is doing something legitimate, and a
+// server that would not start because of it turns a lint into an outage.
+func (s *Server) reportDanglingReferences(ctx context.Context, engine *policy.Engine) {
+	// Bounded: this is a diagnostic, and a slow database must not hold up a
+	// policy swap that the rest of the fleet has already made.
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+
+	dangling, err := engine.Dangling(ctx, s.store.PolicyReferenceExists)
+	if err != nil {
+		s.log.WarnContext(ctx, "could not check what the policy set names", "error", err)
+		return
+	}
+	for _, ref := range dangling {
+		s.log.WarnContext(ctx,
+			"a policy rule names something the directory does not have, so the "+
+				"rule can never match — which looks like the rule working, "+
+				"because Cedar is default-deny",
+			"policy", ref.Policy, "names", ref.Kind, "identifier", ref.Identifier,
+			"version", engine.Version())
 	}
 }
 

@@ -183,7 +183,7 @@ func (s *Server) handleActivatePolicyVersion(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	s.ReloadPolicy(engine)
+	s.ReloadPolicy(ctx, engine)
 	s.log.WarnContext(ctx, "policy set activated from the console",
 		"version", version, "by", session.SubjectID)
 

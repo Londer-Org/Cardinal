@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"go.londer.be/cardinal/internal/server/policy"
+	"go.londer.be/cardinal/internal/store"
 )
 
 func runPolicy(ctx context.Context, args []string) error {
@@ -24,7 +25,7 @@ func runPolicy(ctx context.Context, args []string) error {
 	case "list":
 		return runPolicyList(ctx, args[1:])
 	case "test":
-		return runPolicyTest(args[1:])
+		return runPolicyTest(ctx, args[1:])
 	case "show":
 		return runPolicyShow(ctx, args[1:])
 	default:
@@ -32,19 +33,27 @@ func runPolicy(ctx context.Context, args []string) error {
 	}
 }
 
-// runPolicyTest compiles a policy file without touching the database.
+// runPolicyTest compiles a policy file, and checks what it names if it can.
 //
-// Deliberately offline so it can run in CI, in a pre-commit hook, or on a
-// laptop with no Cardinal to talk to. Catching a syntax error or a missing @id
-// before publication is the whole point.
-func runPolicyTest(args []string) error {
+// Compilation is deliberately offline so it runs in CI, in a pre-commit hook,
+// or on a laptop with no Cardinal to talk to. Catching a syntax error or a
+// missing @id before publication is the whole point.
+//
+// Whether the groups and applications a rule names actually exist is a question
+// only a directory can answer, so it needs -dsn. It is not run silently when
+// one is not given: a check that quietly did not happen is worse than one that
+// is missing, because the clean output reads as a clean bill of health.
+func runPolicyTest(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("policy test", flag.ContinueOnError)
+	dsnFlag := fs.String("dsn", "",
+		"PostgreSQL connection string; enables the check for groups and "+
+			"applications a rule names but that do not exist")
 	pos, err := parse(fs, args)
 	if err != nil {
 		return errUsage
 	}
 	if len(pos) != 1 {
-		return fmt.Errorf("%w: cardinal policy test <file.cedar>", errUsage)
+		return fmt.Errorf("%w: cardinal policy test <file.cedar> [-dsn <url>]", errUsage)
 	}
 
 	document, err := os.ReadFile(pos[0]) //nolint:gosec // operator-supplied path, by design
@@ -62,7 +71,53 @@ func runPolicyTest(args []string) error {
 	for _, name := range names {
 		fmt.Printf("  %s\n", name)
 	}
-	return nil
+
+	if *dsnFlag == "" {
+		fmt.Printf("\nnot checked: whether the groups and applications these rules " +
+			"name exist.\n  Pass -dsn to check. A rule naming a group that is not " +
+			"there never matches,\n  and Cedar being default-deny makes that look " +
+			"like the rule working.\n")
+		return nil
+	}
+
+	s, err := open(ctx, *dsnFlag)
+	if err != nil {
+		return err
+	}
+	defer s.Close()
+
+	dangling, err := engine.Dangling(ctx, s.PolicyReferenceExists)
+	if err != nil {
+		return err
+	}
+	if len(dangling) == 0 {
+		fmt.Printf("\nevery group and application these rules name exists\n")
+		return nil
+	}
+
+	// Reported on stderr and as a failure, because this is the one command
+	// whose entire job is to find this before it is published.
+	fmt.Fprintf(os.Stderr, "\n%s", policy.ExplainDangling(dangling))
+	return fmt.Errorf("%s names %d entities that do not exist", pos[0], len(dangling))
+}
+
+// warnDangling reports what a policy set names and the directory does not have.
+//
+// A warning rather than a refusal, on both publish and activate. Publishing a
+// rule for a group about to be created is legitimate, and activate is the
+// rollback path — the command somebody runs while something is on fire, which
+// is the worst possible moment to add a new way for it to fail. `cardinal policy
+// test -dsn` is the gate; these two are the reminder.
+func warnDangling(ctx context.Context, s *store.Store, engine *policy.Engine) {
+	dangling, err := engine.Dangling(ctx, s.PolicyReferenceExists)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "  could not check what this policy names: %v\n", err)
+		return
+	}
+	if len(dangling) == 0 {
+		return
+	}
+	fmt.Fprintf(os.Stderr, "\nwarning: %s", policy.ExplainDangling(dangling))
 }
 
 // policyReloadNotice matches watchPolicy's interval in serve.go.
@@ -110,6 +165,8 @@ func runPolicyPublish(ctx context.Context, args []string) error {
 
 	fmt.Printf("published version %d — %d policies\n", version.Version, len(engine.PolicyIDs()))
 	fmt.Printf("  digest %s\n", hex.EncodeToString(version.Digest))
+
+	warnDangling(ctx, s, engine)
 
 	if !*activate {
 		// Publish and activate are separate so a version can be inspected
@@ -165,10 +222,16 @@ func runPolicyActivate(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
-	if _, err := policy.NewEngine([]byte(stored.Document), stored.Version); err != nil {
+	engine, err := policy.NewEngine([]byte(stored.Document), stored.Version)
+	if err != nil {
 		return fmt.Errorf("version %d no longer compiles, so no server could "+
 			"enforce it: %w", version, err)
 	}
+
+	// Before activating, not after: rolling back to a version that names a
+	// group somebody has since deleted is a plausible way to reach for the
+	// rollback and find it did not restore what it looked like it would.
+	warnDangling(ctx, s, engine)
 
 	if err := s.ActivatePolicy(ctx, version, nil); err != nil {
 		return err

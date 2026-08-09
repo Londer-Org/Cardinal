@@ -202,7 +202,7 @@ func runServe(ctx context.Context, args []string) error {
 			// is better than serving with no rules.
 			return fmt.Errorf("loading active policy version %d: %w", version.Version, err)
 		}
-		apiServer.ReloadPolicy(engine)
+		apiServer.ReloadPolicy(ctx, engine)
 	}
 
 	srv := &http.Server{
@@ -333,7 +333,7 @@ func watchPolicy(ctx context.Context, st *store.Store, server *httpapi.Server, l
 					"version", active.Version, "error", err)
 				continue
 			}
-			server.ReloadPolicy(engine)
+			server.ReloadPolicy(ctx, engine)
 		}
 	}
 }
