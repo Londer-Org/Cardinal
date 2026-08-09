@@ -75,6 +75,47 @@ func TestRedactionErasesPersonalDataAndKeepsChainValid(t *testing.T) {
 	})
 }
 
+// TestRedactionRemovesTheAbilityToSignIn is the access half of erasure.
+//
+// Erasure used to clear the personal columns and stop there: disabled_at stayed
+// NULL and the passkeys stayed in the table. The WebAuthn login path admits any
+// entity whose disabled_at is NULL, so an account erased under Article 17 could
+// still be signed into with the credential it always had — a live session
+// belonging to a tombstone.
+//
+// A public key is also personal data on its own terms: it is a unique,
+// persistent identifier for a device somebody physically holds.
+func TestRedactionRemovesTheAbilityToSignIn(t *testing.T) {
+	s := newStore(t)
+	ctx := t.Context()
+
+	alice := mustCreate(t, s, directory.TypeUser, "alonfils")
+
+	_, err := s.Pool().Exec(ctx, `
+		INSERT INTO webauthn_credentials
+		       (entity_id, credential_id, public_key, aaguid, sign_count)
+		VALUES ($1, $2, $3, $4, 0)`,
+		alice.ID, []byte("credential-id"), []byte("public-key"), []byte{})
+	require.NoError(t, err)
+
+	creds, err := s.CredentialsFor(ctx, alice.ID)
+	require.NoError(t, err)
+	require.Len(t, creds, 1, "the passkey must exist first, or this proves nothing")
+
+	require.NoError(t, s.RedactEntity(ctx, alice.ID, nil))
+
+	creds, err = s.CredentialsFor(ctx, alice.ID)
+	require.NoError(t, err)
+	assert.Empty(t, creds, "an erased account keeps no credential to sign in with")
+
+	erased, err := s.GetEntity(ctx, alice.ID)
+	require.NoError(t, err)
+	assert.False(t, erased.Active(),
+		"erasure must disable the account: the login path gates on exactly this")
+	assert.True(t, erased.Redacted(),
+		"and the login path refuses a redacted entity as a second line")
+}
+
 // TestRedactionIsIrreversible: a reversible erasure is not an erasure.
 func TestRedactionIsIrreversible(t *testing.T) {
 	s := newStore(t)
@@ -87,9 +128,9 @@ func TestRedactionIsIrreversible(t *testing.T) {
 	require.ErrorIs(t, err, directory.ErrNotFound,
 		"a second redaction is a no-op, not a way to observe prior state")
 
-	redacted, err := s.Redacted(ctx, alice.ID)
+	entity, err := s.GetEntity(ctx, alice.ID)
 	require.NoError(t, err)
-	assert.True(t, redacted)
+	assert.True(t, entity.Redacted())
 }
 
 // TestRedactionRemovesSessions: sessions carry IP addresses and user agents —

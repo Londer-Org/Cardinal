@@ -2,7 +2,6 @@ package store
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
 	"github.com/google/uuid"
@@ -83,6 +82,28 @@ func (s *Store) RedactEntity(ctx context.Context, id uuid.UUID, actorID *uuid.UU
 			return fmt.Errorf("store: deleting sessions: %w", execErr)
 		}
 
+		// The passkeys, and the account's ability to be used at all.
+		//
+		// Erasure did neither of these until now, and the two omissions
+		// compounded: redaction never set disabled_at, the WebAuthn login path
+		// admits any entity whose disabled_at is NULL, and the credentials were
+		// left in place — so an account erased under Article 17 could still be
+		// signed into with the passkey it always had, producing a live session
+		// for a tombstoned entity.
+		//
+		// A public key is personal data in its own right (it is a unique,
+		// persistent identifier for a device somebody holds), so this belongs
+		// in the erasure regardless of the access it also removes.
+		if _, execErr := tx.Exec(ctx,
+			`DELETE FROM webauthn_credentials WHERE entity_id = $1`, id); execErr != nil {
+			return fmt.Errorf("store: deleting credentials: %w", execErr)
+		}
+		if _, execErr := tx.Exec(ctx, `
+			UPDATE entities SET disabled_at = now()
+			 WHERE id = $1 AND disabled_at IS NULL`, id); execErr != nil {
+			return fmt.Errorf("store: disabling the erased entity: %w", execErr)
+		}
+
 		// A home directory is /home/<login>, so it carries the name the
 		// tombstone above just erased. The uid stays: it is on every file this
 		// person ever created, and forgetting which erased account owned it
@@ -105,18 +126,4 @@ func (s *Store) RedactEntity(ctx context.Context, id uuid.UUID, actorID *uuid.UU
 		}
 		return s.AppendEvent(ctx, tx, ev)
 	})
-}
-
-// Redacted reports whether an entity's personal data has been erased.
-func (s *Store) Redacted(ctx context.Context, id uuid.UUID) (bool, error) {
-	var redacted bool
-	err := s.pool.QueryRow(ctx,
-		`SELECT redacted_at IS NOT NULL FROM entities WHERE id = $1`, id).Scan(&redacted)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return false, directory.ErrNotFound
-	}
-	if err != nil {
-		return false, fmt.Errorf("store: checking redaction: %w", err)
-	}
-	return redacted, nil
 }

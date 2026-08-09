@@ -137,6 +137,16 @@ func (s *Service) loadUser(ctx context.Context, entityID uuid.UUID) (*user, erro
 		return nil, fmt.Errorf("%w: account is disabled", ErrUnknownUser)
 	}
 
+	// Erasure disables the account and deletes its passkeys, so this is
+	// belt-and-braces — deliberately. Active() asks one question about one
+	// column, and every path that ends here has to get that column right; an
+	// erased entity that somehow kept a credential must not be able to sign in
+	// because a single UPDATE was missed. Entity.Redacted existed for this and
+	// was called from nowhere, which is how the gap lasted.
+	if e.Redacted() {
+		return nil, fmt.Errorf("%w: account has been erased", ErrUnknownUser)
+	}
+
 	stored, err := s.store.CredentialsFor(ctx, entityID)
 	if err != nil {
 		return nil, err
