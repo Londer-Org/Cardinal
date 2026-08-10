@@ -258,6 +258,28 @@ cardinal ssf stream add aura -endpoint https://aura.example.com/events
 cardinal ssf status
 ```
 
+A receiver that cannot be reached from Cardinal — behind NAT, on a laptop, in a
+CI job, or simply somewhere nobody will open an inbound path to a security
+event handler — collects instead of being pushed to:
+
+```sh
+cardinal ssf stream add aura -delivery poll
+cardinal ssf token aura            # shown once
+```
+
+```
+POST /ssf/poll
+Authorization: Bearer crd_pat_…
+{"maxEvents": 100, "ack": ["<jti of everything already processed>"]}
+```
+
+The response is `{"sets": {"<jti>": "<token>"}, "moreAvailable": false}`.
+Acknowledging is a separate act from receiving, so a receiver that crashes
+between the two is handed the same events again rather than losing them.
+
+The credential belongs to the application, not to whoever configured the
+stream, and it reads that receiver's events and nothing else.
+
 | Event | When |
 |---|---|
 | `session-revoked` | A session was revoked, or the account was disabled |
@@ -270,10 +292,10 @@ key distribution, and rotation is the one that already happens. Each token names
 one audience, so a receiver cannot replay it to another.
 
 `GET /.well-known/ssf-configuration` describes the transmitter, including what
-is not implemented: **push delivery only** (RFC 8935), and **streams are
-configured by a Cardinal administrator** rather than by the receiver over the
-API. A receiver that expects to poll or to create its own stream finds that out
-there rather than from a 404 mid-synchronisation.
+is not implemented. Both delivery methods are — push (RFC 8935) and poll
+(RFC 8936) — but **streams are configured by a Cardinal administrator** rather
+than by the receiver over the API. A receiver that expects to create its own
+stream finds that out there rather than from a 404 mid-synchronisation.
 
 Events are read from Cardinal's hash-chained journal rather than emitted by each
 handler. That is the reason `cardinal user disable` on the server reaches your

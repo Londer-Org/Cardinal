@@ -513,6 +513,17 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("POST /api/ssf/streams/{application}/{state}",
 		apps(s.handleSetSSFStreamEnabled))
 
+	// Poll delivery, RFC 8936. Outside /api and without a session: the caller
+	// is a receiver holding its own access token, not a person at a browser,
+	// and the path is the one advertised in the configuration document.
+	//
+	// Exempt from CSRF, in the closed list beside the other machine-spoken
+	// paths: it authenticates by Authorization header and carries no cookie,
+	// so there is no ambient authority for a browser to be tricked into
+	// replaying.
+	mux.Handle("POST /ssf/poll",
+		s.requireAuth(s.requireScope(ScopeEvents, http.HandlerFunc(s.handlePollEvents))))
+
 	mux.Handle("GET /api/policy",
 		s.requireAuth(s.requireScope(ScopePolicy, http.HandlerFunc(s.handlePolicy))))
 

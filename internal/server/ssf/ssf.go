@@ -114,9 +114,15 @@ func (t *Transmitter) setKey(key any) error {
 // is three tokens, each with its own audience, because a token a receiver can
 // replay to another receiver is a token that says nothing about who was meant
 // to have it.
-func (t Transmitter) Sign(e Event, audience string) (string, error) {
+//
+// The jti is returned as well as embedded. Poll delivery keys its response by
+// that value and acknowledges by it (RFC 8936), so the queue has to store it —
+// and returning the one that was signed is the only way the column and the
+// token cannot disagree. Reading it back out of the token would be a second
+// place the value is derived, which is where the two drift.
+func (t Transmitter) Sign(e Event, audience string) (string, uuid.UUID, error) {
 	if t.Key == nil {
-		return "", errors.New("ssf: no signing key, so nothing can be transmitted")
+		return "", uuid.Nil, errors.New("ssf: no signing key, so nothing can be transmitted")
 	}
 
 	at := e.At
@@ -146,11 +152,12 @@ func (t Transmitter) Sign(e Event, audience string) (string, error) {
 		detail["subject"] = subject
 	}
 
+	jti := uuid.New()
 	claims := map[string]any{
 		"iss": t.Issuer,
 		"aud": audience,
 		"iat": at.Unix(),
-		"jti": uuid.New().String(),
+		"jti": jti.String(),
 		"events": map[string]any{
 			e.Type: detail,
 		},
@@ -163,14 +170,14 @@ func (t Transmitter) Sign(e Event, audience string) (string, error) {
 			WithHeader(jose.HeaderKey("kid"), t.KeyID),
 	)
 	if err != nil {
-		return "", fmt.Errorf("ssf: building the signer: %w", err)
+		return "", uuid.Nil, fmt.Errorf("ssf: building the signer: %w", err)
 	}
 
 	token, err := jwt.Signed(signer).Claims(claims).Serialize()
 	if err != nil {
-		return "", fmt.Errorf("ssf: signing the event: %w", err)
+		return "", uuid.Nil, fmt.Errorf("ssf: signing the event: %w", err)
 	}
-	return token, nil
+	return token, jti, nil
 }
 
 // Configuration is the document a receiver fetches to learn what this
@@ -180,14 +187,22 @@ func (t Transmitter) Sign(e Event, audience string) (string, error) {
 // management over the API is not implemented — streams are configured by a
 // Cardinal administrator — and a receiver that expects to create its own finds
 // that out here rather than from a 404 while somebody is being deprovisioned.
+//
+// Both delivery methods are, so the list is now two entries rather than one,
+// and poll_endpoint says where to collect from.
 type Configuration struct {
 	Issuer                   string   `json:"issuer"`
 	JWKSURI                  string   `json:"jwks_uri"`
 	DeliveryMethodsSupported []string `json:"delivery_methods_supported"`
-	ConfigurationEndpoint    string   `json:"configuration_endpoint,omitempty"`
-	StatusEndpoint           string   `json:"status_endpoint,omitempty"`
-	SpecVersion              string   `json:"spec_version"`
-	CriticalSubjectMembers   []string `json:"critical_subject_members,omitempty"`
+
+	// PollEndpoint is where a poll stream's receiver collects. Named as the
+	// specification names it, so a receiver reading this document finds it
+	// where it looks.
+	PollEndpoint           string   `json:"poll_endpoint,omitempty"`
+	ConfigurationEndpoint  string   `json:"configuration_endpoint,omitempty"`
+	StatusEndpoint         string   `json:"status_endpoint,omitempty"`
+	SpecVersion            string   `json:"spec_version"`
+	CriticalSubjectMembers []string `json:"critical_subject_members,omitempty"`
 
 	// Note is not part of the specification and is here on purpose. A receiver
 	// author reading this document is exactly the person who needs to know
@@ -195,8 +210,14 @@ type Configuration struct {
 	Note string `json:"cardinal_note"`
 }
 
-// DeliveryPush is RFC 8935.
-const DeliveryPush = "https://schemas.openid.net/secevent/risc/delivery-method/push"
+// The delivery methods, as the specification names them.
+const (
+	// DeliveryPush is RFC 8935: Cardinal POSTs each token to the receiver.
+	DeliveryPush = "https://schemas.openid.net/secevent/risc/delivery-method/push"
+
+	// DeliveryPoll is RFC 8936: the receiver connects and collects.
+	DeliveryPoll = "https://schemas.openid.net/secevent/risc/delivery-method/poll"
+)
 
 // MarshalIndent renders the configuration document.
 func (c Configuration) MarshalIndent() ([]byte, error) {

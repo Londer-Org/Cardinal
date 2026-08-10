@@ -596,7 +596,11 @@ export const ssfStreamSchema = z.object({
   // debugging a rejected token is looking for.
   application: z.string(),
   clientId: z.string(),
+  // Empty for a poll stream: nothing is sent to it, so there is nowhere to
+  // send. `delivery` is what tells that apart from a stream misconfigured with
+  // no endpoint at all.
   endpoint: z.string(),
+  delivery: z.enum(['push', 'poll']),
   events: z.array(z.string()),
   enabled: z.boolean(),
   createdAt: z.string(),

@@ -60,12 +60,22 @@ const (
 	// credential too. Both must be true — this scope, and policy permitting
 	// Provision (ADR 0031).
 	ScopeSCIM = "scim"
+
+	// ScopeEvents collects the security events queued for a receiver.
+	//
+	// The only scope whose holder is normally an application rather than a
+	// person: a poll stream (RFC 8936) has the receiver connect to Cardinal, so
+	// the receiver needs a credential of its own. It reads nothing but the
+	// events already addressed to it — each one a token signed for its audience
+	// and already destined for its stream — so this widens nothing that push
+	// delivery did not already send unasked.
+	ScopeEvents = "events"
 )
 
 // AllScopes is the closed vocabulary, in the order a listing should show it.
 var AllScopes = []string{
 	ScopeIdentity, ScopeApplications, ScopeProfile, ScopeDecisions, ScopePolicy,
-	ScopeSCIM,
+	ScopeSCIM, ScopeEvents,
 }
 
 // ValidScope reports whether a name is one Cardinal knows.
@@ -102,10 +112,24 @@ func (s *Server) requireScope(scope string, next http.Handler) http.Handler {
 			writeError(w, http.StatusForbidden,
 				"this access token was not issued with the "+scope+" scope. "+
 					"Scopes cannot be changed on an existing token — issue a new "+
-					"one with `cardinal token create <login> -scope "+scope+"`")
+					"one with `"+issueCommandFor(scope)+"`")
 			return
 		}
 
 		next.ServeHTTP(w, r)
 	})
+}
+
+// issueCommandFor is the command that produces a token carrying this scope.
+//
+// Not one sentence with the scope substituted in, because for one scope that
+// sentence is wrong. `events` belongs to a receiver rather than a person, and
+// `cardinal token create <login> -scope events` takes a login — so the generic
+// advice told whoever hit this to run a command that cannot be run, for a
+// principal that is not a person. Observed against the running stack.
+func issueCommandFor(scope string) string {
+	if scope == ScopeEvents {
+		return "cardinal ssf token <application>"
+	}
+	return "cardinal token create <login> -scope " + scope
 }

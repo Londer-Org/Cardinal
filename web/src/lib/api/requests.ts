@@ -439,10 +439,30 @@ const streamEndpoint = z
   }, 'Must be https — a receiver accepting security events over cleartext is ' +
      'one anybody on the path can feed.')
 
-export const ssfStreamRequest = z.object({
-  endpoint: streamEndpoint,
-  events: z
-    .array(z.string())
-    .min(1, 'Choose at least one — a stream subscribed to nothing receives nothing.'),
-})
+/**
+ * How the receiver is delivered to.
+ *
+ * MIRRORS the `delivery_method` CHECK on ssf_streams and the handler beside it.
+ * A push stream needs somewhere to post to; a poll stream must not claim to
+ * have one, because the receiver connects here instead. The endpoint rule is
+ * therefore conditional rather than always-on, which is why it is refined on
+ * the object rather than on the field.
+ */
+export const ssfStreamRequest = z
+  .object({
+    endpoint: z.string().trim(),
+    delivery: z.enum(['push', 'poll']),
+    events: z
+      .array(z.string())
+      .min(1, 'Choose at least one — a stream subscribed to nothing receives nothing.'),
+  })
+  .refine(
+    (stream) => stream.delivery === 'poll' || streamEndpoint.safeParse(stream.endpoint).success,
+    {
+      path: ['endpoint'],
+      error: (issue) =>
+        streamEndpoint.safeParse((issue.input as { endpoint: string }).endpoint)
+          .error?.issues[0]?.message ?? 'Required.',
+    },
+  )
 export type SSFStreamRequest = z.infer<typeof ssfStreamRequest>

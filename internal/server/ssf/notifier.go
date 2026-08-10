@@ -95,14 +95,14 @@ func (n *Notifier) Emit(ctx context.Context, e Event) {
 	}
 
 	for _, s := range streams {
-		token, signErr := transmitter.Sign(e, s.ClientID)
+		token, jti, signErr := transmitter.Sign(e, s.ClientID)
 		if signErr != nil {
 			n.log().ErrorContext(ctx, "ssf: signing failed",
 				"event", e.Type, "receiver", s.Name, "error", signErr)
 			continue
 		}
 		if queueErr := n.Store.EnqueueEvent(
-			ctx, s.ID, subject, e.Type, token,
+			ctx, s.ID, subject, e.Type, token, jti,
 		); queueErr != nil {
 			n.log().ErrorContext(ctx, "ssf: queueing failed",
 				"event", e.Type, "receiver", s.Name, "error", queueErr)

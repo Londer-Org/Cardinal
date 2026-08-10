@@ -33,16 +33,23 @@ type Stream struct {
 	ClientID string
 	Name     string
 
+	// Endpoint is where events are POSTed, and is empty for a poll stream:
+	// nothing is sent, so there is nowhere to send it.
 	Endpoint string
-	Events   []string
-	Enabled  bool
+
+	// DeliveryMethod is push (RFC 8935) or poll (RFC 8936).
+	DeliveryMethod string
+
+	Events  []string
+	Enabled bool
 
 	CreatedAt time.Time
 	UpdatedAt time.Time
 }
 
 const streamColumns = `s.id, s.entity_id, c.client_id, e.name,
-                       s.endpoint, s.events, s.enabled, s.created_at, s.updated_at`
+                       s.endpoint, s.delivery_method, s.events, s.enabled,
+                       s.created_at, s.updated_at`
 
 const streamFrom = `FROM ssf_streams s
                     JOIN oidc_clients c ON c.entity_id = s.entity_id
@@ -51,7 +58,8 @@ const streamFrom = `FROM ssf_streams s
 func scanStream(row pgx.Row) (*Stream, error) {
 	var s Stream
 	err := row.Scan(&s.ID, &s.EntityID, &s.ClientID, &s.Name,
-		&s.Endpoint, &s.Events, &s.Enabled, &s.CreatedAt, &s.UpdatedAt)
+		&s.Endpoint, &s.DeliveryMethod, &s.Events, &s.Enabled,
+		&s.CreatedAt, &s.UpdatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, directory.ErrNotFound
 	}
@@ -66,20 +74,31 @@ func scanStream(row pgx.Row) (*Stream, error) {
 // One per receiver, enforced by the schema. Two would mean every event
 // delivered twice, and a receiver cannot tell a duplicate from a repeat.
 func (s *Store) SaveStream(
-	ctx context.Context, entityID uuid.UUID, endpoint string, events []string,
-	actorID *uuid.UUID,
+	ctx context.Context, entityID uuid.UUID, endpoint, delivery string,
+	events []string, actorID *uuid.UUID,
 ) (*Stream, error) {
 	if events == nil {
 		events = []string{}
 	}
+	if delivery == "" {
+		delivery = DeliveryPush
+	}
+	// A poll stream has nowhere to be pushed to, and the schema refuses the
+	// combination. Cleared here rather than reported, because an endpoint
+	// arriving with a poll stream is a caller filling in a field the form still
+	// showed rather than an operator asking for something contradictory.
+	if delivery == DeliveryPoll {
+		endpoint = ""
+	}
 	_, err := s.pool.Exec(ctx, `
-		INSERT INTO ssf_streams (entity_id, endpoint, events, created_by)
-		VALUES ($1, $2, $3, $4)
+		INSERT INTO ssf_streams (entity_id, endpoint, delivery_method, events, created_by)
+		VALUES ($1, $2, $3, $4, $5)
 		ON CONFLICT (entity_id) DO UPDATE SET
 		    endpoint = excluded.endpoint,
+		    delivery_method = excluded.delivery_method,
 		    events = excluded.events,
 		    updated_at = now()`,
-		entityID, endpoint, events, actorID)
+		entityID, endpoint, delivery, events, actorID)
 	if err != nil {
 		return nil, fmt.Errorf("store: saving the stream: %w", err)
 	}
@@ -105,7 +124,8 @@ func (s *Store) ListStreams(ctx context.Context) ([]Stream, error) {
 	for rows.Next() {
 		var st Stream
 		if err := rows.Scan(&st.ID, &st.EntityID, &st.ClientID, &st.Name,
-			&st.Endpoint, &st.Events, &st.Enabled, &st.CreatedAt, &st.UpdatedAt); err != nil {
+			&st.Endpoint, &st.DeliveryMethod, &st.Events, &st.Enabled,
+			&st.CreatedAt, &st.UpdatedAt); err != nil {
 			return nil, fmt.Errorf("store: scanning a stream: %w", err)
 		}
 		out = append(out, st)
@@ -168,11 +188,12 @@ type QueuedEvent struct {
 // EnqueueEvent adds a signed token to the outbox.
 func (s *Store) EnqueueEvent(
 	ctx context.Context, streamID uuid.UUID, subjectID *uuid.UUID,
-	eventType, token string,
+	eventType, token string, jti uuid.UUID,
 ) error {
 	_, err := s.pool.Exec(ctx, `
-		INSERT INTO ssf_events (stream_id, subject_id, event_type, token)
-		VALUES ($1, $2, $3, $4)`, streamID, subjectID, eventType, token)
+		INSERT INTO ssf_events (stream_id, subject_id, event_type, token, jti)
+		VALUES ($1, $2, $3, $4, $5)`,
+		streamID, subjectID, eventType, token, jti)
 	if err != nil {
 		return fmt.Errorf("store: queueing a security event: %w", err)
 	}
@@ -197,7 +218,8 @@ func (s *Store) EnabledStreamsFor(ctx context.Context, eventType string) ([]Stre
 	for rows.Next() {
 		var st Stream
 		if err := rows.Scan(&st.ID, &st.EntityID, &st.ClientID, &st.Name,
-			&st.Endpoint, &st.Events, &st.Enabled, &st.CreatedAt, &st.UpdatedAt); err != nil {
+			&st.Endpoint, &st.DeliveryMethod, &st.Events, &st.Enabled,
+			&st.CreatedAt, &st.UpdatedAt); err != nil {
 			return nil, fmt.Errorf("store: scanning a stream: %w", err)
 		}
 		out = append(out, st)
@@ -222,6 +244,11 @@ func (s *Store) ClaimEvents(ctx context.Context, limit int) ([]QueuedEvent, erro
 		      WHERE e.delivered_at IS NULL
 		        AND e.next_attempt_at <= now()
 		        AND s.enabled
+		        -- A poll stream's events wait for the receiver to ask. Without
+		        -- this the delivery loop would claim them, POST to the empty
+		        -- endpoint, fail, and retry them forever while the receiver
+		        -- polls and is told there is nothing waiting.
+		        AND s.delivery_method = 'push'
 		      ORDER BY e.next_attempt_at
 		      LIMIT $1
 		      FOR UPDATE OF e SKIP LOCKED)
@@ -368,4 +395,92 @@ func (s *Store) FollowJournal(ctx context.Context, actions []string, limit int) 
 		return nil
 	})
 	return out, err
+}
+
+// Delivery methods a stream may use.
+//
+// The short names, not the specification's URIs. These are what the column
+// holds and what an operator types; the URIs appear only in the configuration
+// document, where a receiver reads them.
+const (
+	DeliveryPush = "push"
+	DeliveryPoll = "poll"
+)
+
+// PolledEvent is one token waiting for a receiver to collect it.
+type PolledEvent struct {
+	JTI   uuid.UUID
+	Token string
+}
+
+// PollEvents returns what is waiting for one receiver, oldest first.
+//
+// Read-only, and deliberately: RFC 8936 has the receiver acknowledge what it
+// has processed, so nothing here may mark anything delivered. A receiver that
+// crashes between the response and its acknowledgement asks again and is given
+// the same events, which is the behaviour that loses nothing.
+//
+// Events with no jti are skipped rather than returned. Those were queued before
+// poll delivery existed, so they belong to a push stream and cannot be
+// acknowledged — returning one would hand a receiver an event it could never
+// clear, and it would arrive again on every poll forever.
+func (s *Store) PollEvents(ctx context.Context, streamID uuid.UUID, limit int) ([]PolledEvent, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT jti, token
+		  FROM ssf_events
+		 WHERE stream_id = $1 AND delivered_at IS NULL AND jti IS NOT NULL
+		 ORDER BY created_at
+		 LIMIT $2`, streamID, limit)
+	if err != nil {
+		return nil, fmt.Errorf("store: reading queued events: %w", err)
+	}
+	defer rows.Close()
+
+	out := []PolledEvent{}
+	for rows.Next() {
+		var e PolledEvent
+		if err := rows.Scan(&e.JTI, &e.Token); err != nil {
+			return nil, fmt.Errorf("store: scanning a queued event: %w", err)
+		}
+		out = append(out, e)
+	}
+	return out, rows.Err()
+}
+
+// AcknowledgeEvents marks what a receiver says it has processed, and reports
+// how many rows that was.
+//
+// Scoped to the stream on purpose. The jti comes from the request body, so
+// without the stream_id predicate a receiver could acknowledge — and so
+// discard — events queued for somebody else, by quoting an identifier it read
+// in one of its own tokens' place. It knows only its own, but "it should not
+// know that value" is not an access control.
+func (s *Store) AcknowledgeEvents(ctx context.Context, streamID uuid.UUID, jtis []uuid.UUID) (int, error) {
+	if len(jtis) == 0 {
+		return 0, nil
+	}
+	tag, err := s.pool.Exec(ctx, `
+		UPDATE ssf_events SET delivered_at = now()
+		 WHERE stream_id = $1 AND delivered_at IS NULL AND jti = ANY($2)`,
+		streamID, jtis)
+	if err != nil {
+		return 0, fmt.Errorf("store: acknowledging events: %w", err)
+	}
+	return int(tag.RowsAffected()), nil
+}
+
+// PendingForStream counts what one receiver has waiting.
+//
+// Used to answer moreAvailable, which a receiver uses to decide whether to poll
+// again immediately or wait.
+func (s *Store) PendingForStream(ctx context.Context, streamID uuid.UUID) (int, error) {
+	var n int
+	err := s.pool.QueryRow(ctx, `
+		SELECT count(*) FROM ssf_events
+		 WHERE stream_id = $1 AND delivered_at IS NULL AND jti IS NOT NULL`,
+		streamID).Scan(&n)
+	if err != nil {
+		return 0, fmt.Errorf("store: counting queued events: %w", err)
+	}
+	return n, nil
 }
