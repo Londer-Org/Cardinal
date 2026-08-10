@@ -361,3 +361,52 @@ func claimsOf(t *testing.T, token string) map[string]string {
 	}
 	return map[string]string{"jti": claims.JTI, "aud": claims.Aud, "iss": claims.Iss}
 }
+
+// TestPausingAStreamRecordsNothingNew is the behaviour two comments and a CLI
+// message all described backwards.
+//
+// They said a pause queues events and resuming sends what was missed. It does
+// not: `Emit` asks `EnabledStreamsFor`, which filters on the same column
+// pausing sets, so a revocation during a pause is never recorded for that
+// receiver at all. The receiver goes on honouring the session until its token
+// expires, and nothing anywhere says so.
+//
+// Asserted rather than left to the comment, because a comment is exactly what
+// was wrong for as long as this feature has existed.
+func TestPausingAStreamRecordsNothingNew(t *testing.T) {
+	token := pollingReceiver(t, "e2e-client")
+	drainQueue(t, token)
+
+	queued := func() string {
+		return queryScalar(t, `SELECT count(*) FROM ssf_events e
+		    JOIN ssf_streams s ON s.id = e.stream_id
+		    JOIN entities en ON en.id = s.entity_id
+		   WHERE en.name = 'e2e-client' AND e.delivered_at IS NULL`)
+	}
+
+	// Nothing restores it on failure, and that is deliberate: cardinalCLI runs
+	// on t.Context(), which is already cancelled by the time a t.Cleanup would
+	// fire, and pollingReceiver resumes the stream on its next call anyway.
+	cardinalCLI(t, "ssf", "stream", "pause", "e2e-client")
+
+	before := queued()
+	queueEvents(t, "poll-probe-paused")
+
+	// Long enough for the follower, which is what would have queued it.
+	time.Sleep(15 * time.Second)
+
+	if after := queued(); after != before {
+		t.Errorf("the queue went from %s to %s while the stream was paused. If "+
+			"pausing now holds events, the comments and the CLI message that "+
+			"say it does not are wrong again — one of the two has to change",
+			before, after)
+	}
+
+	cardinalCLI(t, "ssf", "stream", "resume", "e2e-client")
+	time.Sleep(3 * time.Second)
+
+	if after := queued(); after != before {
+		t.Errorf("resuming produced %s queued events from %s: it caught up on the "+
+			"pause after all, which is the opposite of what is documented", after, before)
+	}
+}
