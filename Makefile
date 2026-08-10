@@ -76,7 +76,13 @@ psql: ## Open a psql shell against the dev database
 
 .PHONY: test
 test: ## Run unit and integration tests
-	go test ./... -race -count=1
+	@# Everything except test/e2e, which needs the example stack running and has
+	@# `make e2e` of its own. Its TestMain exits 1 with "the stack is not
+	@# running" rather than skipping — deliberately, so somebody running it by
+	@# hand is told what to do — which means `go test ./...` cannot pass on a
+	@# clean checkout. CI has excluded it from the start; this target did not,
+	@# so the README's own five-line quickstart ended in a failure.
+	go test ./internal/... ./cmd/... ./migrations/... -race -count=1
 
 .PHONY: schema
 schema: ## Regenerate docs/schema.md from the running database

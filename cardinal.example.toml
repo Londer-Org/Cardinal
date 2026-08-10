@@ -57,6 +57,11 @@ cookie_domain = ""
 [database]
 # May also be supplied as CARDINAL_DSN, which is preferable in production:
 # a secret in a file gets committed, copied and backed up.
+#
+# sslmode=require is right for a database on another host and wrong for the one
+# `make up` starts, which serves no TLS — copy this file for local work and the
+# server refuses to start with "server refused TLS connection". For that,
+# postgres://cardinal:cardinal@localhost:5433/cardinal?sslmode=disable.
 dsn = "postgres://cardinal@localhost:5433/cardinal?sslmode=require"
 max_conns = 10
 conn_max_lifetime = "1h"
