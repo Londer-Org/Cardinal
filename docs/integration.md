@@ -192,6 +192,8 @@ cardinal token create ci -name "nightly export" -scope applications
 | `profile` | The owner's display name and email |
 | `decisions` | The decision log — who was refused what, by which rule |
 | `policy` | The active policy set |
+| `scim` | Provisions accounts, for an identity provider. The one scope that writes to the directory — see below, and note that policy must permit `Provision` as well |
+| `events` | Collects the security events queued for a receiver. The only scope whose holder is normally an application rather than a person, issued by `cardinal ssf token <application>` for a polled stream |
 
 A scope only ever narrows. Policy still decides, and the token still cannot
 exceed its owner — this answers the question Cedar cannot ask, because Cedar

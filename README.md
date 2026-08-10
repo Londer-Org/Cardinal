@@ -201,18 +201,22 @@ as nonroot.
 ### Releasing
 
 One file holds the version. `make bump-patch|bump-minor|bump-major` rewrites it,
-regenerates `internal/version`, snapshots the documentation for the version being
-left behind, commits, and tags:
+regenerates `internal/version`, commits, and tags:
 
 ```sh
-make bump-minor          # 0.1.0 -> 0.2.0, tagged v0.2.0
-git push && git push origin v0.2.0
+make bump-minor          # 0.4.0 -> 0.5.0, tagged v0.5.0
+git push && git push origin v0.5.0
 ```
+
+It does not touch documentation. This paragraph used to claim it snapshotted
+the docs for the version being left behind, which was never true of any Makefile
+this repository has had — the per-release documentation snapshots live in
+cardinal-website and are taken there.
 
 Pushing the tag runs the release workflow, which re-runs the whole test suite —
 including end-to-end — before publishing anything, then builds the archives,
 the `.deb` and `.rpm`, and multi-architecture images to
-`londerbe/cardinal:0.2.0` and `:latest`.
+`londerbe/cardinal:0.5.0` and `:latest`.
 
 The number is a **constant compiled in**, not derived from the tag, and the
 release refuses to publish if the two disagree. That is not belt-and-braces:
@@ -236,13 +240,25 @@ changes and put them in a release nobody reviewed.
 | [comparison.md](docs/comparison.md) | Authelia, Keycloak, FreeIPA, Kanidm — and where Cardinal is the wrong choice |
 | [threat-model.md](docs/threat-model.md) | What it defends against, and the gaps it does not |
 | [adr/](docs/adr/) | Why things are the way they are |
+| [first-run.md](docs/first-run.md) | Standing one up and signing in, in about ten minutes |
+| [upgrading.md](docs/upgrading.md) | Rolling forward and back, and the changes that need more than a new image |
 | [ROADMAP.md](ROADMAP.md) | What works, what does not, and what is deliberately not being built |
 
-`docs/` is the documentation. It is read in a checkout and on GitHub, and a
-presentation site is being built separately in
-[cardinal-website](https://github.com/Londer-Org/cardinal-website) — which will
-render these same files rather than hold a copy of them, because a second copy
-is the one that goes stale.
+`docs/` is the documentation for people in a checkout: deep, and versioned with
+the code by the tags.
+
+[cardinal-website](https://github.com/Londer-Org/cardinal-website) is a separate
+thing rather than a rendering of these files, and this paragraph used to claim
+otherwise — that the site "will render these same files rather than hold a copy
+of them, because a second copy is the one that goes stale". It holds its own
+shorter set, written for somebody deciding whether to deploy Cardinal at all,
+and keeps a snapshot per released minor so a reader on an older version is not
+shown a flag their binary rejects.
+
+Two sets means the failure the old sentence warned about is real, and the answer
+is that a change here is not finished until the site says the same thing. That
+rule is in `CLAUDE.md` because nothing can enforce it: this repository compiles
+perfectly well while a page over there has stopped being true.
 
 The development tools have their own notes: [tools/uishot/](tools/uishot/) covers
 the screenshot and contrast checker, including the two bugs that once had it

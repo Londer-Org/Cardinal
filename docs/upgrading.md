@@ -69,6 +69,58 @@ of it, but it can read the row.
 Rolling back past a breaking migration is a restore from backup. That is the
 honest cost, it is stated up front, and it should be rare enough to be an event.
 
+### Two changes 0.3.0 needs you to act on
+
+Neither is a schema problem, so nothing refuses to start and nothing appears in
+a log. Both are in the changelog under **Security**; they are here because this
+is the page somebody reads when they upgrade.
+
+**Access tokens issued before 0.3.0 outlived the sessions that made them.**
+Signing out closed the session and left every token minted from it valid for its
+full lifetime. If you ran anything earlier, treat tokens issued before the
+upgrade as outstanding and revoke them:
+
+```sh
+cardinal token list <login>
+cardinal token revoke <login> <token-id>
+```
+
+**Erasure before 0.3.0 left the passkeys behind.** `cardinal redact` stamped the
+entity and never disabled it, and the credentials were not deleted.
+
+Signing in is not the exposure. `loadUser` refuses a redacted entity outright,
+separately from the disabled check and deliberately so — an erased account that
+somehow kept a credential still cannot authenticate on 0.3.0 or later. What
+remains is that a public key is personal data in its own right
+([ADR 0010](adr/0010-personal-data-and-erasure.md)), and those rows are still
+there.
+
+The changelog for 0.3.0 says to re-run erasure for anyone erased earlier. **That
+is not something the CLI can do**, and it was written without being tried:
+erasure renames the entity to a tombstone, so the old login no longer resolves,
+and the update is guarded by `redacted_at IS NULL`, so it would affect no rows
+even if it did.
+
+Whether you are affected at all:
+
+```sql
+SELECT count(*) FROM entities e
+  JOIN webauthn_credentials w ON w.entity_id = e.id
+ WHERE e.redacted_at IS NOT NULL;
+```
+
+Zero means every erasure you have run already removed them. If it is not zero,
+those rows are the leftovers and removing them is a delete:
+
+```sql
+DELETE FROM webauthn_credentials
+ WHERE entity_id IN (SELECT id FROM entities WHERE redacted_at IS NOT NULL);
+```
+
+Nothing else references them: erasure already cleared the sessions, the grant
+justifications and the attributes, and the audit chain records the erasure
+rather than the credential.
+
 ### One change the expand-only rule does not cover: 0.2.0 and forwardAuth
 
 Not a schema change — a behaviour change, so it does not declare itself and no
