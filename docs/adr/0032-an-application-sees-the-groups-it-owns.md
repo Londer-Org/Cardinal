@@ -143,10 +143,147 @@ unauthorized. That failure is at least loud at the application, and the console
 should show which groups an application is projected — a question that today has
 no answer because it has no meaningful one.
 
+## The design
+
+The mechanism this record deferred, now designed. Nothing below is built.
+
+### The rule that must not bend
+
+**Filtering changes what an application is told, never what Cardinal decides.**
+Cedar evaluates against the full transitive closure exactly as it does today; the
+projection is applied on the way out, to the header and the claim. A person
+refused access must be refused for a reason in the directory, not because an
+administrator narrowed a claim — and an application must never become *more*
+permitted by seeing less.
+
+That is the one invariant worth a test of its own, because getting it wrong
+would turn a disclosure control into an authorization bug.
+
+### Storage
+
+Two tables, because there are two questions: how much does this application see,
+and what extra has it been shown.
+
+```sql
+-- How much of the closure this application is told about.
+--
+-- A row per application rather than a nullable column, so the console can show
+-- the setting and the CLI can change it without touching the entity.
+CREATE TABLE application_group_projection (
+    entity_id  uuid PRIMARY KEY REFERENCES entities(id) ON DELETE CASCADE,
+    mode       text NOT NULL CHECK (mode IN ('all', 'owned')),
+    updated_at timestamptz NOT NULL DEFAULT now(),
+    updated_by uuid REFERENCES entities(id)
+);
+
+-- Groups an application may see that it does not own.
+--
+-- The escape hatch, and deliberately a list of facts rather than a pattern: a
+-- wildcard would be a rule nobody could answer "which groups does this
+-- application see" about without evaluating it.
+CREATE TABLE application_visible_groups (
+    application_id uuid NOT NULL REFERENCES entities(id) ON DELETE CASCADE,
+    group_id       uuid NOT NULL REFERENCES entities(id) ON DELETE CASCADE,
+    added_at       timestamptz NOT NULL DEFAULT now(),
+    added_by       uuid REFERENCES entities(id),
+    PRIMARY KEY (application_id, group_id)
+);
+```
+
+The migration inserts `mode = 'all'` for every application that already exists,
+which is what makes this expand-only in behaviour as well as in schema. New
+applications are registered with `mode = 'owned'`.
+
+That asymmetry is deliberate and is the only surprising thing here: an existing
+deployment changes nothing until somebody asks it to, and anything registered
+after the upgrade is narrow by default. Registering an application says which
+mode it got, because a developer wondering why a group is missing should find
+the answer in the output of the command that created it.
+
+### Resolution
+
+`Subject.Groups` stays the full closure. Self-service, the console and policy all
+need it, and a projection that reached back into resolution would make "what am I
+a member of" depend on who asked.
+
+The filter is a separate step with its own input:
+
+```go
+// store
+type GroupProjection struct {
+    Mode    string              // "all" or "owned"
+    Visible map[uuid.UUID]bool  // owned ∪ explicitly allowed, empty when Mode is "all"
+}
+func (s *Store) GroupProjectionFor(ctx context.Context, applicationID uuid.UUID) (GroupProjection, error)
+
+// claims
+func (s *Subject) GroupsFor(p store.GroupProjection) []Group
+```
+
+`GroupsFor` returns the closure unchanged when the mode is `all`, and otherwise
+the members of `Visible`, preserving order and depth so the nearest-first
+contract still holds. `GroupNames` and `GroupIDs` gain `…For` variants; the
+existing methods stay, because the console and the decision log want everything.
+
+### The two consumers
+
+**forwardAuth** already resolves the hostname to an application and holds
+`app.ID`. It projects after the decision, not before:
+
+```go
+projection, err := s.store.GroupProjectionFor(ctx, app.ID)
+visible := subject.GroupsFor(projection)
+h.Set(headerGroups,   strings.Join(names(visible), ","))
+h.Set(headerGroupIDs, strings.Join(ids(visible), ","))
+```
+
+The decision log keeps recording the full closure. It is Cardinal's record of
+why it decided, not a copy of what the application was told, and truncating it
+would make the explorer answer a different question than the one it is asked.
+
+**OIDC** has the client's `EntityID` from `OIDCClientByID`, so the `groups` and
+`group_ids` claims are built from the same projection. Nothing changes for a
+client that does not request the `groups` scope, which is most of them.
+
+**Nothing else changes.** SCIM is inbound. SSH certificate principals come from
+policy rather than from group names. The console and self-service views are
+Cardinal's own surfaces, not third parties.
+
+### Administration
+
+```sh
+cardinal app groups show <application>              # mode, owned, allowed, effective
+cardinal app groups mode <application> owned|all
+cardinal app groups allow <application> <group>     # sight of one it does not own
+cardinal app groups disallow <application> <group>
+```
+
+`show` prints the effective list, because "which groups does this application
+see" is the question an operator actually has and today it has no answer.
+
+In the console, the application detail page gains a section with the mode, the
+groups it owns, the ones it has been allowed, and what the projection currently
+comes to. Behind `ManageApplications`, like the rest of that page.
+
+### What tells you it is wrong
+
+An application in `owned` mode whose projection is empty is almost certainly a
+mistake — nobody configures filtering in order to send nothing. Cardinal logs it
+at the point of projection and the console shows it on the application, in the
+same spirit as the startup warning about policy actions no rule mentions.
+
+### Rollback
+
+The schema is expand-only and the previous build ignores both tables, so an
+older Cardinal serves the full closure again — the behaviour it had. That makes
+rolling back safe and, for anyone relying on filtering, visibly not a no-op:
+the claim widens. Worth saying out loud in the release notes rather than
+discovering it.
+
 ## Status of this record
 
-Proposed rather than accepted: the decision is argued and nothing is built. The
-opt-in mechanism — where an application declares it wants filtering, and how
-sight of a group it does not own is granted — is the part that needs designing
-before this is implemented, and it should be designed against the console and the
-CLI at the same time so administering it is not an afterthought.
+Proposed. The decision and the design are argued; nothing is built. One claim it
+rests on — that common off-the-shelf relying parties do not request the `groups`
+scope by default — is marked above as an assumption that has not been tested
+here, and should be confirmed against one real relying party before this is
+accepted.
