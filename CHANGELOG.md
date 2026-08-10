@@ -118,8 +118,15 @@ build rather than waiting for the next audit.
   cleared personal data and deleted sessions, but left the credentials and
   never set `disabled_at` — and the login path gates on `disabled_at` alone.
   Erasure now deletes credentials and disables the account, and the login path
-  refuses a redacted entity. **Re-run erasure for anyone erased on an earlier
-  version**; the earlier erasure did not remove their ability to sign in.
+  refuses a redacted entity. **If you erased anyone on an earlier version**,
+  their passkeys are still stored. They cannot sign in — the login path
+  refuses a redacted entity — but a public key is personal data in its own
+  right, and re-running `cardinal redact` cannot remove it: erasure renames
+  the entity to a tombstone and guards itself on `redacted_at IS NULL`, so
+  the old login no longer resolves and the update would match nothing.
+  [docs/upgrading.md](docs/upgrading.md) has the query that says whether you
+  are affected and the delete that clears it. This entry previously said to
+  re-run erasure, which was written without being tried.
 - **An entity could be named `0`.** `getent passwd 0` returns root, and shadow
   mode runs exactly that with an entity's name, so the numbers offered for
   adoption would have been root's. All-digit names are refused.
