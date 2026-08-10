@@ -402,3 +402,47 @@ export const posixRequest = z.object({
     .refine((v) => v.startsWith('/'), 'Must be an absolute path.'),
 })
 export type PosixRequest = z.infer<typeof posixRequest>
+
+/**
+ * Where a receiver is told that access changed, and about what.
+ *
+ * MIRRORS `validateStreamEndpoint` and `validateStreamEvents` in
+ * internal/server/httpapi/ssfstreams.go.
+ *
+ * The https rule is worth mirroring rather than leaving to the server, because
+ * the server is not where it originates: it is a CHECK constraint on
+ * ssf_streams, so an unchecked cleartext endpoint reaches the database and
+ * comes back as a constraint violation. The handler checks it so the answer
+ * names the problem; this checks it so the answer arrives before submitting.
+ *
+ * The event list is not mirrored — which URIs Cardinal transmits comes from the
+ * server with the streams, so the console offers that set rather than a second
+ * copy of it that can drift.
+ */
+const streamEndpoint = z
+  .string()
+  .trim()
+  .min(1, 'Required — it is where events are delivered.')
+  .refine((value) => {
+    try {
+      return new URL(value).host !== ''
+    } catch {
+      return false
+    }
+  }, 'Must be an absolute URL, such as https://app.example.com/events.')
+  .refine((value) => {
+    try {
+      return new URL(value).protocol === 'https:'
+    } catch {
+      return false
+    }
+  }, 'Must be https — a receiver accepting security events over cleartext is ' +
+     'one anybody on the path can feed.')
+
+export const ssfStreamRequest = z.object({
+  endpoint: streamEndpoint,
+  events: z
+    .array(z.string())
+    .min(1, 'Choose at least one — a stream subscribed to nothing receives nothing.'),
+})
+export type SSFStreamRequest = z.infer<typeof ssfStreamRequest>

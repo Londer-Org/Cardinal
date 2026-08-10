@@ -1,5 +1,4 @@
 import { useState } from 'react'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { PauseIcon, PlayIcon, PlusIcon, Trash2Icon, TriangleAlertIcon } from 'lucide-react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
@@ -14,18 +13,18 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Checkbox } from '@/components/ui/checkbox'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
 import { ErrorMessage } from '@/components/ErrorMessage'
+import { ApplicationPicker } from '@/features/directory/ApplicationPicker'
 import { RequiresFreshAuth } from '@/features/auth/RequiresFreshAuth'
+import {
+  useDeleteSSFStream,
+  useSaveSSFStream,
+  useSetSSFStreamEnabled,
+  useSSFStreams,
+} from '@/features/ssf/useSSFStreams'
 import { ViewHeader } from '@/views/ViewHeader'
-import { api, queryKeys, type SSFStream } from '@/lib/api'
+import { type SSFStream } from '@/lib/api'
 
 /**
  * Who is told when access changes.
@@ -43,9 +42,6 @@ import { api, queryKeys, type SSFStream } from '@/lib/api'
  * prevent.
  */
 
-/** Enough applications that the picker is not a paginated control. */
-const APPLICATION_PAGE = { q: '', limit: 200, offset: 0 }
-
 /** The tail of a CAEP event type URI, which is the part worth reading. */
 function eventLabel(uri: string): string {
   const tail = uri.split('/').pop() ?? uri
@@ -60,32 +56,9 @@ function when(iso: string): string {
   })
 }
 
-function StreamRow({
-  stream,
-  onChanged,
-}: {
-  stream: SSFStream
-  onChanged: () => void
-}) {
-  const [error, setError] = useState<string | null>(null)
-
-  const setEnabled = useMutation({
-    mutationFn: (enabled: boolean) => api.ssfStreams.setEnabled(stream.application, enabled),
-    onSuccess: () => {
-      setError(null)
-      onChanged()
-    },
-    onError: (e: Error) => { setError(e.message); },
-  })
-
-  const remove = useMutation({
-    mutationFn: () => api.ssfStreams.remove(stream.application),
-    onSuccess: () => {
-      setError(null)
-      onChanged()
-    },
-    onError: (e: Error) => { setError(e.message); },
-  })
+function StreamRow({ stream }: { stream: SSFStream }) {
+  const setEnabled = useSetSSFStreamEnabled()
+  const remove = useDeleteSSFStream()
 
   return (
     <li className="border-b py-4 last:border-b-0">
@@ -124,7 +97,12 @@ function StreamRow({
             variant="outline"
             size="sm"
             disabled={setEnabled.isPending}
-            onClick={() => { setEnabled.mutate(!stream.enabled); }}
+            onClick={() => {
+              setEnabled.mutate({
+                application: stream.application,
+                enabled: !stream.enabled,
+              })
+            }}
           >
             {stream.enabled ? <PauseIcon /> : <PlayIcon />}
             {stream.enabled ? 'Pause' : 'Resume'}
@@ -134,7 +112,7 @@ function StreamRow({
             size="sm"
             className="text-destructive"
             disabled={remove.isPending}
-            onClick={() => { remove.mutate(); }}
+            onClick={() => { remove.mutate(stream.application); }}
           >
             <Trash2Icon />
             Remove
@@ -142,7 +120,7 @@ function StreamRow({
         </div>
       </div>
 
-      <ErrorMessage error={error} />
+      <ErrorMessage error={setEnabled.error ?? remove.error} />
     </li>
   )
 }
@@ -150,11 +128,9 @@ function StreamRow({
 function AddStream({
   knownEvents,
   taken,
-  onAdded,
 }: {
   knownEvents: string[]
   taken: string[]
-  onAdded: () => void
 }) {
   const [application, setApplication] = useState('')
   const [endpoint, setEndpoint] = useState('')
@@ -162,31 +138,8 @@ function AddStream({
   // default that silently omits an event is the one that produces a gap
   // nobody notices.
   const [events, setEvents] = useState<string[]>(knownEvents)
-  const [error, setError] = useState<string | null>(null)
 
-  const applications = useQuery({
-    queryKey: queryKeys.refApplications(APPLICATION_PAGE),
-    queryFn: () => api.directory.applications(APPLICATION_PAGE),
-  })
-
-  const save = useMutation({
-    mutationFn: () => api.ssfStreams.save(application, { endpoint, events }),
-    onSuccess: () => {
-      setError(null)
-      setApplication('')
-      setEndpoint('')
-      setEvents(knownEvents)
-      onAdded()
-    },
-    onError: (e: Error) => { setError(e.message); },
-  })
-
-  // Only applications without a stream. There is one per receiver, enforced by
-  // the schema, so offering a name that already has one would be offering to
-  // overwrite it from a form labelled "add".
-  const available = (applications.data?.items ?? []).filter(
-    (app) => !taken.includes(app.name),
-  )
+  const save = useSaveSSFStream()
 
   return (
     <Card>
@@ -202,18 +155,25 @@ function AddStream({
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-2">
             <Label htmlFor="ssf-application">Application</Label>
-            <Select value={application} onValueChange={setApplication}>
-              <SelectTrigger id="ssf-application">
-                <SelectValue placeholder="Choose an application" />
-              </SelectTrigger>
-              <SelectContent>
-                {available.map((app) => (
-                  <SelectItem key={app.name} value={app.name}>
-                    {app.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            {/*
+              Searched at the server rather than listed: the console runs
+              against directories with more applications than a dropdown can
+              hold, and one that quietly stops at the first page is one where
+              the application you wanted is absent for no visible reason.
+
+              The schema allows one stream per receiver, so an application that
+              already has one is shown disabled with that as the reason — not
+              removed, which would raise the same question the truncation did.
+            */}
+            <ApplicationPicker
+              id="ssf-application"
+              value={application}
+              onChange={setApplication}
+              placeholder="Choose an application"
+              unavailable={(name) =>
+                taken.includes(name) ? 'has a stream' : undefined
+              }
+            />
           </div>
 
           <div className="space-y-2">
@@ -248,11 +208,22 @@ function AddStream({
           </div>
         </fieldset>
 
-        <ErrorMessage error={error} />
+        <ErrorMessage error={save.error} />
 
         <Button
           disabled={application === '' || endpoint === '' || save.isPending}
-          onClick={() => { save.mutate(); }}
+          onClick={() => {
+            save.mutate(
+              { application, stream: { endpoint, events } },
+              {
+                onSuccess: () => {
+                  setApplication('')
+                  setEndpoint('')
+                  setEvents(knownEvents)
+                },
+              },
+            )
+          }}
         >
           <PlusIcon />
           Add receiver
@@ -263,15 +234,7 @@ function AddStream({
 }
 
 function SecurityEventsViewBody() {
-  const queryClient = useQueryClient()
-  const { data, isPending, error } = useQuery({
-    queryKey: queryKeys.ssfStreams,
-    queryFn: () => api.ssfStreams.get(),
-  })
-
-  const refresh = () => {
-    void queryClient.invalidateQueries({ queryKey: queryKeys.ssfStreams })
-  }
+  const { data, isPending, error } = useSSFStreams()
 
   if (isPending) return <Skeleton className="h-64 w-full" />
   if (error) return <ErrorMessage error={error} />
@@ -309,7 +272,7 @@ function SecurityEventsViewBody() {
           <CardContent>
             <ul>
               {data.streams.map((stream) => (
-                <StreamRow key={stream.application} stream={stream} onChanged={refresh} />
+                <StreamRow key={stream.application} stream={stream} />
               ))}
             </ul>
           </CardContent>
@@ -319,7 +282,6 @@ function SecurityEventsViewBody() {
       <AddStream
         knownEvents={data.knownEvents}
         taken={data.streams.map((s) => s.application)}
-        onAdded={refresh}
       />
 
       <Card>

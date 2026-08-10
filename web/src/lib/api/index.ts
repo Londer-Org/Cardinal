@@ -15,11 +15,13 @@ import {
   nameCredentialRequest,
   openRecoveryRequest,
   registerApplicationRequest,
+  ssfStreamRequest,
   createApplicationRequest,
   addHostnameRequest,
   addPolicyRuleRequest,
   updateProfileRequest,
   type CreateGroupRequest,
+  type SSFStreamRequest,
   type AdminProfileRequest,
   type CreateHostRequest,
   type CreateTokenRequest,
@@ -597,10 +599,10 @@ export const api = {
     get: () => request('/api/ssf/streams', ssfStreamsSchema),
     // PUT, because there is one stream per receiver: sending it twice is the
     // same request rather than a second stream.
-    save: (application: string, body: { endpoint: string; events: string[] }) =>
+    save: (application: string, input: SSFStreamRequest) =>
       request(`/api/ssf/streams/${encodeURIComponent(application)}`, ssfStreamSchema, {
         method: 'PUT',
-        body,
+        body: ssfStreamRequest.parse(input),
       }),
     setEnabled: (application: string, enabled: boolean) =>
       request(
