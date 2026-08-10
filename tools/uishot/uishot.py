@@ -341,6 +341,23 @@ def main() -> int:
     try:
         browser.page("Page.enable")
         browser.page("Network.enable")
+        # The viewport, set explicitly rather than left to --window-size.
+        #
+        # Chrome clamps a window to roughly 500px wide, so asking for a 375px
+        # one silently gave a 500px one and every narrow screenshot was of a
+        # screen no phone has. Found while checking whether the site overflowed
+        # on a phone: it reported an overflow that was the tool's, not the
+        # site's.
+        browser.page(
+            "Emulation.setDeviceMetricsOverride",
+            width=args.width,
+            height=args.height,
+            deviceScaleFactor=1,
+            # False, so a page wider than the viewport shows as a page wider
+            # than the viewport. With mobile emulation Chrome scales it down to
+            # fit, which is how a layout problem disappears from a screenshot.
+            mobile=False,
+        )
         browser.page(
             "Emulation.setEmulatedMedia",
             media="screen",
