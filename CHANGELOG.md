@@ -16,6 +16,33 @@ old image.
 
 ### Added
 
+- **A receiver can collect security events instead of being pushed them**
+  (RFC 8936). Push asks the receiver to run an HTTPS endpoint Cardinal can
+  reach, which is reasonable for a service in the same network and impossible
+  for one behind NAT, on a laptop, in a CI job, or anywhere nobody will open an
+  inbound path to a security event handler. Those receivers could not be told
+  about a revocation at all.
+
+  ```sh
+  cardinal ssf stream add aura -delivery poll
+  cardinal ssf token aura     # the receiver's own credential, shown once
+  ```
+
+  The receiver then `POST`s to `/ssf/poll` with that token as a bearer, and
+  acknowledges by the `jti` each event is keyed by. Acknowledging is separate
+  from receiving, so a receiver that crashes between the two is handed the same
+  events again rather than losing them. The token delivered is byte for byte
+  the one push would have sent, and `/.well-known/ssf-configuration` now
+  advertises both methods and the polling endpoint.
+
+  The credential is issued to the application rather than to the person who
+  configured the stream, carries a new `events` scope, and can read that
+  receiver's queued events and nothing else. The console offers the choice when
+  adding a receiver and says which method each one uses.
+
+  Stream management over the API is still not implemented — a receiver cannot
+  create its own stream — and the configuration document still says so.
+
 - **The console configures Shared Signals streams.** Integrations › Security
   events lists every receiver, what it subscribes to, whether it is delivering
   or paused, and how many events are queued or have exhausted their attempts —
