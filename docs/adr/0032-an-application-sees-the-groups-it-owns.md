@@ -159,6 +159,49 @@ permitted by seeing less.
 That is the one invariant worth a test of its own, because getting it wrong
 would turn a disclosure control into an authorization bug.
 
+**And the type system holds it, not a comment.** The hazard is in the shape of
+the existing code: `forwardauth.go` resolves one `subject` and uses it three
+times — as the policy input, in the decision log, and to write the headers. The
+obvious way to add filtering is to narrow that variable straight after resolving
+it, which would work, read cleanly, and silently change what Cardinal decides.
+
+Both directions of that mistake are real:
+
+- **Wrongly denied.** `directory-admins-may-administer` is
+  `permit (principal in Cardinal::Group::"…ad11", …)`. Had Cedar seen only the
+  groups an application may be told about, narrowing a projection would revoke
+  administration from actual directory administrators — an operator changing a
+  disclosure setting would have changed access.
+- **Wrongly granted, which is worse.** A deployment writing
+  `forbid (…) when { principal in Cardinal::Group::"suspended" }` would find it
+  stops matching once `suspended` is filtered out, and the person is permitted.
+  No shipped rule does this — the three forbids key on `deviceBound` and
+  `authAgeSeconds` — but policy authored by the deployment is the entire premise,
+  and this is the failure nobody notices.
+
+So `GroupsFor` does not return `[]Group`, which would assign straight back over
+`Subject.Groups`. It returns a distinct type whose field is unexported, so a
+filtered set cannot be constructed outside this package and cannot be put back
+into a Subject:
+
+```go
+// Projected is the subset of a subject's groups that one application is told
+// about. Deliberately not []Group: the assignment that would put a filtered set
+// back into the Subject the policy engine reads does not compile.
+type Projected struct{ groups []Group }
+
+func (p Projected) Names() []string { … }
+func (p Projected) IDs() []string   { … }
+
+func (s *Subject) GroupsFor(p store.GroupProjection) Projected
+```
+
+The cost is a wrapper type in a package that has none, and a conversion at each
+of the two output sites. That is accepted deliberately: prose and a test are how
+the rest of Cardinal's invariants are held, and this repository keeps a table of
+bugs where a comment was the only thing holding a rule in place. The test stays
+as well — the type stops the slip, the test states the property.
+
 ### Storage
 
 Two tables, because there are two questions: how much does this application see,
@@ -216,14 +259,15 @@ type GroupProjection struct {
 }
 func (s *Store) GroupProjectionFor(ctx context.Context, applicationID uuid.UUID) (GroupProjection, error)
 
-// claims
-func (s *Subject) GroupsFor(p store.GroupProjection) []Group
+// claims — returns Projected, not []Group. See the invariant above.
+func (s *Subject) GroupsFor(p store.GroupProjection) Projected
 ```
 
 `GroupsFor` returns the closure unchanged when the mode is `all`, and otherwise
 the members of `Visible`, preserving order and depth so the nearest-first
-contract still holds. `GroupNames` and `GroupIDs` gain `…For` variants; the
-existing methods stay, because the console and the decision log want everything.
+contract still holds. `Subject.GroupNames` and `GroupIDs` stay exactly as they
+are and keep returning everything, because the console, self-service and the
+decision log all want the closure; the projected pair live on `Projected`.
 
 ### The two consumers
 
@@ -232,9 +276,9 @@ existing methods stay, because the console and the decision log want everything.
 
 ```go
 projection, err := s.store.GroupProjectionFor(ctx, app.ID)
-visible := subject.GroupsFor(projection)
-h.Set(headerGroups,   strings.Join(names(visible), ","))
-h.Set(headerGroupIDs, strings.Join(ids(visible), ","))
+visible := subject.GroupsFor(projection)   // Projected, not []Group
+h.Set(headerGroups,   strings.Join(visible.Names(), ","))
+h.Set(headerGroupIDs, strings.Join(visible.IDs(), ","))
 ```
 
 The decision log keeps recording the full closure. It is Cardinal's record of
