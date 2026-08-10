@@ -237,12 +237,22 @@ func runSSFStreamState(ctx context.Context, resume bool, args []string) error {
 	}
 
 	if resume {
-		fmt.Printf("%s is receiving again — anything queued while it was paused goes now\n",
+		fmt.Printf("%s is receiving again — whatever was still queued goes out now.\n",
 			app.Name)
+		fmt.Println("  Anything that happened while it was paused was not recorded")
+		fmt.Println("  for it, so this does not catch it up.")
 		return nil
 	}
-	fmt.Printf("%s is paused. Events keep queueing, so resuming sends what was missed\n",
-		app.Name)
+	// Said plainly, because the consequence is invisible and permanent. This
+	// used to print "Events keep queueing, so resuming sends what was missed",
+	// which is the opposite of what happens.
+	fmt.Printf("%s is paused. What is already queued is kept and goes out when you\n", app.Name)
+	fmt.Println("  resume, but nothing new is recorded while it is paused.")
+	fmt.Println()
+	fmt.Println("  So a session revoked from now until you resume is one this receiver")
+	fmt.Println("  is never told about, and it will go on honouring that session until")
+	fmt.Println("  the token expires on its own. Remove the stream instead if the")
+	fmt.Println("  receiver is gone for good.")
 	return nil
 }
 

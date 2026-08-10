@@ -137,8 +137,20 @@ func (s *Store) ListStreams(ctx context.Context) ([]Stream, error) {
 //
 // Paused rather than deleted, so a receiver that is down does not lose its
 // configuration and an operator can stop delivery without forgetting what it
-// was. Queued events stay queued: resuming sends what was missed, which is the
-// behaviour an incident wants.
+// was.
+//
+// A pause holds what is already queued and records nothing new. Both halves
+// measured against the running stack: an event queued before the pause is not
+// even attempted while it lasts and goes out on resume, and a revocation
+// happening during the pause adds nothing to this receiver's queue, because
+// EnabledStreamsFor is what Emit asks and it filters on this column.
+//
+// That second half is the one worth knowing, and this comment used to say the
+// opposite — "resuming sends what was missed". It does not. A receiver paused
+// for an hour is never told about anything revoked in that hour, so it goes on
+// honouring those sessions until they expire on their own. Pausing a stream is
+// therefore a decision about what an application is allowed not to know, which
+// is a larger thing than it sounds like.
 func (s *Store) SetStreamEnabled(ctx context.Context, entityID uuid.UUID, enabled bool) error {
 	tag, err := s.pool.Exec(ctx,
 		`UPDATE ssf_streams SET enabled = $2, updated_at = now() WHERE entity_id = $1`,
