@@ -70,6 +70,8 @@ import {
   auditEventsSchema,
   healthSchema,
   authoritiesSchema,
+  ssfStreamsSchema,
+  ssfStreamSchema,
   chainReportSchema,
   policySchema,
   policyVersionsSchema,
@@ -590,6 +592,28 @@ export const api = {
    */
   health: () => request('/api/health', healthSchema),
 
+  /** Who is told when access changes, and whether delivery is working. */
+  ssfStreams: {
+    get: () => request('/api/ssf/streams', ssfStreamsSchema),
+    // PUT, because there is one stream per receiver: sending it twice is the
+    // same request rather than a second stream.
+    save: (application: string, body: { endpoint: string; events: string[] }) =>
+      request(`/api/ssf/streams/${encodeURIComponent(application)}`, ssfStreamSchema, {
+        method: 'PUT',
+        body,
+      }),
+    setEnabled: (application: string, enabled: boolean) =>
+      request(
+        `/api/ssf/streams/${encodeURIComponent(application)}/${enabled ? 'resume' : 'pause'}`,
+        z.undefined(),
+        { method: 'POST' },
+      ),
+    remove: (application: string) =>
+      request(`/api/ssf/streams/${encodeURIComponent(application)}`, z.undefined(), {
+        method: 'DELETE',
+      }),
+  },
+
   /** The certificate authorities, and the bundles machines have to trust. */
   authorities: {
     get: () => request('/api/authorities', authoritiesSchema),
@@ -717,6 +741,8 @@ export { ApiError, onStepUpNeeded } from './client'
 export * from './requests'
 export type {
   ApprovedRecovery,
+  SSFStream,
+  SSFStreams,
   Setting,
   MailSettings,
   MailTemplate,
@@ -789,6 +815,7 @@ export const queryKeys = {
   policy: ['policy'] as const,
   health: ['health'] as const,
   authorities: ['authorities'] as const,
+  ssfStreams: ['ssf', 'streams'] as const,
   auditEvents: (filter: { action: string; subject: string; before: number }) =>
     ['audit', 'events', filter] as const,
   policyVersions: ['policy', 'versions'] as const,

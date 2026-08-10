@@ -500,6 +500,19 @@ func (s *Server) Handler() http.Handler {
 	// them would duplicate the lookup and the audit line.
 	mux.Handle("POST /api/applications/{name}/{state}",
 		apps(s.handleSetApplicationEnabled))
+	// Shared Signals streams. Behind ManageApplications rather than an action
+	// of their own: a stream belongs to an application, and whoever may
+	// register a receiver is whoever may decide it hears about revocations.
+	// A new action would need a migration and a policy rule to grant it, for a
+	// distinction nobody would draw.
+	mux.Handle("GET /api/ssf/streams", apps(s.handleListSSFStreams))
+	// PUT because there is one stream per receiver, enforced by the schema —
+	// sending it twice is the same request rather than a second stream.
+	mux.Handle("PUT /api/ssf/streams/{application}", apps(s.handleSaveSSFStream))
+	mux.Handle("DELETE /api/ssf/streams/{application}", apps(s.handleDeleteSSFStream))
+	mux.Handle("POST /api/ssf/streams/{application}/{state}",
+		apps(s.handleSetSSFStreamEnabled))
+
 	mux.Handle("GET /api/policy",
 		s.requireAuth(s.requireScope(ScopePolicy, http.HandlerFunc(s.handlePolicy))))
 

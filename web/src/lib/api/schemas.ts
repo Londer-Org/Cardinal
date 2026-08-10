@@ -589,6 +589,35 @@ export const authoritiesSchema = z.object({
   x509: authoritySchema,
 })
 
+/** One receiver of security events. */
+export const ssfStreamSchema = z.object({
+  // The directory name, which is what an operator knows and what the CLI
+  // takes. The client id is the token's audience, and is what a receiver
+  // debugging a rejected token is looking for.
+  application: z.string(),
+  clientId: z.string(),
+  endpoint: z.string(),
+  events: z.array(z.string()),
+  enabled: z.boolean(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+})
+export type SSFStream = z.infer<typeof ssfStreamSchema>
+
+export const ssfStreamsSchema = z.object({
+  streams: z.array(ssfStreamSchema),
+  // Offered by the server rather than listed here, so the console cannot drift
+  // from the set the CLI validates against.
+  knownEvents: z.array(z.string()),
+  pending: z.number(),
+  // The number that have exhausted their attempts — the only figure on the
+  // page that means somebody has to do something.
+  failing: z.number(),
+  issuer: z.string(),
+  jwksUri: z.string(),
+})
+export type SSFStreams = z.infer<typeof ssfStreamsSchema>
+
 /** What /api/health reports. The version is why the console asks. */
 export const healthSchema = z.object({
   status: z.string(),

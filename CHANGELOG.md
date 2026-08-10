@@ -14,6 +14,19 @@ old image.
 
 ## Unreleased
 
+### Added
+
+- **The console configures Shared Signals streams.** Integrations › Security
+  events lists every receiver, what it subscribes to, whether it is delivering
+  or paused, and how many events are queued or have exhausted their attempts —
+  plus the issuer and JWKS a receiver author always asks for. Adding, pausing
+  and removing are there too. It was the last piece of administration that
+  existed only as a CLI command, which made the whole subsystem invisible: a
+  transmitter nobody watches is one that stops working quietly.
+
+  Behind `ManageApplications` rather than an action of its own, since a stream
+  belongs to an application — so no migration and no policy change.
+
 ### Internal
 
 - `make verify-rollback` runs published releases against a schema this build

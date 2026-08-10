@@ -8,6 +8,7 @@ import {
   MailIcon,
   ScaleIcon,
   SlidersHorizontalIcon,
+  RadioTowerIcon,
   ScrollTextIcon,
   ShieldCheckIcon,
   ServerIcon,
@@ -108,6 +109,14 @@ export const NAV: NavSection[] = [
         label: 'Applications',
         to: '/integrations/applications',
         icon: AppWindowIcon,
+      },
+      // Beside applications because a stream belongs to one, and behind the
+      // same tier: deciding who is told that access was revoked is deciding
+      // whether a revocation takes effect anywhere but here.
+      {
+        label: 'Security events',
+        to: '/integrations/security-events',
+        icon: RadioTowerIcon,
       },
     ],
   },

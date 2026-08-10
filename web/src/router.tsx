@@ -122,6 +122,15 @@ const applicationsRoute = createRoute({
   component: lazyRouteComponent(() => import('@/views/applications'), 'ApplicationsView'),
 })
 
+const securityEventsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/integrations/security-events',
+  component: lazyRouteComponent(
+    () => import('@/views/security-events'),
+    'SecurityEventsView',
+  ),
+})
+
 const policyRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/policy',
@@ -163,6 +172,7 @@ const routeTree = rootRoute.addChildren([
   hostsRoute,
   hostDetailRoute,
   applicationsRoute,
+  securityEventsRoute,
   policyRoute,
   auditRoute,
   authoritiesRoute,
