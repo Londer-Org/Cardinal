@@ -315,6 +315,21 @@ func (s *Server) csrfProtect(next http.Handler) http.Handler {
 			return
 		}
 
+		// A receiver collecting its security events, for the same reason once
+		// more. It holds an access token issued to the application and no
+		// cookie at all.
+		//
+		// Listed here rather than left to the header-authenticated exemption
+		// above, which only fires once a credential has succeeded. A receiver
+		// whose token has expired would otherwise be told its CSRF token was
+		// missing or invalid — a message about a browser mechanism it does not
+		// use, pointing at the wrong problem entirely. Measured before this was
+		// added: an expired credential returned 403 and exactly that text.
+		if r.URL.Path == "/ssf/poll" {
+			next.ServeHTTP(w, r)
+			return
+		}
+
 		// A terminal exchanging its code, for the same reason again. It holds
 		// no cookie — that is the premise of the whole flow — so there is no
 		// ambient authority to abuse. A browser tricked into posting here would

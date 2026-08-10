@@ -810,6 +810,7 @@ erDiagram
         integer attempts
         timestamp_with_time_zone delivered_at
         text last_error
+        uuid jti
     }
     ssf_streams {
         uuid id PK
@@ -820,6 +821,7 @@ erDiagram
         timestamp_with_time_zone created_at
         timestamp_with_time_zone updated_at
         uuid created_by FK
+        text delivery_method
     }
     ssf_watermark {
         boolean id PK
@@ -1084,10 +1086,11 @@ uid and gid numbers. One allocator for both, never reused, never changed.
 | `attempts` | `integer` | no | `0` |  |
 | `delivered_at` | `timestamp with time zone` | yes |  |  |
 | `last_error` | `text` | yes |  |  |
+| `jti` | `uuid` | yes |  | The jti of the signed token, lifted out so RFC 8936 poll responses can be keyed by it and acknowledged by it without parsing the token. |
 
 ### `ssf_streams`
 
-Receivers Cardinal pushes security events to. Configured by an administrator rather than by the receiver: stream management over the API is not implemented, and the SSF configuration document says so.
+Receivers Cardinal sends security events to. push (RFC 8935) posts each event to the receiver's endpoint; poll (RFC 8936) holds it until the receiver collects it with a credential of its own. Streams are configured by an administrator: stream management over the API is not implemented, and the SSF configuration document says so.
 
 | Column | Type | Null | Default | Notes |
 |---|---|---|---|---|
@@ -1099,6 +1102,7 @@ Receivers Cardinal pushes security events to. Configured by an administrator rat
 | `created_at` | `timestamp with time zone` | no | `now()` |  |
 | `updated_at` | `timestamp with time zone` | no | `now()` |  |
 | `created_by` | `uuid` | yes |  | → `entities.id` |
+| `delivery_method` | `text` | no | `'push'::text` | push (RFC 8935) posts each event to endpoint; poll (RFC 8936) holds it until the receiver asks. Poll streams have no endpoint: the receiver connects to Cardinal. |
 
 ### `ssf_watermark`
 

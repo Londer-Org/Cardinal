@@ -1,5 +1,12 @@
 import { useState } from 'react'
-import { PauseIcon, PlayIcon, PlusIcon, Trash2Icon, TriangleAlertIcon } from 'lucide-react'
+import {
+  KeyRoundIcon,
+  PauseIcon,
+  PlayIcon,
+  PlusIcon,
+  Trash2Icon,
+  TriangleAlertIcon,
+} from 'lucide-react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -13,6 +20,13 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Checkbox } from '@/components/ui/checkbox'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
 import { ErrorMessage } from '@/components/ErrorMessage'
 import { ApplicationPicker } from '@/features/directory/ApplicationPicker'
@@ -66,6 +80,9 @@ function StreamRow({ stream }: { stream: SSFStream }) {
         <div className="min-w-0">
           <p className="flex flex-wrap items-center gap-2 text-sm font-medium">
             {stream.application}
+            <Badge variant="outline" className="font-normal">
+              {stream.delivery === 'poll' ? 'Poll' : 'Push'}
+            </Badge>
             {stream.enabled ? (
               <Badge variant="secondary">Delivering</Badge>
             ) : (
@@ -76,9 +93,15 @@ function StreamRow({ stream }: { stream: SSFStream }) {
               </Badge>
             )}
           </p>
-          <p className="truncate font-mono text-xs text-muted-foreground">
-            {stream.endpoint}
-          </p>
+          {stream.delivery === 'poll' ? (
+            <p className="text-xs text-muted-foreground">
+              Collected by the receiver, which connects and asks
+            </p>
+          ) : (
+            <p className="truncate font-mono text-xs text-muted-foreground">
+              {stream.endpoint}
+            </p>
+          )}
           <p className="mt-0.5 text-xs text-muted-foreground">
             Audience <span className="font-mono">{stream.clientId}</span> · updated{' '}
             {when(stream.updatedAt)}
@@ -133,6 +156,7 @@ function AddStream({
   taken: string[]
 }) {
   const [application, setApplication] = useState('')
+  const [delivery, setDelivery] = useState<'push' | 'poll'>('push')
   const [endpoint, setEndpoint] = useState('')
   // Everything, to begin with. A receiver that wants less can say so, but the
   // default that silently omits an event is the one that produces a gap
@@ -146,9 +170,9 @@ function AddStream({
       <CardHeader>
         <CardTitle>Add a receiver</CardTitle>
         <CardDescription>
-          Events are pushed to the endpoint as signed tokens. It must be https:
-          a receiver accepting security events over cleartext is one anybody on
-          the path can feed.
+          Events are signed tokens either way. Push posts each one to an
+          endpoint you give; poll holds them until the receiver collects them,
+          which is what a receiver behind NAT or without a public address needs.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -177,6 +201,24 @@ function AddStream({
           </div>
 
           <div className="space-y-2">
+            <Label htmlFor="ssf-delivery">Delivery</Label>
+            <Select
+              value={delivery}
+              onValueChange={(v) => { setDelivery(v as 'push' | 'poll'); }}
+            >
+              <SelectTrigger id="ssf-delivery">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="push">Push — Cardinal posts to the receiver</SelectItem>
+                <SelectItem value="poll">Poll — the receiver collects</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+
+        {delivery === 'push' ? (
+          <div className="space-y-2">
             <Label htmlFor="ssf-endpoint">Endpoint</Label>
             <Input
               id="ssf-endpoint"
@@ -184,8 +226,28 @@ function AddStream({
               value={endpoint}
               onChange={(e) => { setEndpoint(e.target.value); }}
             />
+            <p className="text-xs text-muted-foreground">
+              Must be https — a receiver accepting security events over
+              cleartext is one anybody on the path can feed.
+            </p>
           </div>
-        </div>
+        ) : (
+          <Alert>
+            <KeyRoundIcon />
+            <AlertTitle>The receiver needs a credential of its own</AlertTitle>
+            <AlertDescription>
+              <span>
+                A polling receiver authenticates as itself rather than as the
+                person who configured it, and reads only this receiver's events.
+                Issue one with{' '}
+                <code className="font-mono text-xs">
+                  cardinal ssf token{' '}
+                  {application === '' ? '<application>' : application}
+                </code>
+              </span>
+            </AlertDescription>
+          </Alert>
+        )}
 
         <fieldset className="space-y-2">
           <legend className="text-sm font-medium">Events</legend>
@@ -211,14 +273,19 @@ function AddStream({
         <ErrorMessage error={save.error} />
 
         <Button
-          disabled={application === '' || endpoint === '' || save.isPending}
+          disabled={
+            application === '' ||
+            (delivery === 'push' && endpoint === '') ||
+            save.isPending
+          }
           onClick={() => {
             save.mutate(
-              { application, stream: { endpoint, events } },
+              { application, stream: { endpoint, delivery, events } },
               {
                 onSuccess: () => {
                   setApplication('')
                   setEndpoint('')
+                  setDelivery('push')
                   setEvents(knownEvents)
                 },
               },

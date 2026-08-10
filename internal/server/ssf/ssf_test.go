@@ -52,7 +52,7 @@ func TestASessionRevocationIsATokenAReceiverCanRead(t *testing.T) {
 	subject := uuid.New()
 	when := time.Now().Add(-30 * time.Second).Truncate(time.Second)
 
-	token, err := tx.Sign(ssf.Event{
+	token, _, err := tx.Sign(ssf.Event{
 		Type:      ssf.EventSessionRevoked,
 		SubjectID: subject,
 		Reason:    "an administrator revoked this",
@@ -91,7 +91,7 @@ func TestASessionRevocationIsATokenAReceiverCanRead(t *testing.T) {
 func TestTheTypeHeaderIsSecevent(t *testing.T) {
 	tx, _ := transmitter(t)
 
-	token, err := tx.Sign(ssf.Event{
+	token, _, err := tx.Sign(ssf.Event{
 		Type: ssf.EventSessionRevoked, SubjectID: uuid.New(),
 	}, "client-abc")
 	require.NoError(t, err)
@@ -113,7 +113,7 @@ func TestEveryTokenIsUnique(t *testing.T) {
 	seen := map[string]bool{}
 
 	for range 5 {
-		token, err := tx.Sign(ssf.Event{
+		token, _, err := tx.Sign(ssf.Event{
 			Type: ssf.EventSessionRevoked, SubjectID: uuid.New(),
 		}, "client-abc")
 		require.NoError(t, err)
@@ -131,7 +131,7 @@ func TestEveryTokenIsUnique(t *testing.T) {
 // deployment with the OIDC provider switched off, and an unsigned security
 // event is worse than none: a receiver that accepted one would accept anybody's.
 func TestSigningWithoutAKeyIsRefused(t *testing.T) {
-	_, err := ssf.Transmitter{Issuer: "https://id.example.com"}.
+	_, _, err := ssf.Transmitter{Issuer: "https://id.example.com"}.
 		Sign(ssf.Event{Type: ssf.EventSessionRevoked}, "client-abc")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "no signing key")
@@ -142,7 +142,7 @@ func TestSigningWithoutAKeyIsRefused(t *testing.T) {
 func TestVerificationCarriesNoSubject(t *testing.T) {
 	tx, public := transmitter(t)
 
-	token, err := tx.Sign(ssf.Event{Type: ssf.EventVerification}, "client-abc")
+	token, _, err := tx.Sign(ssf.Event{Type: ssf.EventVerification}, "client-abc")
 	require.NoError(t, err)
 
 	events, ok := verify(t, token, public)["events"].(map[string]any)

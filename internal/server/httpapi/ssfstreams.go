@@ -9,6 +9,7 @@ import (
 
 	"go.londer.be/cardinal/internal/directory"
 	"go.londer.be/cardinal/internal/server/ssf"
+	"go.londer.be/cardinal/internal/store"
 )
 
 // Shared Signals streams, from the console.
@@ -37,6 +38,11 @@ type ssfStreamResponse struct {
 	Events   []string `json:"events"`
 	Enabled  bool     `json:"enabled"`
 
+	// Delivery is push or poll. A poll stream has no endpoint — the receiver
+	// connects to Cardinal — so a console showing "no endpoint" needs this to
+	// tell that apart from one that was never configured.
+	Delivery string `json:"delivery"`
+
 	CreatedAt time.Time `json:"createdAt"`
 	UpdatedAt time.Time `json:"updatedAt"`
 }
@@ -63,6 +69,7 @@ type ssfStreamsResponse struct {
 type ssfStreamRequest struct {
 	Endpoint string   `json:"endpoint"`
 	Events   []string `json:"events"`
+	Delivery string   `json:"delivery"`
 }
 
 // handleListSSFStreams describes every stream and the state of delivery.
@@ -98,6 +105,7 @@ func (s *Server) handleListSSFStreams(w http.ResponseWriter, r *http.Request) {
 			Application: stream.Name,
 			ClientID:    stream.ClientID,
 			Endpoint:    stream.Endpoint,
+			Delivery:    stream.DeliveryMethod,
 			Events:      stream.Events,
 			Enabled:     stream.Enabled,
 			CreatedAt:   stream.CreatedAt,
@@ -124,10 +132,26 @@ func (s *Server) handleSaveSSFStream(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	endpoint := strings.TrimSpace(req.Endpoint)
-	if problem := validateStreamEndpoint(endpoint); problem != "" {
-		writeError(w, http.StatusBadRequest, problem)
+	delivery := strings.TrimSpace(req.Delivery)
+	if delivery == "" {
+		delivery = store.DeliveryPush
+	}
+	if delivery != store.DeliveryPush && delivery != store.DeliveryPoll {
+		writeError(w, http.StatusBadRequest,
+			"delivery must be push or poll: push posts each event to the "+
+				"receiver, poll has the receiver collect them")
 		return
+	}
+
+	// Only a push stream has an endpoint to check. A poll stream is delivered
+	// by the receiver connecting here, so requiring one would be demanding an
+	// address for something nothing is ever sent to.
+	endpoint := strings.TrimSpace(req.Endpoint)
+	if delivery == store.DeliveryPush {
+		if problem := validateStreamEndpoint(endpoint); problem != "" {
+			writeError(w, http.StatusBadRequest, problem)
+			return
+		}
 	}
 
 	events, problem := validateStreamEvents(req.Events)
@@ -148,7 +172,7 @@ func (s *Server) handleSaveSSFStream(w http.ResponseWriter, r *http.Request) {
 	}
 
 	actorID := session.SubjectID
-	stream, err := s.store.SaveStream(ctx, app.ID, endpoint, events, &actorID)
+	stream, err := s.store.SaveStream(ctx, app.ID, endpoint, delivery, events, &actorID)
 	if err != nil {
 		s.log.ErrorContext(ctx, "saving a security event stream failed", "error", err)
 		writeError(w, http.StatusInternalServerError, "could not save that stream")
@@ -157,11 +181,13 @@ func (s *Server) handleSaveSSFStream(w http.ResponseWriter, r *http.Request) {
 
 	s.log.InfoContext(ctx, "security event stream saved",
 		"application", stream.Name, "endpoint", stream.Endpoint,
+		"delivery", stream.DeliveryMethod,
 		"events", len(stream.Events), "actor", session.SubjectID)
 
 	writeJSON(w, http.StatusOK, ssfStreamResponse{
 		Application: stream.Name, ClientID: stream.ClientID,
-		Endpoint: stream.Endpoint, Events: stream.Events, Enabled: stream.Enabled,
+		Endpoint: stream.Endpoint, Delivery: stream.DeliveryMethod,
+		Events: stream.Events, Enabled: stream.Enabled,
 		CreatedAt: stream.CreatedAt, UpdatedAt: stream.UpdatedAt,
 	})
 }

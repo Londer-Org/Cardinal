@@ -24,13 +24,15 @@ func (s *Server) handleSSFConfiguration(w http.ResponseWriter, r *http.Request) 
 		// so security events need no key distribution of their own and rotate
 		// with the keys that already rotate.
 		JWKSURI:                  issuer + "/oidc/keys",
-		DeliveryMethodsSupported: []string{ssf.DeliveryPush},
+		DeliveryMethodsSupported: []string{ssf.DeliveryPush, ssf.DeliveryPoll},
+		PollEndpoint:             issuer + "/ssf/poll",
 		SpecVersion:              "1_0-ID2",
 		Note: "Streams are configured by a Cardinal administrator with " +
 			"`cardinal ssf stream add`, not by the receiver over this API: " +
-			"stream management is not implemented. Push delivery, the Security " +
-			"Event Token format and the CAEP event types are, which is what a " +
-			"receiver needs in order to accept and verify what arrives.",
+			"stream management is not implemented. Both delivery methods are: " +
+			"push posts each token to an endpoint you give, poll has you " +
+			"collect them from poll_endpoint with an access token issued by " +
+			"`cardinal ssf token <application>` and sent as a bearer token.",
 	}.MarshalIndent()
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "could not describe this transmitter")

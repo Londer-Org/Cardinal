@@ -84,3 +84,14 @@ CREATE INDEX ssf_events_unpolled_idx
 COMMENT ON COLUMN ssf_events.jti IS
     'The jti of the signed token, lifted out so RFC 8936 poll responses can be '
     'keyed by it and acknowledged by it without parsing the token.';
+
+-- The table comment predates poll delivery and said Cardinal pushes to these
+-- receivers, full stop. Half of that is now wrong in the direction that
+-- matters: somebody reading the schema to find out how events reach an
+-- application would conclude there is only one way.
+COMMENT ON TABLE ssf_streams IS
+    'Receivers Cardinal sends security events to. push (RFC 8935) posts each '
+    'event to the receiver''s endpoint; poll (RFC 8936) holds it until the '
+    'receiver collects it with a credential of its own. Streams are configured '
+    'by an administrator: stream management over the API is not implemented, '
+    'and the SSF configuration document says so.';
