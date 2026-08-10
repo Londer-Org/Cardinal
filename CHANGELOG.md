@@ -12,7 +12,15 @@ the API can change in any release. Migrations are expand-only, so the previous
 build keeps working against a newer schema and rolling back is redeploying the
 old image.
 
-## Unreleased
+## 0.4.0 — 2026-08-10
+
+Security events stop being a thing you configure blind and hope about. The
+console shows every receiver and whether delivery is working, and a receiver
+that Cardinal cannot reach — behind NAT, on a laptop, in a CI job — can now
+collect its events instead of needing an inbound path opened to it.
+
+Nothing to do on upgrade. The schema change is expand-only as always, existing
+streams keep pushing exactly as they did, and no configuration key changed.
 
 ### Added
 

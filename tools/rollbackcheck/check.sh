@@ -18,13 +18,15 @@
 #      and chose to serve, rather than not having looked.
 #
 # Versions to test are arguments; the default is every release whose schema is
-# genuinely older. 0.3.0 and 0.3.1 share a schema — 0.3.1 was documentation
-# only — so testing against 0.3.0 would pass while exercising nothing.
+# genuinely older. Where consecutive releases share a schema only the newer one
+# is listed: 0.3.0 and 0.3.1 are such a pair — 0.3.1 was documentation only — so
+# testing 0.3.0 as well would pass while exercising nothing the newer one does
+# not already cover.
 set -euo pipefail
 
 VERSIONS=("$@")
 if [ ${#VERSIONS[@]} -eq 0 ]; then
-  VERSIONS=(0.1.0 0.2.0)
+  VERSIONS=(0.1.0 0.2.0 0.3.1)
 fi
 
 NET="cardinal-rollback-check"
