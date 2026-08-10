@@ -31,6 +31,27 @@ import (
 // compatible. `-- breaking: <why>` on a line of its own.
 var breakingHeader = regexp.MustCompile(`(?im)^--\s*breaking:\s*(\S.*)$`)
 
+// widensConstraint marks a DROP CONSTRAINT that exists only to replace one with
+// a wider one. `-- widens: <constraint> — <why>` on a line of its own.
+//
+// Dropping a constraint is the one forbidden rule that can be either direction.
+// Removing `endpoint LIKE 'https://%'` and re-adding it as
+// `endpoint = ” OR endpoint LIKE 'https://%'` accepts every row the old one
+// accepted, so a previous version keeps writing rows this schema takes. Narrowing
+// it is the opposite and breaks that version's inserts one at a time.
+//
+// A marker cannot prove which was done — the author asserts it, as with
+// `breaking:`. What is checked mechanically is that the same constraint name is
+// added back in the same migration, so the marker cannot be used to remove a
+// constraint outright: that is a drop whatever the comment says.
+var widensConstraint = regexp.MustCompile(`(?im)^--\s*widens:\s*(\w+)\s*(?:—|-)\s*(\S.*)$`)
+
+// droppedConstraint and addedConstraint find the two halves of a replacement.
+var (
+	droppedConstraint = regexp.MustCompile(`(?i)\bDROP\s+CONSTRAINT\s+(?:IF\s+EXISTS\s+)?(\w+)`)
+	addedConstraint   = regexp.MustCompile(`(?i)\bADD\s+CONSTRAINT\s+(\w+)`)
+)
+
 // grandfathered are the migrations that predate this rule.
 //
 // They cannot be brought into line, and that is not laziness: a migration's
@@ -109,7 +130,12 @@ func TestMigrationsOnlyAdd(t *testing.T) {
 				return
 			}
 
+			widened := declaredWidenings(t, body, sql)
+
 			for _, rule := range forbidden {
+				if rule.name == "DROP CONSTRAINT" && allDropsAreWidenings(sql, widened) {
+					continue
+				}
 				assert.False(t, rule.pattern.MatchString(sql),
 					"%s is not expand-only: %s.\n\nEither split it — add now, remove a "+
 						"release later once nothing reads it — or, if it genuinely cannot "+
@@ -132,6 +158,43 @@ func TestMigrationsOnlyAdd(t *testing.T) {
 			}
 		})
 	}
+}
+
+// declaredWidenings returns the constraints this migration says it widened,
+// failing the test for any that is not actually replaced.
+func declaredWidenings(t *testing.T, body []byte, sql string) map[string]bool {
+	t.Helper()
+
+	added := map[string]bool{}
+	for _, m := range addedConstraint.FindAllStringSubmatch(sql, -1) {
+		added[strings.ToLower(m[1])] = true
+	}
+
+	widened := map[string]bool{}
+	for _, m := range widensConstraint.FindAllSubmatch(body, -1) {
+		name := strings.ToLower(string(m[1]))
+		assert.True(t, added[name],
+			"`-- widens: %s` names a constraint this migration never adds back, so it "+
+				"is a removal rather than a replacement. A previous version writing rows "+
+				"that only the old constraint refused now succeeds", m[1])
+		widened[name] = true
+		t.Logf("declared widening: %s — %s", m[1], strings.TrimSpace(string(m[2])))
+	}
+	return widened
+}
+
+// allDropsAreWidenings reports whether every dropped constraint was declared.
+func allDropsAreWidenings(sql string, widened map[string]bool) bool {
+	drops := droppedConstraint.FindAllStringSubmatch(sql, -1)
+	if len(drops) == 0 {
+		return false
+	}
+	for _, m := range drops {
+		if !widened[strings.ToLower(m[1])] {
+			return false
+		}
+	}
+	return true
 }
 
 // stripComments removes -- and /* */ so a rule named in prose is not mistaken
