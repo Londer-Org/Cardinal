@@ -753,7 +753,37 @@ type errorBody struct {
 // credential" from "account disabled": each distinction is a username
 // enumeration oracle. Detail goes to the log, not the response.
 func writeError(w http.ResponseWriter, status int, message string) {
-	writeJSON(w, status, errorBody{Error: message})
+	writeJSON(w, status, errorBody{Error: withoutPackagePrefix(message)})
+}
+
+// internalPrefixes are the package names Cardinal's own errors carry.
+//
+// Wrapped errors are written `fmt.Errorf("store: ...")` so a log line says
+// which layer failed, which is the right thing for a log. Three dozen handlers
+// then pass err.Error() straight to the client, and the prefix goes with it —
+// so an administrator correcting a typo in a hostname was told "store: a
+// hostname cannot be blank", and somebody adding a group to itself got
+// "temporal: a group cannot be a member of itself". The sentences are good.
+// The package names are implementation detail standing in front of them.
+//
+// An explicit list rather than a regexp for anything before a colon: messages
+// legitimately contain colons — a URL, a duration, a quoted identifier — and a
+// pattern would eat the front of those.
+var internalPrefixes = []string{
+	"store: ", "directory: ", "temporal: ", "policy: ", "auth: ",
+	"ssf: ", "scim: ", "config: ", "event: ", "claims: ", "hostclient: ",
+}
+
+// withoutPackagePrefix strips one leading package name from a client-facing
+// message. Only the response is changed; the log keeps the whole thing, which
+// is where the layer is worth knowing.
+func withoutPackagePrefix(message string) string {
+	for _, prefix := range internalPrefixes {
+		if after, found := strings.CutPrefix(message, prefix); found {
+			return after
+		}
+	}
+	return message
 }
 
 // decodeJSON reads a request body with a size cap, so a malicious client cannot
