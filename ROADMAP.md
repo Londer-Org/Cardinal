@@ -117,7 +117,7 @@ Honest, and referenced from [the threat model](docs/threat-model.md) and
 | SSF streams are configured only from the CLI | The console has no view for them, so deciding which applications hear about a revocation is the one piece of administration that cannot be done from the browser. Unlike the row above this is a missing admin surface rather than a missing protocol half | 5 |
 | Single writer | PostgreSQL streaming replication with manual promotion. Deliberate — split-brain in an identity store means two primaries accepting credential writes | revisit with a team on call |
 | No automated failover | Same reason. A misconfigured automatic failover is more dangerous than none | revisit |
-| No N-1 compatibility test | Nothing runs the previous release against a schema migrated by the current one. The expand-only rule is what makes it safe, and the rule is enforced per migration — the pairing is checked by reading | when there are two releases |
+| No N-1 compatibility test | ~~Nothing runs the previous release against a schema migrated by the current one~~ **Closed.** `make verify-rollback` migrates a database with this build, then starts the published 0.1.0 and 0.2.0 images against it and asserts they serve. It found that 0.1.0 predates drift detection and serves without noticing, which is correct for a build from before the feature and would have been a false failure to demand otherwise | done |
 | Windows is client-only | Passkeys, OIDC and OpenSSH work. There is no managed-host path and no domain join: the agent needs systemd's userdb, sudoers and sshd config | not planned |
 
 ## Open questions

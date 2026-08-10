@@ -52,3 +52,6 @@ examples/traefik/tls/
 # The virtualenv tools/uishot/README.md tells you to create, at the path it
 # names. Following the documented workflow should not leave the tree dirty.
 .venv/
+
+# Scratch directory for tools/rollbackcheck
+.rollbackcheck.*

@@ -136,6 +136,18 @@ verify-acme: ## Drive the ACME server with lego, a client nobody here wrote
 	@# Cardinal agreeing with Cardinal.
 	@tools/acmecheck/check.sh
 
+.PHONY: verify-rollback
+verify-rollback: ## Run published releases against a schema this build migrated
+	@# The upgrade story rests on one promise — migrations are expand-only, so
+	@# rolling back is redeploying the old image and nothing else. The rule is
+	@# enforced per migration by `go test ./migrations/`, and the drift logic is
+	@# unit-tested against synthetic rows, but the pairing itself was only ever
+	@# checked by reading. This runs it.
+	@#
+	@# Needs the published images, so it is not part of `make test`. Pass
+	@# versions to override the default set.
+	@bash tools/rollbackcheck/check.sh $(VERSIONS)
+
 .PHONY: verify-host
 verify-host: ## Check the host integration against real getent, id and sudo
 	@# The Go tests prove each package agrees with a client written from the

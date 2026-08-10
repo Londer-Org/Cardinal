@@ -12,6 +12,18 @@ the API can change in any release. Migrations are expand-only, so the previous
 build keeps working against a newer schema and rolling back is redeploying the
 old image.
 
+## Unreleased
+
+### Internal
+
+- `make verify-rollback` runs published releases against a schema this build
+  migrated, and asserts they serve. Rolling back has always been "redeploy the
+  old image and nothing else", resting on migrations being expand-only — a rule
+  enforced per migration, with the pairing itself only ever checked by reading.
+  0.1.0 and 0.2.0 both serve against the current schema. Verified in the other
+  direction too: marking a migration breaking makes 0.2.0 refuse to start, and
+  the check reports it.
+
 ## 0.3.1 — 2026-08-09
 
 Documentation and metadata only. No code, no schema change, and no behaviour
