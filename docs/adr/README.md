@@ -40,6 +40,8 @@ isn't finished.
 | [0028](0028-shadow-mode-reports-and-does-not-act.md) | Shadow mode reports, and does not act | Accepted |
 | [0029](0029-a-number-is-permanent-once-it-has-been-served.md) | A number is permanent once it has been served, and not before | Accepted |
 | [0030](0030-the-package-installs-and-reports.md) | The package installs and reports, and does not prepare | Accepted |
+| [0031](0031-scim-provisioning-is-its-own-action.md) | SCIM provisioning is its own action, not administration | Accepted |
+| [0032](0032-an-application-sees-the-groups-it-owns.md) | An application sees the groups it owns, not the whole directory | Proposed |
 
 ## Conventions
 
