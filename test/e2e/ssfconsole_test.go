@@ -35,7 +35,6 @@ type consoleStreams struct {
 	JWKSURI     string          `json:"jwksUri"`
 }
 
-
 // asAdministrator makes the seeded user one, for this test.
 //
 // Seeded rather than assumed: the suite's user is not an administrator by
@@ -82,7 +81,8 @@ func TestTheConsoleCanConfigureAReceiver(t *testing.T) {
 
 	// Removed first and last: the schema allows one stream per receiver, so a
 	// test that assumed none would pass once and fail on every rerun.
-	drain(requestWithCSRF(t, c, http.MethodDelete, "/api/ssf/streams/"+app, csrf))
+	stale := requestWithCSRF(t, c, http.MethodDelete, "/api/ssf/streams/"+app, csrf) //nolint:bodyclose // drain closes it; bodyclose cannot see through the helper
+	drain(stale)
 
 	created := requestWithCSRF2(t, c, http.MethodPut, "/api/ssf/streams/"+app, csrf,
 		map[string]any{"endpoint": endpoint, "events": []string{sessionRevoked}})
@@ -119,15 +119,19 @@ func TestTheConsoleCanConfigureAReceiver(t *testing.T) {
 
 	// Pausing rather than deleting is what somebody does when a receiver is
 	// down, so the configuration survives the outage.
-	drain(requestWithCSRF(t, c, http.MethodPost, "/api/ssf/streams/"+app+"/pause", csrf))
+	paused := requestWithCSRF(t, c, http.MethodPost, "/api/ssf/streams/"+app+"/pause", csrf) //nolint:bodyclose // drain closes it; bodyclose cannot see through the helper
+	drain(paused)
 	for _, s := range listStreams(t, c).Streams {
 		if s.Application == app && s.Enabled {
 			t.Error("the stream still reports itself as delivering after being paused")
 		}
 	}
 
-	drain(requestWithCSRF(t, c, http.MethodPost, "/api/ssf/streams/"+app+"/resume", csrf))
-	drain(requestWithCSRF(t, c, http.MethodDelete, "/api/ssf/streams/"+app, csrf))
+	resumed := requestWithCSRF(t, c, http.MethodPost, "/api/ssf/streams/"+app+"/resume", csrf) //nolint:bodyclose // drain closes it; bodyclose cannot see through the helper
+	drain(resumed)
+
+	removed := requestWithCSRF(t, c, http.MethodDelete, "/api/ssf/streams/"+app, csrf) //nolint:bodyclose // drain closes it; bodyclose cannot see through the helper
+	drain(removed)
 
 	for _, s := range listStreams(t, c).Streams {
 		if s.Application == app {

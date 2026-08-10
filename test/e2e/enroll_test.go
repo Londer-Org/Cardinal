@@ -17,7 +17,26 @@ import (
 // cover redemption and these cover the boundary.
 
 // TestEnrollmentRequiresAnInvitation.
+// clearEnrollmentRateLimit keeps these tests independent of what ran before.
+//
+// Enrolment is limited to 60 attempts per client address per fifteen minutes,
+// and every test here arrives from the same address. Sixty is generous enough
+// that the suite does not exhaust it on its own — but anything else touching
+// /api/enroll in that window does, and then these fail with 429 while looking
+// like a broken invitation path. That happened: probing the endpoint by hand
+// cost a full suite run.
+//
+// The limit is not weakened, only its window reset, which is what a
+// fifteen-minute wait would do. The recovery tests do the same for the same
+// reason.
+func clearEnrollmentRateLimit(t *testing.T) {
+	t.Helper()
+	seedSQL(t, "DELETE FROM rate_limits WHERE scope = 'enrollment'")
+}
+
 func TestEnrollmentRequiresAnInvitation(t *testing.T) {
+	clearEnrollmentRateLimit(t)
+
 	c := client(t)
 	csrf := csrfToken(t, c)
 
@@ -72,6 +91,8 @@ func TestEnrollmentRequiresAnInvitation(t *testing.T) {
 // account's expired link. Otherwise the endpoint answers "does alice exist?"
 // to anyone willing to try.
 func TestInvitationDoesNotLeakWhetherAnAccountExists(t *testing.T) {
+	clearEnrollmentRateLimit(t)
+
 	c := client(t)
 
 	bodies := make([]string, 0, 2)
@@ -99,6 +120,8 @@ func TestInvitationDoesNotLeakWhetherAnAccountExists(t *testing.T) {
 // user must be refused: otherwise any employee could mint a credential on a
 // colleague's account.
 func TestIssuingAnInvitationIsAdministration(t *testing.T) {
+	clearEnrollmentRateLimit(t)
+
 	adminClient(t) // ensures the ordinary account is not an administrator
 
 	c := signedInClient(t)
@@ -129,6 +152,8 @@ func TestIssuingAnInvitationIsAdministration(t *testing.T) {
 
 // TestAdminCanIssueAndRevokeAnInvitation walks the administrative half.
 func TestAdminCanIssueAndRevokeAnInvitation(t *testing.T) {
+	clearEnrollmentRateLimit(t)
+
 	c, csrf := adminClient(t)
 
 	// A throwaway account, created directly so the test does not depend on the
