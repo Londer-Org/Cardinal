@@ -72,11 +72,32 @@ Edit it: for local testing set
 ```toml
 [server]
 listen = "127.0.0.1:8099"
+public_url = "http://localhost:8099"
+
+[database]
+dsn = "postgres://cardinal:cardinal@localhost:5433/cardinal?sslmode=disable"
 
 [webauthn]
 rp_id = "localhost"
 origins = ["http://localhost:8099"]
 ```
+
+Four keys, and two of them are easy to leave alone and hard to diagnose.
+
+**The dsn**, because the shipped example is `sslmode=require` with no password —
+right for a production database and wrong for the container `make up` starts,
+which serves no TLS. Left as it is, the server does not start:
+
+```
+cardinal: store: reading server version: failed to connect to
+  `user=cardinal database=cardinal`: tls error: server refused TLS connection
+```
+
+**The public_url**, because every link Cardinal hands out is built from it, not
+from the address it happens to be listening on. Left as the example's
+`https://id.example.com`, the server runs fine and `cardinal invite` prints an
+enrolment link to a domain that does not exist — which is discovered by a person
+clicking it.
 
 `rp_id = "localhost"` matters. Browsers treat `http://localhost` as a secure
 context, so WebAuthn works there without TLS — which is true of no other
@@ -106,24 +127,30 @@ This is Phase 0, and all of it works:
 ```sh
 ./bin/cardinal user create alonfils -display "Arthur Lonfils"
 ./bin/cardinal user create contractor
-./bin/cardinal group create engineers
-./bin/cardinal group create prod-access
+./bin/cardinal group create analysts
+./bin/cardinal group create prod-reviewers
 
-# Nested groups: engineers are, transitively, production
-./bin/cardinal grant prod-access engineers -reason "engineering owns production"
-./bin/cardinal grant engineers alonfils   -reason "employee"
+# Nested groups: analysts are, transitively, reviewers
+./bin/cardinal grant prod-reviewers analysts -reason "analysis owns review"
+./bin/cardinal grant analysts alonfils       -reason "employee"
 
 # The interesting one: time-boxed access
-./bin/cardinal grant prod-access contractor -for 72h -reason "incident #42"
+./bin/cardinal grant prod-reviewers contractor -for 72h -reason "incident #42"
 ```
+
+Names nothing else uses, deliberately. Migration 0027 creates `engineers`,
+`prod-access`, `sre`, `env-prod`, `env-dev`, `staff-apps` and the administration
+groups, so a walkthrough built on those would open with
+`a group named "engineers" already exists` — which reads as a broken install on
+the first command anybody runs.
 
 Then look at what that bought you:
 
 ```sh
-./bin/cardinal memberships alonfils     # prod-access, inherited, depth 2
-./bin/cardinal members prod-access
-./bin/cardinal revoke prod-access contractor
-./bin/cardinal history prod-access contractor
+./bin/cardinal memberships alonfils     # prod-reviewers, inherited, depth 2
+./bin/cardinal members prod-reviewers
+./bin/cardinal revoke prod-reviewers contractor
+./bin/cardinal history prod-reviewers contractor
 ```
 
 That last command is the point of the whole temporal model. The contractor's
@@ -133,9 +160,9 @@ revocation. A boolean membership model destroys that.
 Point-in-time queries:
 
 ```sh
-./bin/cardinal members prod-access -at 2026-08-04T12:00:00Z
-./bin/cardinal memberships alonfils  -at 2026-08-04T12:00:00Z
-./bin/cardinal history prod-access contractor -at 2026-08-04T12:00:00Z
+./bin/cardinal members prod-reviewers -at 2026-08-04T12:00:00Z
+./bin/cardinal memberships alonfils   -at 2026-08-04T12:00:00Z
+./bin/cardinal history prod-reviewers contractor -at 2026-08-04T12:00:00Z
 ```
 
 The last one answers the question an auditor actually asks — *was this person in
