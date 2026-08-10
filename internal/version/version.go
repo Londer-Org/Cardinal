@@ -28,7 +28,7 @@ const Header = "X-Cardinal-Version"
 const AgentUserAgent = "cardinal-agent/" + Number
 
 // Number is the release this was built from.
-const Number = "0.3.1"
+const Number = "0.4.0"
 
 // Commit and Date are stamped at link time by goreleaser. Empty in a local
 // build, which is the honest answer rather than a guess.
