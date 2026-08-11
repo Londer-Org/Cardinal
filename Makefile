@@ -427,6 +427,20 @@ e2e-seed: ## Create the end-to-end user and activate the policy set
 		cardinal grant staff-apps protected-app 2>&1 \
 		| grep -qE 'granted|already' \
 		|| { echo 'ERROR: could not put protected-app in staff-apps'; exit 1; }
+	@# And told about every group, which is what this fixture assumed before
+	@# projections existed (ADR 0032). An application created now starts in
+	@# `owned` mode and owns nothing, so the identity headers arrive with no
+	@# groups at all — which is correct, and broke the header tests the moment
+	@# the default changed.
+	@#
+	@# Set here rather than by narrowing those tests: they are about whether a
+	@# stable identifier reaches an application, and coupling them to a
+	@# disclosure setting would make a failure ambiguous. The projection has an
+	@# end-to-end test of its own that flips this deliberately.
+	@$(COMPOSE_E2E) exec -T cardinal \
+		cardinal app groups mode protected-app all 2>&1 \
+		| grep -qE 'every group' \
+		|| { echo 'ERROR: could not widen the group projection'; exit 1; }
 	@# The Shared Signals receiver, which is deliberately not Cardinal: it
 	@# fetches the JWKS like any receiver would and verifies what arrives. The
 	@# stream is configured here because stream management over the API is not
