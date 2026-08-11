@@ -1,6 +1,11 @@
 package e2e
 
 import (
+	"encoding/base64"
+	"encoding/json"
+	"io"
+	"net/http"
+	"net/url"
 	"os/exec"
 	"strings"
 	"testing"
@@ -131,4 +136,137 @@ func cliBackground(args ...string) {
 		"exec", "-T", "cardinal", "cardinal",
 	}, args...)
 	_ = exec.Command("docker", full...).Run() //nolint:errcheck,noctx // best effort cleanup
+}
+
+// TestEveryTokenCarriesOnlyWhatTheApplicationMayBeTold.
+//
+// A relying party is handed two JWTs and both can carry groups, assembled by
+// two different storage methods: the id_token through SetUserinfoFromScopes,
+// the access token through GetPrivateClaimsFromScopes. Only the first was
+// narrowed, so a projection filtered the forwardAuth header and the userinfo
+// response while the access token still carried the whole closure — and
+// Cardinal's access tokens are JWTs deliberately, so anything in one is
+// readable by every resource server behind that relying party.
+//
+// Both are asserted here because the pair is the point: a projection that
+// holds for one token and not the other is not a projection.
+func TestEveryTokenCarriesOnlyWhatTheApplicationMayBeTold(t *testing.T) {
+	t.Cleanup(func() { cliBackground("app", "groups", "mode", "e2e-client", "all") })
+
+	// e2e-user is who establishSession signs in as, and the seed leaves them in
+	// no groups at all — so without this the wide case and the narrow case are
+	// both empty and the test passes while proving nothing.
+	tryCardinalCLI(t, "grant", "engineers", "e2e-user", "-reason", "projection e2e")
+
+	cardinalCLI(t, "app", "groups", "mode", "e2e-client", "all")
+	wideAccess, wideID := tokenGroups(t)
+	if len(wideAccess) == 0 || len(wideID) == 0 {
+		t.Fatalf("a token carried no groups before anything was narrowed "+
+			"(access %v, id %v), so this test cannot tell a narrowed claim "+
+			"from an empty directory", wideAccess, wideID)
+	}
+
+	// e2e-client owns no groups, so `owned` withdraws all of them at once.
+	cardinalCLI(t, "app", "groups", "mode", "e2e-client", "owned")
+	narrowAccess, narrowID := tokenGroups(t)
+	if len(narrowAccess) != 0 {
+		t.Errorf("the access token still carried %v after the application was "+
+			"narrowed to the groups it owns, and it owns none", narrowAccess)
+	}
+	if len(narrowID) != 0 {
+		t.Errorf("the id_token still carried %v after the application was "+
+			"narrowed to the groups it owns, and it owns none", narrowID)
+	}
+}
+
+// tokenGroups drives an authorization for the `groups` scope and returns the
+// claim out of both tokens the exchange returns.
+//
+// The payloads are read without verifying the signature, which would be wrong
+// in a client and is right here: the assertion is about what Cardinal put in
+// the tokens, and oidc_test.go already covers that they verify.
+func tokenGroups(t *testing.T) (access, id []string) {
+	t.Helper()
+
+	clientID := seededClientID(t)
+	c := client(t)
+	code, verifier := authorizeAs(t, c, clientID, "openid groups")
+
+	form := url.Values{
+		"grant_type":    {"authorization_code"},
+		"code":          {code},
+		"redirect_uri":  {origin(hostRP) + "/callback"},
+		"client_id":     {clientID},
+		"code_verifier": {verifier},
+	}
+	req, err := http.NewRequest(http.MethodPost, //nolint:noctx // bounded by client timeout
+		origin(hostCardinal)+"/oidc/token", strings.NewReader(form.Encode()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	resp, err := c.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close() //nolint:errcheck // nothing actionable remains once the body is read
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body) //nolint:errcheck // a body that will not read is reported by the assertion that follows
+		t.Fatalf("token exchange failed with %d: %s", resp.StatusCode, body)
+	}
+
+	var token struct {
+		AccessToken string `json:"access_token"`
+		IDToken     string `json:"id_token"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&token); err != nil {
+		t.Fatal(err)
+	}
+	return groupsClaim(t, "access token", token.AccessToken),
+		groupsClaim(t, "id_token", token.IDToken)
+}
+
+// groupsClaim reads the groups out of a JWT payload.
+func groupsClaim(t *testing.T, which, jwt string) []string {
+	t.Helper()
+
+	parts := strings.Split(jwt, ".")
+	if len(parts) != 3 {
+		t.Fatalf("the %s is not a JWT, so this test is checking the wrong "+
+			"thing: %q", which, jwt)
+	}
+	payload, err := base64.RawURLEncoding.DecodeString(parts[1])
+	if err != nil {
+		t.Fatalf("decoding the %s payload: %v", which, err)
+	}
+
+	var claims struct {
+		Groups []string `json:"groups"`
+	}
+	if err := json.Unmarshal(payload, &claims); err != nil {
+		t.Fatalf("parsing the %s payload: %v", which, err)
+	}
+	return claims.Groups
+}
+
+// seededClientID reads the client id of the relying party the Makefile seeds,
+// which is registered with the `groups` scope this test needs.
+func seededClientID(t *testing.T) string {
+	t.Helper()
+
+	repointClient(t, "e2e-client")
+	out, err := exec.CommandContext(t.Context(), "docker", "compose",
+		"-f", "../../examples/compose.yml", "exec", "-T", "postgres",
+		"psql", "-U", "cardinal", "-d", "cardinal", "-tAc",
+		"SELECT client_id FROM oidc_clients c JOIN entities e ON e.id = c.entity_id "+
+			"WHERE e.name = 'e2e-client'").Output()
+	if err != nil {
+		t.Fatalf("reading the seeded client id: %v", err)
+	}
+	id := strings.TrimSpace(string(out))
+	if id == "" {
+		t.Fatal("the seeded relying party has no client_id")
+	}
+	return id
 }

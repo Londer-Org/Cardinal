@@ -12,6 +12,37 @@ the API can change in any release. Migrations are expand-only, so the previous
 build keeps working against a newer schema and rolling back is redeploying the
 old image.
 
+## Unreleased
+
+### Added
+
+- **An application can be told only about the groups that concern it.** Until
+  now every application behind forwardAuth, and every relying party asking for
+  the `groups` scope, received every group the person belonged to. An internal
+  wiki learned that somebody was in `hr-investigations`, and the payload grew
+  with the size of the directory rather than with the needs of the application.
+
+  ```sh
+  cardinal group create aura-admins -app aura   # a group that belongs to an app
+  cardinal app groups mode aura owned           # tell it about those, and no more
+  cardinal app groups allow aura engineers      # plus one it does not own
+  cardinal app groups show aura                 # what it is told about, and why
+  ```
+
+  The same is on the application's page in the console. A system group is never
+  projected: membership of `directory-admins` is authority inside Cardinal, not
+  a role in somebody else's application.
+
+  **This changes what an application is told, never what Cardinal decides.**
+  Policy is evaluated against the full membership either way, so narrowing a
+  projection can neither refuse nor admit anybody
+  ([ADR 0032](docs/adr/0032-an-application-sees-the-groups-it-owns.md)).
+
+  Nothing to do on upgrade: every application starts in `all`, which is the
+  behaviour it had. Rolling back to a build without this **widens** the claim
+  again, which is a disclosure change rather than a failure — `docs/upgrading.md`
+  says so.
+
 ## 0.4.0 — 2026-08-10
 
 Security events stop being a thing you configure blind and hope about. The

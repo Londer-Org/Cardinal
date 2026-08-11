@@ -312,6 +312,16 @@ would make the explorer answer a different question than the one it is asked.
 `group_ids` claims are built from the same projection. Nothing changes for a
 client that does not request the `groups` scope, which is most of them.
 
+> **Corrected after implementing this.** "The claims" is two places, not one.
+> zitadel/oidc assembles the id_token through `SetUserinfoFromScopes` and the
+> access token through `GetPrivateClaimsFromScopes`, and Cardinal issues access
+> tokens as JWTs, so both carry `groups` to the relying party. The first
+> implementation projected the header, userinfo and the id_token while the
+> access token still carried the whole closure — caught before release, by
+> writing the documentation and finding the code did not match it. The end-to-end test now asserts
+> both tokens, because a projection that holds for one and not the other is not
+> a projection.
+
 **Nothing else changes.** SCIM is inbound. SSH certificate principals come from
 policy rather than from group names. The console and self-service views are
 Cardinal's own surfaces, not third parties.
@@ -349,8 +359,12 @@ discovering it.
 
 ## Status of this record
 
-Proposed. The decision and the design are argued; nothing is built. One claim it
-rests on — that common off-the-shelf relying parties do not request the `groups`
-scope by default — is marked above as an assumption that has not been tested
-here, and should be confirmed against one real relying party before this is
-accepted.
+Accepted, and built. The schema, the projection, the CLI, the console and the
+end-to-end tests are in the tree; where the implementation contradicted the
+design, the record above says so rather than being quietly edited to match.
+
+One claim it rests on is still untested: that common off-the-shelf relying
+parties do not request the `groups` scope by default. That is marked above as an
+assumption, and it stays an assumption until somebody points a real relying
+party at Cardinal and looks. It affects how much this feature matters, not
+whether it is correct.

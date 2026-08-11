@@ -456,6 +456,16 @@ func (s *Storage) setUserinfo(
 }
 
 // GetPrivateClaimsFromScopes projects directory attributes into claims.
+//
+// This assembles the *access token*, which Cardinal issues as a JWT — the
+// id_token goes through setUserinfo instead. So the projection has to be
+// applied twice, in two methods the library calls for two different tokens.
+// The first implementation applied it in one of them: narrowing an application
+// filtered its forwardAuth header, its userinfo response and its id_token
+// while the access token it holds still carried every group.
+//
+// The library strips profile, email, address and phone before calling this,
+// because those belong to userinfo. It does not strip `groups`.
 func (s *Storage) GetPrivateClaimsFromScopes(ctx context.Context, userID, clientID string, scopes []string) (map[string]any, error) {
 	subjectID, err := uuid.Parse(userID)
 	if err != nil {
@@ -470,8 +480,9 @@ func (s *Storage) GetPrivateClaimsFromScopes(ctx context.Context, userID, client
 	private := map[string]any{}
 	for _, scope := range scopes {
 		if scope == "groups" {
-			private["groups"] = resolved.GroupNames()
-			private["group_ids"] = resolved.GroupIDs()
+			visible := resolved.GroupsFor(s.projectionFor(ctx, clientID))
+			private["groups"] = visible.Names()
+			private["group_ids"] = visible.IDs()
 		}
 	}
 	return private, nil

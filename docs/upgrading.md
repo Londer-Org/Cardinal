@@ -69,6 +69,22 @@ of it, but it can read the row.
 Rolling back past a breaking migration is a restore from backup. That is the
 honest cost, it is stated up front, and it should be rare enough to be an event.
 
+### Rolling back past a narrowed group projection
+
+Not a schema problem — the tables are expand-only and an older build ignores
+them — but the behaviour is not symmetrical, and it is worth knowing before it
+surprises somebody.
+
+An application whose projection is `owned` is told about a subset of a person's
+groups. A build from before that feature reads neither table and sends the full
+closure, so **rolling back widens the claim**: an application that had been told
+about two groups is suddenly told about all of them. Nothing breaks and nothing
+is refused, because the projection never affected what Cardinal decides — but a
+disclosure you had narrowed is open again until you roll forward.
+
+Nothing to do beyond knowing it. If the narrowing mattered, that is a reason to
+fix forward rather than back.
+
 ### Two changes 0.3.0 needs you to act on
 
 Neither is a schema problem, so nothing refuses to start and nothing appears in
