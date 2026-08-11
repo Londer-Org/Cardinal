@@ -37,8 +37,9 @@ import (
 // DefaultValidity is how long an issued certificate lives.
 //
 // Short enough that a stolen one is not durable access, long enough to finish
-// what you started. The plan's range is 5–15 minutes; this sits in it and is
-// configurable per issuance for the cases that genuinely differ.
+// what you started. Configurable per issuance for the cases that genuinely
+// differ; ten minutes is the default because five is disruptive on a slow link
+// and an hour stops being short-lived in any useful sense.
 const DefaultValidity = 10 * time.Minute
 
 // clockSkew is subtracted from the start time.

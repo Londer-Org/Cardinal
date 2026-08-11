@@ -57,6 +57,26 @@ comment makes a factual claim about the behaviour of a dependency, the operating
 system, or a database, check it before writing it — and if you checked, the
 comment may as well say what was observed.
 
+**Write for someone who was not there.** A comment is read by a developer with
+the code in front of them and nothing else: no roadmap, no plan document, no
+conversation, no memory of the afternoon it was written. So it may not lean on
+any of those.
+
+- **No private references.** "The plan says", "Phase 2", "as discussed" — the
+  reader cannot check any of it, so the sentence carries authority they have no
+  way to weigh. Say the reasoning instead. It is usually one clause.
+- **No promises with a date attached to them.** "Once Cedar lands this becomes
+  a policy" is a claim that expires: Cedar landed, the check is still
+  hardcoded, and the comment now describes a plan nobody is executing. Say what
+  the code does and why it is that way; if it should change, say what would
+  have to be decided first.
+- **No first person, and nobody's name** except in an example value.
+- Anything that would embarrass the project if a stranger read it aloud in a
+  review is not a comment, it is a note to yourself.
+
+`internal/lint/comments_test.go` enforces the mechanical half of this. It is not
+a substitute for reading what you wrote.
+
 ## The website is documentation, and it lives in another repository
 
 Presentation and user-facing documentation are in

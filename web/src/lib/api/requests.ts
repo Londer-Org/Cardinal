@@ -51,10 +51,9 @@ import { z } from 'zod'
  * (ADR 0009), and whether an http redirect URI is allowed, both depend on
  * configuration the browser cannot see.
  *
- * This is the argument for generating these from an OpenAPI spec rather than
- * writing them, which the plan calls for and which does not exist yet. Until it
- * does, the mirroring is manual and these comments are the only thing holding
- * it together.
+ * These would be generated from an OpenAPI spec if one existed, and it does
+ * not. Until then the mirroring is manual, and these comments are the only
+ * thing holding it together.
  */
 
 /**

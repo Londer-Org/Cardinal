@@ -8,10 +8,11 @@ import { z } from 'zod'
  * and nowhere else, so untyped data never travels more than a line from where it
  * entered. See ADR 0008.
  *
- * These are hand-written today. Once the OpenAPI spec is generated from the Go
- * handlers (Phase 2), they get generated from it: hand-maintained validation
- * drifts from the server, and in an identity system that drift is a security
- * bug rather than a papercut.
+ * Hand-written, which is the wrong way round and is worth fixing: generating
+ * them from a spec produced by the Go handlers would make drift impossible,
+ * and hand-maintained validation drifting from the server is a security bug in
+ * an identity system rather than a papercut. Nothing generates that spec
+ * today.
  */
 
 export const meSchema = z.object({

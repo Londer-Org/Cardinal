@@ -38,8 +38,8 @@ func TestSessionSlidesWhileItIsUsed(t *testing.T) {
 
 // TestSessionIsNotRewrittenOnEveryRequest.
 //
-// The plan is explicit that writing on every request is how people make
-// Postgres session storage slow and then blame Postgres. Extension happens only
+// Writing on every request is the usual way Postgres session storage is made
+// slow, and it is invisible until the table is large. Extension happens only
 // once the window has actually moved by more than a minute.
 func TestSessionIsNotRewrittenOnEveryRequest(t *testing.T) {
 	s := newStore(t)

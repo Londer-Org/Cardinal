@@ -278,9 +278,9 @@ func TestCyclicGroupsTerminate(t *testing.T) {
 // several goroutines with overlapping periods. Exactly one must win; the
 // database must not end up holding two overlapping grants.
 //
-// The plan called this out specifically: the exclusion constraint prevents
-// corruption, but the retry and error-classification behaviour is ours, and is
-// only observable under real concurrency.
+// The exclusion constraint prevents corruption on its own. What it does not
+// cover is the retry and error classification around it, which is this
+// package's own and is only observable under real concurrency.
 func TestConcurrentGrantsDoNotCorrupt(t *testing.T) {
 	s := newStore(t)
 	ctx := t.Context()

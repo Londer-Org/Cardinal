@@ -14,8 +14,8 @@ import (
 
 // runDecisions prints the decision log.
 //
-// The console has had the decision explorer since Phase 2 and the CLI has had
-// nothing, which is the wrong way round for the question it answers. "Why was
+// The decision explorer was in the console long before it was here, which is
+// the wrong way round for the question it answers. "Why was
 // this denied" is asked while something is broken — during an incident, from a
 // terminal, over SSH, quite possibly because the console itself is what cannot
 // be reached — and it is the question neither FreeIPA nor Keycloak can answer
