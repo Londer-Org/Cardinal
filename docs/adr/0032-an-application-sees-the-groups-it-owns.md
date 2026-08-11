@@ -235,13 +235,36 @@ CREATE TABLE application_visible_groups (
 
 The migration inserts `mode = 'all'` for every application that already exists,
 which is what makes this expand-only in behaviour as well as in schema. New
-applications are registered with `mode = 'owned'`.
+applications are registered with the same, so every application behaves
+identically whenever it was created.
 
-That asymmetry is deliberate and is the only surprising thing here: an existing
-deployment changes nothing until somebody asks it to, and anything registered
-after the upgrade is narrow by default. Registering an application says which
-mode it got, because a developer wondering why a group is missing should find
-the answer in the output of the command that created it.
+**This was decided the other way first, and the reversal is the useful part of
+this record.** New applications started `owned`, on the reasoning that an
+upgrade should change nothing while anything new is narrow by default. Three
+things came out of building it:
+
+- The end-to-end suite passed locally and failed in CI. The local database had
+  been backfilled to `all`; CI built the stack from nothing and got the new
+  default. Both were correct and only one was being tested.
+- The lab's demonstration application renders the groups it receives. Rebuilt
+  against a Cardinal carrying this migration, the page a reviewer looks at reads
+  `Groups: (none)` for somebody who is in several.
+- It contradicted the decision above. "Unfiltered is the default until an
+  application says otherwise" — and a new application had said nothing.
+
+The failure mode is what settled it: an application created after the upgrade is
+registered, reachable, permitted, and told about no groups at all. That surfaces
+in the application rather than in Cardinal, and reads as a directory problem to
+whoever is debugging. Meanwhile the safety it bought was smaller than it looked
+— an application seeing every group is the state every deployment is already in,
+not an exposure created by the act of registering one.
+
+The cost of the uniform default is that filtering is a thing nobody turns on,
+which is how a capability ends up built and never used. That is answered where
+somebody is actually looking rather than by a default they cannot see:
+`cardinal app groups show` says how many groups exist, how many the application
+owns, and therefore how many it is being told about for no reason, and creating
+an application says it is told about everything and how to narrow it.
 
 ### Resolution
 

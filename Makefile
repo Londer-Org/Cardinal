@@ -427,20 +427,6 @@ e2e-seed: ## Create the end-to-end user and activate the policy set
 		cardinal grant staff-apps protected-app 2>&1 \
 		| grep -qE 'granted|already' \
 		|| { echo 'ERROR: could not put protected-app in staff-apps'; exit 1; }
-	@# And told about every group, which is what this fixture assumed before
-	@# projections existed (ADR 0032). An application created now starts in
-	@# `owned` mode and owns nothing, so the identity headers arrive with no
-	@# groups at all — which is correct, and broke the header tests the moment
-	@# the default changed.
-	@#
-	@# Set here rather than by narrowing those tests: they are about whether a
-	@# stable identifier reaches an application, and coupling them to a
-	@# disclosure setting would make a failure ambiguous. The projection has an
-	@# end-to-end test of its own that flips this deliberately.
-	@$(COMPOSE_E2E) exec -T cardinal \
-		cardinal app groups mode protected-app all 2>&1 \
-		| grep -qE 'every group' \
-		|| { echo 'ERROR: could not widen the group projection'; exit 1; }
 	@# The Shared Signals receiver, which is deliberately not Cardinal: it
 	@# fetches the JWKS like any receiver would and verifies what arrives. The
 	@# stream is configured here because stream management over the API is not
@@ -540,8 +526,17 @@ e2e-reset: ## Drop the end-to-end database and rebuild it from migrations and se
 	@# Dropping the database rather than truncating it, because the schema is
 	@# part of what drifts: a column added since the stack was last built is
 	@# exactly the thing a TRUNCATE would preserve the absence of.
-	@$(COMPOSE_E2E) exec -T postgres psql -U cardinal -d postgres -q 		-c "DROP DATABASE IF EXISTS cardinal WITH (FORCE)" 		-c "CREATE DATABASE cardinal OWNER cardinal" >/dev/null
-	@$(COMPOSE_E2E) run --rm --no-deps cardinal migrate 		-dsn "postgres://cardinal:cardinal@postgres:5432/cardinal?sslmode=disable" 		| sed 's/^/  /'
+	@# The image first, because the seed runs inside it. Resetting the
+	@# database while the container still holds the previous build
+	@# reproduces the staleness this target exists to remove: a new schema,
+	@# the old code writing into it, and no way to see the difference.
+	@$(COMPOSE_E2E) build -q cardinal >/dev/null
+	@$(COMPOSE_E2E) exec -T postgres psql -U cardinal -d postgres -q \
+		-c "DROP DATABASE IF EXISTS cardinal WITH (FORCE)" \
+		-c "CREATE DATABASE cardinal OWNER cardinal" >/dev/null
+	@$(COMPOSE_E2E) run --rm --no-deps cardinal migrate \
+		-dsn "postgres://cardinal:cardinal@postgres:5432/cardinal?sslmode=disable" \
+		| sed 's/^/  /'
 	@# Restarted because it holds a connection pool to a database that no longer
 	@# exists, and because the policy set is loaded at startup.
 	@$(COMPOSE_E2E) up -d --force-recreate cardinal >/dev/null 2>&1
