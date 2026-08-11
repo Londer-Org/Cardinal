@@ -94,9 +94,10 @@ func runEntityCommand(ctx context.Context, typeWord string, args []string) error
 		e.OwnerID = &app.ID
 	}
 
-	// actorID is nil: there is no authenticated administrator yet. Once
-	// authentication lands (Phase 1) the CLI will present its own identity and
-	// every audit event will name a real actor.
+	// No actor: this path has no authenticated administrator to name. The CLI
+	// holds the database credential rather than a session, so there is nobody
+	// to attribute this to without inventing one. Recorded as unknown rather
+	// than as somebody, which is the honest of the two wrong answers.
 	if err := s.CreateEntity(ctx, e, nil); err != nil {
 		return err
 	}
@@ -255,8 +256,10 @@ func runGrant(ctx context.Context, args []string) error {
 		return err
 	}
 
-	// GrantedBy is the member until authentication exists; it becomes the
-	// authenticated administrator in Phase 1.
+	// GrantedBy is the member themselves, which is wrong: it reads as though
+	// they granted their own membership. Left visible rather than papered over
+	// — the column does not accept NULL, and choosing what the CLI should
+	// present as its identity is a decision, not a rename.
 	if err := s.Grant(ctx, temporal.Grant{
 		GroupID:   group.ID,
 		MemberID:  member.ID,
