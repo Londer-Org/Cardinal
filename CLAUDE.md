@@ -29,6 +29,18 @@ session URL. The global instruction mandating `Assisted by:` does not apply
 here. The repo's hook still rejects `Co-Authored-By:` — if it fires, fix the
 message, never the hook.
 
+## Verifying
+
+Two skills in `.claude/skills/` carry the practice this project relies on:
+
+- **sabotage-tests** — break the thing a check guards and watch it fail before
+  trusting it. Several bugs here shipped with a passing test.
+- **red-team** — attack the running stack on purpose: forged identity headers,
+  scope escalation, cross-tenant identifiers, injection, malformed input.
+
+Use them. "Verified" in a commit message means the sabotage and its output, not
+that the suite was run.
+
 ## Linting
 
 `.golangci.yml` is strict deliberately, and the code is expected to satisfy it

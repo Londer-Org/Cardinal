@@ -525,8 +525,33 @@ e2e-seed-oidc: ## Register the relying party and start it with its client id
 	@OIDC_CLIENT_ID="$$(cat examples/.oidc-client-id)" $(COMPOSE_E2E) up -d oidc-client >/dev/null
 	@echo "  relying party registered: $$(cut -c1-16 examples/.oidc-client-id)…"
 
+.PHONY: e2e-reset
+e2e-reset: ## Drop the end-to-end database and rebuild it from migrations and seed
+	@# A database the tests have never seen before.
+	@#
+	@# The suite is written to tolerate leftovers — the stack outlives a single
+	@# `go test` run, so helpers re-register streams and re-create users rather
+	@# than assuming a clean slate. That tolerance is what lets it be run twice,
+	@# and it is also what let a real regression pass here and fail in CI: a
+	@# migration had backfilled a setting on rows that already existed, while CI
+	@# built the stack from nothing and got the new default. Both were correct;
+	@# only one was being tested.
+	@#
+	@# Dropping the database rather than truncating it, because the schema is
+	@# part of what drifts: a column added since the stack was last built is
+	@# exactly the thing a TRUNCATE would preserve the absence of.
+	@$(COMPOSE_E2E) exec -T postgres psql -U cardinal -d postgres -q 		-c "DROP DATABASE IF EXISTS cardinal WITH (FORCE)" 		-c "CREATE DATABASE cardinal OWNER cardinal" >/dev/null
+	@$(COMPOSE_E2E) run --rm --no-deps cardinal migrate 		-dsn "postgres://cardinal:cardinal@postgres:5432/cardinal?sslmode=disable" 		| sed 's/^/  /'
+	@# Restarted because it holds a connection pool to a database that no longer
+	@# exists, and because the policy set is loaded at startup.
+	@$(COMPOSE_E2E) up -d --force-recreate cardinal >/dev/null 2>&1
+	@$(COMPOSE_E2E) exec -T cardinal /bin/sh -c 'exit 0' 2>/dev/null || sleep 8
+	@$(MAKE) --no-print-directory e2e-seed
+	@$(MAKE) --no-print-directory e2e-seed-oidc
+	@echo "==> the end-to-end database is new"
+
 .PHONY: e2e
-e2e: ## Run the end-to-end tests against the running stack
+e2e: e2e-reset ## Run the end-to-end tests against a freshly seeded stack
 	@# Rate-limit counters are cleared first, so the suite is repeatable.
 	@#
 	@# Several tests deliberately spend failed attempts — redeeming a recovery
@@ -537,6 +562,18 @@ e2e: ## Run the end-to-end tests against the running stack
 	@#
 	@# Deliberately not making the limits looser for the stack: the thing being
 	@# exercised should be the one that ships.
+	go test ./test/e2e/... -count=1 -v
+
+.PHONY: e2e-keep
+e2e-keep: ## Run the end-to-end tests without resetting, for a fast loop
+	@# The old behaviour, kept because rebuilding the database between every
+	@# attempt makes debugging one test tedious. Rate-limit counters are cleared
+	@# because several tests deliberately spend failed attempts and the limiter
+	@# has no idea it is being tested — run twice without this and the second
+	@# run fails with 429s that look like a bug in what is being tested.
+	@#
+	@# What it cannot tell you is whether the thing you are testing works on a
+	@# database that has not seen the previous twenty attempts. `make e2e` can.
 	@$(COMPOSE_E2E) exec -T postgres \
 		psql -U cardinal -d cardinal -q -c "TRUNCATE rate_limits" >/dev/null
 	go test ./test/e2e/... -count=1 -v
