@@ -8,9 +8,18 @@ decision can explain itself**.
 
 <br clear="left">
 
-> **Status: pre-1.0, under active development. Not production ready.**
-> There is no stable API, no upgrade path between versions, and no security
-> audit yet. Please don't deploy this to anything you care about.
+> **Status: a proof of concept. A working one, and not a product.**
+>
+> Everything described here runs: passkey sign-in, the OIDC provider, an
+> application behind a proxy, SSH certificates, a Linux host with no other
+> directory agent. An end-to-end suite drives all of it against a real stack on
+> every change, so the demonstration is of software rather than of slides.
+>
+> What it is not is something to run. There is no stable API, no supported
+> upgrade path between versions, no external security audit, and PostgreSQL 19
+> is still in beta. It exists to show that the design holds together — one
+> directory, one policy language, one decision point — not to be deployed to
+> anything you would miss.
 
 ## Why this exists
 

@@ -156,6 +156,42 @@ branch on never arrived — and nothing anywhere reported a difference. If a
 header in the table above is missing at the application, that list is the first
 place to look.
 
+### Which groups an application is told about
+
+Both styles carry group membership — the header above, and for a relying party
+that asks for the `groups` scope, the `groups` and `group_ids` claims in the
+id_token, the access token and the userinfo response — and by default all of
+them carry **every** group the person belongs to. That is more than most applications want
+and more than most should have: an internal wiki learns that somebody is in
+`hr-investigations`, and the payload grows with the size of the directory rather
+than with the needs of the application.
+
+An application can be told only what concerns it:
+
+```sh
+cardinal app groups show aura            # what it is told about now, and why
+cardinal app groups mode aura owned      # the groups it owns, and nothing else
+cardinal app groups allow aura engineers # plus one it does not own
+```
+
+The same is on the application's page in the console.
+
+`owned` means the groups whose owner is this application — `cardinal group
+create aura-admins -app aura` makes one — plus anything explicitly allowed. A
+**system group is never projected**: membership of `directory-admins` is
+authority inside Cardinal, and an application branching on it would be reading a
+Cardinal internal as though it were one of its own roles.
+
+**This changes what an application is told, never what Cardinal decides.**
+Policy is evaluated against the full membership either way, so narrowing a
+projection cannot refuse anybody anything, and cannot admit anybody either
+([ADR 0032](adr/0032-an-application-sees-the-groups-it-owns.md)). If an
+application stops recognising somebody after a projection is narrowed, the fix
+is to allow the group — not to widen a policy rule.
+
+Every application starts in `all`, including newly registered ones, so nothing
+changes until somebody narrows it deliberately.
+
 ### The trust boundary, stated plainly
 
 The application believes those headers because **only the proxy can reach it**.
