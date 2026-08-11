@@ -133,3 +133,40 @@ export function useRotateSecret() {
     },
   })
 }
+
+/**
+ * How much of the directory an application is told about (ADR 0032).
+ *
+ * Fetched per application rather than carried on the list: it needs the group
+ * count and the visible set, which is a query nobody browsing a table wants
+ * paid for every row.
+ */
+export function useProjection(name: string) {
+  return useQuery({
+    queryKey: queryKeys.projection(name),
+    queryFn: () => api.applications.projection(name),
+  })
+}
+
+export function useSetProjection(name: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (mode: 'all' | 'owned') => api.applications.setProjection(name, mode),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: queryKeys.projection(name) })
+    },
+  })
+}
+
+export function useGroupSight(name: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ group, allow }: { group: string; allow: boolean }) =>
+      allow
+        ? api.applications.allowGroup(name, group)
+        : api.applications.denyGroup(name, group),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: queryKeys.projection(name) })
+    },
+  })
+}

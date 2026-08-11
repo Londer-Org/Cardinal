@@ -133,6 +133,19 @@ export type ApplicationSummary = z.infer<typeof applicationSummarySchema>
 
 export const applicationsSchema = z.array(applicationSummarySchema)
 
+/**
+ * How much of the directory one application is told about (ADR 0032).
+ *
+ * `totalGroups` is what makes `all` legible: "told about every group" is a
+ * setting, "told about 14 of which it owns 2" is an argument.
+ */
+export const projectionSchema = z.object({
+  mode: z.enum(['all', 'owned']),
+  groups: z.array(z.object({ name: z.string(), owned: z.boolean() })),
+  totalGroups: z.number(),
+})
+export type Projection = z.infer<typeof projectionSchema>
+
 /** What an application currently holds — the answer to "may I disable this?" */
 export const applicationDetailSchema = applicationSchema.extend({
   activeTokens: z.number(),

@@ -493,6 +493,15 @@ func (s *Server) Handler() http.Handler {
 	// it is the one that most needs a hostname.
 	mux.Handle("POST /api/applications/{name}/hostnames",
 		apps(s.handleAddApplicationHostname))
+	// How much of the directory an application is told about (ADR 0032). Keyed
+	// on the name like the hostname routes, because an application behind the
+	// proxy has no client id and is exactly the kind that reads the header.
+	mux.Handle("GET /api/applications/{name}/projection", apps(s.handleGetProjection))
+	mux.Handle("PUT /api/applications/{name}/projection", apps(s.handleSetProjection))
+	mux.Handle("POST /api/applications/{name}/projection/groups/{group}",
+		apps(s.handleAllowGroupSight))
+	mux.Handle("DELETE /api/applications/{name}/projection/groups/{group}",
+		apps(s.handleDenyGroupSight))
 	mux.Handle("DELETE /api/applications/{name}/hostnames/{hostname}",
 		apps(s.handleRemoveApplicationHostname))
 	// Retiring, also by name and for the same reason. {state} is enable or

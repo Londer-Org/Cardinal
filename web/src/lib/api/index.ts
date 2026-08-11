@@ -37,6 +37,7 @@ import {
 import {
   applicationDetailSchema,
   applicationsSchema,
+  projectionSchema,
   applicationSummarySchema,
   ceremonySchema,
   consentsSchema,
@@ -267,6 +268,28 @@ export const api = {
       request(
         `/api/applications/${encodeURIComponent(name)}` +
           `/hostnames/${encodeURIComponent(hostname)}`,
+        z.undefined(), { method: 'DELETE' }),
+
+    /** How much of the directory this application is told about. */
+    projection: (name: string) =>
+      request(`/api/applications/${encodeURIComponent(name)}/projection`,
+        projectionSchema),
+
+    setProjection: (name: string, mode: 'all' | 'owned') =>
+      request(`/api/applications/${encodeURIComponent(name)}/projection`,
+        z.undefined(), { method: 'PUT', body: { mode } }),
+
+    /** Sight of a group it does not own, and taking it back. */
+    allowGroup: (name: string, group: string) =>
+      request(
+        `/api/applications/${encodeURIComponent(name)}` +
+          `/projection/groups/${encodeURIComponent(group)}`,
+        z.undefined(), { method: 'POST' }),
+
+    denyGroup: (name: string, group: string) =>
+      request(
+        `/api/applications/${encodeURIComponent(name)}` +
+          `/projection/groups/${encodeURIComponent(group)}`,
         z.undefined(), { method: 'DELETE' }),
 
     /**
@@ -743,6 +766,7 @@ export { ApiError, onStepUpNeeded } from './client'
 export * from './requests'
 export type {
   ApprovedRecovery,
+  Projection,
   SSFStream,
   SSFStreams,
   Setting,
@@ -796,6 +820,7 @@ export const queryKeys = {
   config: () => ['config'] as const,
   me: ['me'] as const,
   applications: ['applications'] as const,
+  projection: (name: string) => ['applications', name, 'projection'] as const,
   application: (clientID: string) => ['applications', clientID] as const,
   consents: ['consents'] as const,
   invitations: ['invitations'] as const,

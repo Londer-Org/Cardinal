@@ -26,7 +26,10 @@ import {
   useAddHostname,
   useApplication,
   useApplications,
+  useGroupSight,
+  useProjection,
   useRemoveHostname,
+  useSetProjection,
   useRotateSecret,
   useSetApplicationEnabled,
 } from './useApplications'
@@ -360,6 +363,7 @@ function ApplicationDetail({ application }: { application: ApplicationSummary })
   return (
     <div className="mt-3 ml-7 space-y-3 border-l pl-4">
       <Hostnames application={application} />
+      <Projection application={application} />
 
       {oidc !== null && <OIDCDetail application={application} oidc={oidc} />}
 
@@ -484,5 +488,115 @@ function Detail({ label, children }: { label: string; children: React.ReactNode 
       <p className="text-xs font-medium text-muted-foreground">{label}</p>
       <div className="mt-0.5">{children}</div>
     </div>
+  )
+}
+
+/**
+ * How much of the directory this application is told about (ADR 0032).
+ *
+ * The count is the argument. "Told about every group" reads as a setting
+ * somebody chose; "told about 14, of which it owns 2" is the disclosure stated
+ * plainly, and it is the only thing likely to make anyone narrow it.
+ */
+function Projection({ application }: { application: ApplicationSummary }) {
+  const projection = useProjection(application.name)
+  const setMode = useSetProjection(application.name)
+  const sight = useGroupSight(application.name)
+  const [group, setGroup] = useState('')
+
+  if (projection.isPending) return <Detail label="Groups it is told about"><Skeleton className="h-8 w-full" /></Detail>
+  if (projection.error) {
+    return (
+      <Detail label="Groups it is told about">
+        <ErrorMessage error={projection.error} />
+      </Detail>
+    )
+  }
+
+  const { mode, groups, totalGroups } = projection.data
+  const owned = groups.filter((g) => g.owned).length
+
+  return (
+    <Detail label="Groups it is told about">
+      {mode === 'all' ? (
+        <p className="text-xs text-muted-foreground">
+          Every group, on every request — in the forwardAuth header and in the
+          OIDC groups claim.{' '}
+          {totalGroups > owned && (
+            <>
+              <strong>{totalGroups}</strong> group{totalGroups === 1 ? '' : 's'}{' '}
+              exist and it owns {owned}, so {totalGroups - owned} of them have
+              nothing to do with it.
+            </>
+          )}
+        </p>
+      ) : groups.length === 0 ? (
+        <p className="text-xs text-muted-foreground">
+          None. It is told about no groups at all, whoever signs in — which is
+          almost always a misconfiguration rather than a decision.
+        </p>
+      ) : (
+        <ul className="space-y-1">
+          {groups.map((g) => (
+            <li key={g.name} className="flex items-center gap-2">
+              <code className="min-w-0 flex-1 truncate font-mono text-xs">{g.name}</code>
+              <Badge variant="outline" className="font-normal">
+                {g.owned ? 'owns' : 'allowed'}
+              </Badge>
+              {/* Ownership is set when the group is created, so only an
+                  allowance can be taken back here. */}
+              {!g.owned && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-destructive"
+                  disabled={sight.isPending}
+                  onClick={() => { sight.mutate({ group: g.name, allow: false }) }}
+                >
+                  Remove
+                </Button>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+
+      <ErrorMessage error={setMode.error ?? sight.error} />
+
+      <div className="mt-2 flex flex-wrap items-center gap-2">
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={setMode.isPending}
+          onClick={() => { setMode.mutate(mode === 'all' ? 'owned' : 'all') }}
+        >
+          {mode === 'all' ? 'Tell it only what it owns' : 'Tell it every group'}
+        </Button>
+        {mode === 'owned' && (
+          <form
+            className="flex flex-1 gap-2"
+            onSubmit={(event) => {
+              event.preventDefault()
+              sight.mutate({ group, allow: true }, { onSuccess: () => { setGroup('') } })
+            }}
+          >
+            <Input
+              value={group}
+              placeholder="also tell it about…"
+              aria-label={`Allow a group for ${application.name}`}
+              onChange={(event) => { setGroup(event.target.value) }}
+            />
+            <Button type="submit" size="sm" variant="outline" disabled={group === '' || sight.isPending}>
+              Allow
+            </Button>
+          </form>
+        )}
+      </div>
+
+      <p className="mt-2 text-xs text-muted-foreground">
+        This changes what the application is told, never what Cardinal decides —
+        policy is evaluated against the full membership either way.
+      </p>
+    </Detail>
   )
 }
