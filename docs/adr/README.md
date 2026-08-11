@@ -41,7 +41,8 @@ isn't finished.
 | [0029](0029-a-number-is-permanent-once-it-has-been-served.md) | A number is permanent once it has been served, and not before | Accepted |
 | [0030](0030-the-package-installs-and-reports.md) | The package installs and reports, and does not prepare | Accepted |
 | [0031](0031-scim-provisioning-is-its-own-action.md) | SCIM provisioning is its own action, not administration | Accepted |
-| [0032](0032-an-application-sees-the-groups-it-owns.md) | An application sees the groups it owns, not the whole directory | Proposed |
+| [0032](0032-an-application-sees-the-groups-it-owns.md) | An application sees the groups it owns, not the whole directory | Accepted |
+| [0033](0033-the-cli-signs-in.md) | The CLI signs in rather than holding the database | Proposed |
 
 ## Conventions
 
