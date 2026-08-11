@@ -36,12 +36,16 @@ func (s *Server) handleDecisions(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	session, _ := SessionFrom(ctx)
 
-	// Scoped to the caller by default.
+	// Scoped to the caller, with no way to widen it.
 	//
-	// Reading everyone's decisions is itself privileged — the log reveals who
-	// tried to reach what, and when — so it will become a policy check once
-	// applications are directory entities. Until then the safe default is that
-	// you see only your own.
+	// Reading everyone's decisions is privileged in its own right: the log
+	// reveals who tried to reach what and when, which is a map of the
+	// organisation. Cedar could decide this rather than the scope being fixed
+	// here, and until somebody wants that, an endpoint that can only ever
+	// return your own decisions is the version with no way to get it wrong.
+	//
+	// The unscoped view is `cardinal decisions`, which reaches the database
+	// directly and is therefore already administrative.
 	principalID := &session.SubjectID
 
 	deniedOnly := r.URL.Query().Get("denied") == "true"

@@ -362,8 +362,13 @@ func (s *Server) handleGenerateRecoveryCodes(w http.ResponseWriter, r *http.Requ
 	session, _ := SessionFrom(ctx)
 
 	// Step-up: issuing recovery codes mints credentials that bypass the
-	// authenticator entirely, so an old session is not enough. Once Cedar lands
-	// (Phase 2) this becomes a policy rather than a hardcoded check.
+	// authenticator entirely, so an old session is not enough.
+	//
+	// Hardcoded rather than a Cedar rule, which is a leftover — Cedar reads
+	// authentication age and expresses exactly this elsewhere. Moving it means
+	// the freshness requirement on the most sensitive self-service action
+	// becomes editable policy, so it has not been moved without deciding
+	// whether that is wanted.
 	if time.Since(session.AuthAt) > 5*time.Minute {
 		writeError(w, http.StatusForbidden,
 			"re-authenticate before generating recovery codes")

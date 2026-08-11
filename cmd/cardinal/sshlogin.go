@@ -28,10 +28,10 @@ import (
 // administered in sshauthority.go; sshagent.go hands the certificate to
 // ssh-agent.
 //
-// The command the whole host-access design is for, and until now it did not
-// exist: the endpoint had been there since Phase 4 and nothing could reach it,
-// because issuing a certificate needs a device-bound session and a terminal
-// cannot perform a WebAuthn ceremony.
+// The command the whole host-access design is for, and the last piece written:
+// the issuing endpoint existed long before anything could reach it, because a
+// certificate needs a device-bound session and a terminal cannot perform a
+// WebAuthn ceremony.
 //
 // So the ceremony happens where ceremonies happen. This opens a browser, waits
 // on a loopback listener for the console to send back a code, exchanges that

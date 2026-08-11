@@ -13,9 +13,9 @@ import (
 
 // Policy versions, and rolling back to one.
 //
-// Publishing and activating were CLI-only, which is defensible — a policy set
-// belongs in git and reaches Cardinal from a pipeline (the plan says so, and
-// this deliberately does not add an editor). Rolling *back* is the exception.
+// Publishing and activating were CLI-only, which is defensible: a policy set
+// belongs in git and reaches Cardinal from a pipeline, and this deliberately
+// does not add an editor. Rolling *back* is the exception.
 // It happens during an incident, by whoever is looking at the decision log
 // wondering why half the company cannot log in, and requiring them to find a
 // shell on the Cardinal server first is the wrong shape for that moment.
