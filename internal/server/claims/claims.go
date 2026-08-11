@@ -199,3 +199,65 @@ func (r *Resolver) ResolveByID(ctx context.Context, id uuid.UUID) (*Subject, err
 		ResolvedAt:  time.Now().UTC(),
 	}, nil
 }
+
+// Projected is the subset of a subject's groups that one application is told
+// about.
+//
+// Deliberately not []Group. The assignment that would put a filtered set back
+// into the Subject the policy engine reads does not compile, and that is the
+// whole reason this type exists: forwardauth.go resolves one subject and uses
+// it three times — as the policy input, in the decision log, and to write the
+// headers — so narrowing that variable is the obvious way to add filtering and
+// would silently change what Cardinal decides.
+//
+// Both directions of that mistake are real. `directory-admins-may-administer`
+// permits on group membership, so filtering before the decision would refuse
+// administration to actual administrators; and a deployment writing a forbid
+// keyed on a group would find it stops matching once that group is filtered
+// out, granting access instead of refusing it.
+//
+// The field is unexported so a Projected cannot be built outside this package
+// either. See ADR 0032.
+type Projected struct{ groups []Group }
+
+// Names is what to show a person. See GroupNames for why a name is the wrong
+// thing for an application to branch on.
+func (p Projected) Names() []string {
+	names := make([]string, 0, len(p.groups))
+	for _, g := range p.groups {
+		names = append(names, g.Name)
+	}
+	return names
+}
+
+// IDs is what an application should key on.
+func (p Projected) IDs() []string {
+	ids := make([]string, 0, len(p.groups))
+	for _, g := range p.groups {
+		ids = append(ids, g.ID.String())
+	}
+	return ids
+}
+
+// Len reports how many groups survived the projection, for the log line that
+// says an application is being told about none.
+func (p Projected) Len() int { return len(p.groups) }
+
+// GroupsFor narrows the closure to what one application may be told.
+//
+// Order and depth are preserved, so the nearest-first contract still holds for
+// whoever receives it. Subject.Groups is untouched: the console, self-service
+// and the decision log all want the whole thing, and a projection that reached
+// back into resolution would make "what am I a member of" depend on who asked.
+func (s *Subject) GroupsFor(p store.GroupProjection) Projected {
+	if p.Mode == store.ProjectionAll {
+		return Projected{groups: s.Groups}
+	}
+	visible := make([]Group, 0, len(s.Groups))
+	for _, g := range s.Groups {
+		if p.Visible[g.ID] {
+			visible = append(visible, g)
+		}
+	}
+	return Projected{groups: visible}
+}

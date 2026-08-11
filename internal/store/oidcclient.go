@@ -367,7 +367,7 @@ func insertEntityTx(ctx context.Context, tx pgx.Tx, e *directory.Entity) error {
 		}
 		return fmt.Errorf("store: creating entity: %w", err)
 	}
-	return nil
+	return defaultProjectionTx(ctx, tx, e)
 }
 
 // ClientStats summarise an application's live use.

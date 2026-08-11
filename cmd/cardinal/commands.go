@@ -51,6 +51,16 @@ func runEntityCommand(ctx context.Context, typeWord string, args []string) error
 
 	fs := flag.NewFlagSet(typeWord+" create", flag.ContinueOnError)
 	display := fs.String("display", "", "human-friendly display name")
+	// The application a group exists for. Only meaningful for a group, so it is
+	// rejected rather than ignored elsewhere: a flag that silently does nothing
+	// is how somebody believes they set an owner.
+	//
+	// The column has existed since migration 0013 and the console has always
+	// been able to set it; the CLI never could. That mattered little while an
+	// owner was organisational, and matters now that it decides what an
+	// application is told (ADR 0032) — an owned group was unreachable from a
+	// terminal.
+	owner := fs.String("app", "", "the application this group exists for (groups only)")
 	dsnFlag := fs.String("dsn", "", "PostgreSQL connection string")
 	pos, err := parse(fs, args[1:])
 	if err != nil {
@@ -58,6 +68,10 @@ func runEntityCommand(ctx context.Context, typeWord string, args []string) error
 	}
 	if len(pos) != 1 {
 		return fmt.Errorf("%w: cardinal %s create <name>", errUsage, typeWord)
+	}
+	if *owner != "" && cliType(typeWord) != directory.TypeGroup {
+		return fmt.Errorf("%w: -app names the application a *group* belongs to, "+
+			"and %s is not a group", errUsage, typeWord)
 	}
 	name := pos[0]
 
@@ -72,6 +86,14 @@ func runEntityCommand(ctx context.Context, typeWord string, args []string) error
 	}
 	defer s.Close()
 
+	if *owner != "" {
+		app, lookupErr := s.LookupEntity(ctx, directory.TypeApplication, *owner)
+		if lookupErr != nil {
+			return lookupErr
+		}
+		e.OwnerID = &app.ID
+	}
+
 	// actorID is nil: there is no authenticated administrator yet. Once
 	// authentication lands (Phase 1) the CLI will present its own identity and
 	// every audit event will name a real actor.
@@ -80,6 +102,16 @@ func runEntityCommand(ctx context.Context, typeWord string, args []string) error
 	}
 
 	fmt.Printf("created %s %s\n  id %s\n", e.Type, e.Name, e.ID)
+	if *owner != "" {
+		fmt.Printf("  owned by %s, so that application is told about it\n", *owner)
+	}
+	if e.Type == directory.TypeApplication {
+		// Said at creation because it is the moment somebody can act on it, and
+		// because a developer wondering where the groups went should find the
+		// answer in the output of the command they just ran.
+		fmt.Println("  told about the groups it owns only — `cardinal app groups show " +
+			e.Name + "`")
+	}
 	return nil
 }
 

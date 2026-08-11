@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"log/slog"
 	"math"
 	"time"
 
@@ -369,12 +370,12 @@ func (s *Storage) SetUserinfoFromScopes(context.Context, *oidc.UserInfo, string,
 // declare, so it is easy to implement that, see tokens being issued, and never
 // notice the ID token is malformed.
 func (s *Storage) SetUserinfoFromRequest(ctx context.Context, info *oidc.UserInfo, request op.IDTokenRequest, scopes []string) error {
-	return s.setUserinfo(ctx, info, request.GetSubject(), scopes)
+	return s.setUserinfo(ctx, info, request.GetSubject(), request.GetClientID(), scopes)
 }
 
 // SetUserinfoFromToken fills the userinfo response for a token.
-func (s *Storage) SetUserinfoFromToken(ctx context.Context, info *oidc.UserInfo, tokenID, subject, _ string) error {
-	return s.setUserinfo(ctx, info, subject, []string{
+func (s *Storage) SetUserinfoFromToken(ctx context.Context, info *oidc.UserInfo, tokenID, subject, clientID string) error {
+	return s.setUserinfo(ctx, info, subject, clientID, []string{
 		oidc.ScopeOpenID, oidc.ScopeProfile, oidc.ScopeEmail, "groups",
 	})
 }
@@ -382,7 +383,7 @@ func (s *Storage) SetUserinfoFromToken(ctx context.Context, info *oidc.UserInfo,
 // SetIntrospectionFromToken fills an introspection response.
 func (s *Storage) SetIntrospectionFromToken(ctx context.Context, info *oidc.IntrospectionResponse, tokenID, subject, clientID string) error {
 	userinfo := new(oidc.UserInfo)
-	if err := s.setUserinfo(ctx, userinfo, subject, []string{
+	if err := s.setUserinfo(ctx, userinfo, subject, clientID, []string{
 		oidc.ScopeOpenID, oidc.ScopeProfile, oidc.ScopeEmail, "groups",
 	}); err != nil {
 		return err
@@ -396,7 +397,9 @@ func (s *Storage) SetIntrospectionFromToken(ctx context.Context, info *oidc.Intr
 // The same resolution that feeds forwardAuth headers, SCIM attributes and SSH
 // certificate principals. Groups are resolved with expiry already applied, so
 // an expired grant simply is not in the list and cannot leak into a token.
-func (s *Storage) setUserinfo(ctx context.Context, info *oidc.UserInfo, subject string, scopes []string) error {
+func (s *Storage) setUserinfo(
+	ctx context.Context, info *oidc.UserInfo, subject, clientID string, scopes []string,
+) error {
 	subjectID, err := uuid.Parse(subject)
 	if err != nil {
 		return fmt.Errorf("oidcprovider: malformed subject: %w", err)
@@ -431,12 +434,21 @@ func (s *Storage) setUserinfo(ctx context.Context, info *oidc.UserInfo, subject 
 			}
 
 		case "groups":
-			info.AppendClaims("groups", resolved.GroupNames())
+			// Narrowed to what this relying party may be told, which is the
+			// same projection forwardAuth applies to its headers. Resolved
+			// through the client's entity because the projection belongs to the
+			// application, not to the OIDC registration.
+			//
+			// A failure to read it produces the empty projection rather than the
+			// closure: a claim is a disclosure, and the safe direction when the
+			// answer is unknown is to say less.
+			visible := resolved.GroupsFor(s.projectionFor(ctx, clientID))
+			info.AppendClaims("groups", visible.Names())
 			// Stable identifiers beside the names. A relying party deciding
 			// what somebody may do should key on these: a group's name is a
 			// mutable attribute (ADR 0002), so permission logic written against
 			// the string breaks silently the day someone renames it.
-			info.AppendClaims("group_ids", resolved.GroupIDs())
+			info.AppendClaims("group_ids", visible.IDs())
 		}
 	}
 
@@ -548,4 +560,30 @@ func newOpaqueToken() (string, error) {
 		return "", fmt.Errorf("oidcprovider: generating token: %w", err)
 	}
 	return base64.RawURLEncoding.EncodeToString(b), nil
+}
+
+// projectionFor resolves how much this relying party may be told.
+//
+// Errors are swallowed into the empty projection rather than returned. A token
+// is being minted for somebody who has already authenticated and been
+// authorized; failing the whole exchange because a disclosure setting could not
+// be read would turn a narrowing feature into an outage. Saying less is the
+// direction that cannot leak, and the error is logged where an operator sees it.
+func (s *Storage) projectionFor(ctx context.Context, clientID string) store.GroupProjection {
+	if clientID == "" {
+		return store.GroupProjection{Mode: store.ProjectionOwned}
+	}
+	c, err := s.store.OIDCClientByID(ctx, clientID)
+	if err != nil {
+		slog.ErrorContext(ctx, "oidcprovider: resolving the client for its group projection failed",
+			"client_id", clientID, "error", err)
+		return store.GroupProjection{Mode: store.ProjectionOwned}
+	}
+	projection, err := s.store.GroupProjectionFor(ctx, c.EntityID)
+	if err != nil {
+		slog.ErrorContext(ctx, "oidcprovider: reading the group projection failed",
+			"client_id", clientID, "error", err)
+		return store.GroupProjection{Mode: store.ProjectionOwned}
+	}
+	return projection
 }
