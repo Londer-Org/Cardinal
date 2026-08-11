@@ -195,6 +195,18 @@ APPLICATIONS
                                             forwardAuth asks on every request.
   app hostname list [app]                   Every mapping, or one application's
 
+  app groups show <app>                     Which groups this application is
+                                            told about, and why each one.
+  app groups mode <app> <owned|all>         owned tells it the groups it owns;
+                                            all tells it every group a person
+                                            belongs to, which is what every
+                                            application saw before this existed.
+  app groups allow <app> <group>            Tell it about a group it does not
+  app groups disallow <app> <group>         own, or stop.
+
+  A projection changes what an application is *told*, never what Cardinal
+  decides — policy is evaluated against the full membership either way.
+
   An application behind a proxy needs no OIDC client — cardinal application
   create <name>, plus a hostname, is enough. A hostname nothing claims is
   refused before policy is consulted, like an SSH certificate for a machine

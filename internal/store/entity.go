@@ -94,6 +94,10 @@ func (s *Store) CreateEntity(ctx context.Context, e *directory.Entity, actorID *
 		// append-only, so it could never be erased. The entity_id carried by
 		// the event resolves to the name via the entities table, which *is*
 		// redactable. See ADR 0010.
+		if projErr := defaultProjectionTx(ctx, tx, e); projErr != nil {
+			return projErr
+		}
+
 		ev, err := event.New(event.ActionEntityCreated, &e.ID, actorID, map[string]any{
 			"type": string(e.Type),
 		})

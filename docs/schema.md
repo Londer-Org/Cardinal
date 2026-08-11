@@ -715,9 +715,21 @@ erDiagram
         uuid ca_key_id FK
         text serial
     }
+    application_group_projection {
+        uuid entity_id PK
+        text mode
+        timestamp_with_time_zone updated_at
+        uuid updated_by FK
+    }
     application_hostnames {
         text hostname PK
         uuid entity_id FK
+        timestamp_with_time_zone added_at
+        uuid added_by FK
+    }
+    application_visible_groups {
+        uuid application_id PK
+        uuid group_id PK
         timestamp_with_time_zone added_at
         uuid added_by FK
     }
@@ -869,8 +881,13 @@ erDiagram
     entities ||--o{ acme_eab_credentials : subject_id
     acme_accounts ||--o{ acme_orders : account_id
     x509_ca_keys ||--o{ acme_orders : ca_key_id
+    entities ||--o{ application_group_projection : entity_id
+    entities ||--o{ application_group_projection : updated_by
     entities ||--o{ application_hostnames : added_by
     entities ||--o{ application_hostnames : entity_id
+    entities ||--o{ application_visible_groups : added_by
+    entities ||--o{ application_visible_groups : application_id
+    entities ||--o{ application_visible_groups : group_id
     sessions ||--o{ cli_authorizations : session_id
     entities ||--o{ host_aliases : added_by
     entities ||--o{ host_aliases : host_id
@@ -951,6 +968,17 @@ One per identifier. Always born valid: control of the name was established at en
 | `ca_key_id` | `uuid` | yes |  | → `x509_ca_keys.id` |
 | `serial` | `text` | yes |  |  |
 
+### `application_group_projection`
+
+How much of a subject's group closure this application is told about. Affects the forwardAuth header and the OIDC groups claim only — Cedar always evaluates the full closure, so this cannot change a decision.
+
+| Column | Type | Null | Default | Notes |
+|---|---|---|---|---|
+| `entity_id` | `uuid` | no |  | → `entities.id` |
+| `mode` | `text` | no |  |  |
+| `updated_at` | `timestamp with time zone` | no | `now()` |  |
+| `updated_by` | `uuid` | yes |  | → `entities.id` |
+
 ### `application_hostnames`
 
 Maps a hostname Traefik forwards to the application entity it belongs to. A hostname with no row here is refused by forwardAuth before policy is consulted, the same way an unenrolled machine is refused an SSH certificate: Cardinal decides about things the directory knows.
@@ -959,6 +987,17 @@ Maps a hostname Traefik forwards to the application entity it belongs to. A host
 |---|---|---|---|---|
 | `hostname` | `text` | no |  |  |
 | `entity_id` | `uuid` | no |  | → `entities.id` |
+| `added_at` | `timestamp with time zone` | no | `now()` |  |
+| `added_by` | `uuid` | yes |  | → `entities.id` |
+
+### `application_visible_groups`
+
+Groups an application is told about that it does not own. The escape hatch for a projection in owned mode; ignored in all mode.
+
+| Column | Type | Null | Default | Notes |
+|---|---|---|---|---|
+| `application_id` | `uuid` | no |  | → `entities.id` |
+| `group_id` | `uuid` | no |  | → `entities.id` |
 | `added_at` | `timestamp with time zone` | no | `now()` |  |
 | `added_by` | `uuid` | yes |  | → `entities.id` |
 

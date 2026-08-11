@@ -180,12 +180,37 @@ func (s *Server) handleForwardAuth(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Projected here, after the decision, and never before it.
+	//
+	// Cedar has already run against the full closure a few lines above. This
+	// narrows only what the application is told, which is the invariant ADR 0032
+	// is built on — and the reason GroupsFor returns a type that cannot be
+	// assigned back over subject.Groups.
+	//
+	// A failure to read the projection is not a reason to refuse a request the
+	// policy permitted, but it is a reason not to disclose: the empty projection
+	// is the safe answer, and it is logged loudly because an application
+	// suddenly told about no groups is somebody's afternoon.
+	projection, projErr := s.store.GroupProjectionFor(ctx, app.ID)
+	if projErr != nil {
+		s.log.ErrorContext(ctx, "forwardAuth: reading the group projection failed",
+			"application", app.Name, "error", projErr)
+	}
+	visible := subject.GroupsFor(projection)
+	if visible.Len() == 0 && len(subject.Groups) > 0 {
+		// Almost always a misconfiguration: nobody narrows a projection in order
+		// to send nothing. Said once per request rather than never, in the same
+		// spirit as the startup warning about actions no rule mentions.
+		s.log.InfoContext(ctx, "forwardAuth: the application is told about no groups",
+			"application", app.Name, "subject_groups", len(subject.Groups))
+	}
+
 	h := w.Header()
 	h.Set(headerUser, subject.ID.String())
 	h.Set(headerLogin, subject.Login)
 	h.Set(headerName, subject.DisplayName)
-	h.Set(headerGroups, strings.Join(subject.GroupNames(), ","))
-	h.Set(headerGroupIDs, strings.Join(subject.GroupIDs(), ","))
+	h.Set(headerGroups, strings.Join(visible.Names(), ","))
+	h.Set(headerGroupIDs, strings.Join(visible.IDs(), ","))
 	h.Set(headerAuthMethod, subject.Auth.Method)
 	h.Set(headerDeviceBound, boolHeader(subject.Auth.DeviceBound))
 	h.Set(headerPolicy, strings.Join(decision.Reasons, ","))
