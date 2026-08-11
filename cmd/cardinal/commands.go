@@ -106,11 +106,11 @@ func runEntityCommand(ctx context.Context, typeWord string, args []string) error
 		fmt.Printf("  owned by %s, so that application is told about it\n", *owner)
 	}
 	if e.Type == directory.TypeApplication {
-		// Said at creation because it is the moment somebody can act on it, and
-		// because a developer wondering where the groups went should find the
-		// answer in the output of the command they just ran.
-		fmt.Println("  told about the groups it owns only — `cardinal app groups show " +
-			e.Name + "`")
+		// Said at creation because it is the one moment somebody is looking. An
+		// application is told about every group until somebody narrows it, and
+		// a feature nobody is told about is one nobody turns on.
+		fmt.Println("  told about every group — narrow it with `cardinal app groups " +
+			"mode " + e.Name + " owned`")
 	}
 	return nil
 }

@@ -18,21 +18,23 @@ import (
 // what an application can and cannot be told rather than about the shape of the
 // tables underneath.
 
-// TestANewApplicationStartsNarrow.
+// TestApplicationsStartTheSameWhenevertheyWereCreated.
 //
-// Migration 0033 wrote `all` for every application that already existed, so an
-// upgrade changes nothing; anything created afterwards starts owned. Both
-// halves of that asymmetry matter, and only this half is reachable from Go.
-func TestANewApplicationStartsNarrow(t *testing.T) {
+// Migration 0033 wrote `all` for every application that already existed, and a
+// new one gets the same. New applications started `owned` at first, which meant
+// two applications registered a month apart behaved differently with nothing on
+// either to say so — and the one created later was reachable, correct, and told
+// about no groups at all, which surfaces in the application rather than here.
+func TestApplicationsStartTheSameWheneverTheyWereCreated(t *testing.T) {
 	s := newStore(t)
 
 	app := mustCreate(t, s, directory.TypeApplication, "billing")
 
 	projection, err := s.GroupProjectionFor(t.Context(), app.ID)
 	require.NoError(t, err)
-	assert.Equal(t, store.ProjectionOwned, projection.Mode,
-		"a newly created application should be narrow by default; wide is the "+
-			"behaviour migration 0033 preserved for applications that predate it")
+	assert.Equal(t, store.ProjectionAll, projection.Mode,
+		"a new application should start where every existing one does; narrowing "+
+			"is a deliberate act, not a consequence of when it was registered")
 }
 
 // TestAnApplicationSeesTheGroupsItOwns.
@@ -40,6 +42,9 @@ func TestAnApplicationSeesTheGroupsItOwns(t *testing.T) {
 	s := newStore(t)
 
 	app := mustCreate(t, s, directory.TypeApplication, "aura")
+	// Narrowing is the deliberate act; an application is told everything until
+	// somebody asks for less.
+	require.NoError(t, s.SetGroupProjection(t.Context(), app.ID, store.ProjectionOwned, nil))
 	owned := ownedGroup(t, s, "aura-admins", app.ID)
 	somebodyElses := mustCreate(t, s, directory.TypeGroup, "hr-investigations")
 
@@ -57,6 +62,7 @@ func TestSightOfAnotherGroupIsGrantedExplicitly(t *testing.T) {
 	s := newStore(t)
 
 	app := mustCreate(t, s, directory.TypeApplication, "grafana")
+	require.NoError(t, s.SetGroupProjection(t.Context(), app.ID, store.ProjectionOwned, nil))
 	shared := mustCreate(t, s, directory.TypeGroup, "engineering")
 
 	before, err := s.GroupProjectionFor(t.Context(), app.ID)

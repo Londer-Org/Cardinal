@@ -70,10 +70,34 @@ func runAppGroupsShow(ctx context.Context, args []string) error {
 	}
 
 	if projection.Mode == store.ProjectionAll {
+		// Says what widening actually costs rather than only that it is on.
+		//
+		// Every application starts here, so a message that merely stated the
+		// mode would be one nobody reads and a feature nobody turns on. The
+		// number is the argument: an application told about groups it does not
+		// own is learning somebody's position in the organisation to decide
+		// whether they may read a wiki.
+		owned, countErr := s.GroupsVisibleTo(ctx, app.ID)
+		if countErr != nil {
+			return countErr
+		}
+		total, countErr := s.GroupCount(ctx)
+		if countErr != nil {
+			return countErr
+		}
+
 		fmt.Printf("%s is told about every group\n\n", app.Name)
-		fmt.Println("  Every group the person belongs to reaches this application, in the")
-		fmt.Println("  forwardAuth header and in the OIDC groups claim. Narrow it with:")
-		fmt.Printf("    cardinal app groups mode %s owned\n", app.Name)
+		if total > len(owned) {
+			fmt.Printf("  %d group(s) exist and it owns %d, so it is told about %d that\n",
+				total, len(owned), total-len(owned))
+			fmt.Println("  have nothing to do with it — on every request, in the forwardAuth")
+			fmt.Println("  header and in the OIDC groups claim.")
+		} else {
+			fmt.Println("  Every group the person belongs to reaches this application, in the")
+			fmt.Println("  forwardAuth header and in the OIDC groups claim.")
+		}
+		fmt.Println()
+		fmt.Printf("  Narrow it to the ones it owns: cardinal app groups mode %s owned\n", app.Name)
 		return nil
 	}
 

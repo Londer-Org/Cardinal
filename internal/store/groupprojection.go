@@ -169,12 +169,13 @@ func (s *Store) DenyGroupSight(ctx context.Context, applicationID, groupID uuid.
 
 // defaultProjectionTx writes the mode a newly created application starts with.
 //
-// Owned, which is the opposite of what migration 0033 wrote for applications
-// that already existed. The asymmetry is deliberate (ADR 0032): an upgrade
-// tells no existing application anything different, and anything registered
-// afterwards is narrow by default. The command that creates one says which it
-// got, because a developer wondering where a group went should find the answer
-// in the output of the command they just ran.
+// The same mode migration 0033 wrote for applications that already existed, so
+// two applications registered a month apart behave identically. New ones
+// started `owned` at first, and the asymmetry cost more than it bought: the
+// application is created, reachable, and told about no groups at all, which
+// surfaces in the application rather than here and reads as a directory
+// problem. Narrowing is a deliberate act now, which is what ADR 0032 said
+// before its design section said otherwise.
 //
 // Called from both entity-creation paths. There are two because an OIDC
 // registration builds its client and its entity in one transaction while
@@ -187,7 +188,7 @@ func defaultProjectionTx(ctx context.Context, tx pgx.Tx, e *directory.Entity) er
 	_, err := tx.Exec(ctx, `
 		INSERT INTO application_group_projection (entity_id, mode)
 		VALUES ($1, $2) ON CONFLICT (entity_id) DO NOTHING`,
-		e.ID, ProjectionOwned)
+		e.ID, ProjectionAll)
 	if err != nil {
 		return fmt.Errorf("store: setting the initial group projection: %w", err)
 	}
@@ -235,4 +236,16 @@ func (s *Store) GroupsVisibleTo(ctx context.Context, applicationID uuid.UUID) ([
 		out = append(out, g)
 	}
 	return out, rows.Err()
+}
+
+// GroupCount is how many groups exist, for saying how many an application is
+// told about that it has no reason to see.
+func (s *Store) GroupCount(ctx context.Context) (int, error) {
+	var n int
+	if err := s.pool.QueryRow(ctx,
+		`SELECT count(*) FROM entities WHERE type = 'group' AND redacted_at IS NULL`,
+	).Scan(&n); err != nil {
+		return 0, fmt.Errorf("store: counting groups: %w", err)
+	}
+	return n, nil
 }
