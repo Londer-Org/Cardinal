@@ -14,6 +14,24 @@ old image.
 
 ## Unreleased
 
+### Fixed
+
+- **Cardinal would have stopped accepting every change on 1 January 2028.**
+  The `events` and `decisions` tables are partitioned by time, their partitions
+  were created by hand covering 2026 and 2027, and nothing created more. Every
+  mutation writes its journal entry in the same transaction as the change it
+  records, so a row that routed to no partition failed — and took the grant,
+  the credential or the session with it. Not a degradation: no writes at all.
+
+  Yearly partitions now run to the end of 2035, and each table has a `DEFAULT`
+  partition behind them so running out slows things down instead of stopping
+  them. The server warns at startup when a table has under two years of
+  partitions left, and warns differently once rows are landing in the backstop,
+  which is the point at which adding the proper partition means moving them
+  first.
+
+  Nothing to do on upgrade beyond running `cardinal migrate`.
+
 ### Added
 
 - **An application can be told only about the groups that concern it.** Until
