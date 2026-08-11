@@ -1,8 +1,11 @@
 # Roadmap
 
-Cardinal is **pre-1.0 and not production ready**. There is no stable API, no
-upgrade path between versions, and no security audit. This page says what works,
-what does not, and what is deliberately not being built.
+Cardinal is **a proof of concept** — pre-1.0, unaudited, and not something to
+run. There is no stable API, no supported upgrade path between versions, and no
+external security audit. What works, works properly and is tested against a real
+stack; the state of the project is a demonstration of the design rather than a
+product. This page says what works, what does not, and what is deliberately not
+being built.
 
 Two documents already linked here and neither existed until the documentation
 site was first built with broken links treated as errors — which is a small
