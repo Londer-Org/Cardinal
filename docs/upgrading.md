@@ -69,6 +69,19 @@ of it, but it can read the row.
 Rolling back past a breaking migration is a restore from backup. That is the
 honest cost, it is stated up front, and it should be rare enough to be an event.
 
+### The partitions this adds are worth keeping
+
+Migration 0034 gives `events` and `decisions` partitions through 2035 and a
+`DEFAULT` partition behind them. Rolling back to a build that predates it is
+safe — the tables and their partitions are untouched by the older binary — but
+the partitions themselves must not be dropped to "undo" the migration. Doing
+that restores the failure it exists to prevent, and that failure is every write
+in the system.
+
+Watch the startup log instead. It says when a table has under two years of
+partitions left, and says something different once rows are landing in the
+backstop.
+
 ### Rolling back past a narrowed group projection
 
 Not a schema problem — the tables are expand-only and an older build ignores

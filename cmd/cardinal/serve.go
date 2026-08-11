@@ -120,6 +120,8 @@ func runServe(ctx context.Context, args []string) error {
 		return store.ErrSchemaBehind
 	}
 
+	warnPartitionRunway(ctx, st, log)
+
 	idle, absolute := cfg.Sessions.Effective()
 	st.SetSessionLimits(store.SessionLimits{Idle: idle, Absolute: absolute})
 	// Strings, not durations: slog renders a time.Duration as nanoseconds, and
@@ -456,6 +458,57 @@ func deliverMail(ctx context.Context, notifier *mail.Notifier, sealKey string, l
 			if sent > 0 {
 				log.InfoContext(ctx, "notifications sent", "count", sent)
 			}
+		}
+	}
+}
+
+// partitionWarning is how much runway is left before this is worth saying.
+//
+// Two years, because the thing it asks for is a migration written, reviewed and
+// deployed by whoever runs this — and because a warning that only appears when
+// there is nothing to be done about it is decoration.
+const partitionWarning = 2 * 365 * 24 * time.Hour
+
+// warnPartitionRunway says something while there is still time to act.
+//
+// The events and decisions tables are partitioned by time and their partitions
+// are created by migration. Before 0034 there were two years of them and
+// nothing more, which made a date on which every write failed — a journal entry
+// is written in the same transaction as the change it records, so a row that
+// routes nowhere takes the change with it.
+//
+// 0034 added a DEFAULT partition, so that failure is gone. What replaced it is
+// quieter and needs reporting: rows accumulate in a partition nobody intended,
+// and creating the proper one later has to move them first. This is the only
+// thing that notices.
+func warnPartitionRunway(ctx context.Context, st *store.Store, log *slog.Logger) {
+	runways, err := st.PartitionRunways(ctx)
+	if err != nil {
+		// Not fatal. Failing to start because a warning could not be computed
+		// would make this check more dangerous than what it warns about.
+		log.Warn("could not check how much time the partitioned tables cover",
+			"error", err)
+		return
+	}
+
+	for _, runway := range runways {
+		if runway.Overflowing {
+			log.Warn("a partitioned table is writing into its backstop",
+				"table", runway.Table,
+				"covered_until", runway.Until.Format(time.RFC3339),
+				"what_to_do", "add partitions covering now, then move the rows out "+
+					"of the DEFAULT partition; writes are fine until then")
+			continue
+		}
+		if runway.Until.IsZero() {
+			log.Warn("a partitioned table has no dated partitions", "table", runway.Table)
+			continue
+		}
+		if time.Until(runway.Until) < partitionWarning {
+			log.Warn("a partitioned table is running out of partitions",
+				"table", runway.Table,
+				"covered_until", runway.Until.Format(time.RFC3339),
+				"what_to_do", "add a migration creating the next years before then")
 		}
 	}
 }

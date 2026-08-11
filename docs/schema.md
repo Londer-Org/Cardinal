@@ -609,7 +609,7 @@ erDiagram
 
 Every authorization decision and the policy that made it. Distinct from the events journal: that is tamper-evident audit of *changes*, this is high-volume observability of *access*, with its own retention.
 
-Partitioned by time: `decisions_2026`, `decisions_2027`. Retention is a partition drop rather than a delete.
+Partitioned by time: `decisions_2026`, `decisions_2027`, `decisions_2028`, `decisions_2029`, `decisions_2030`, `decisions_2031`, `decisions_2032`, `decisions_2033`, `decisions_2034`, `decisions_2035`, `decisions_overflow`. Retention is a partition drop rather than a delete.
 
 | Column | Type | Null | Default | Notes |
 |---|---|---|---|---|
@@ -628,7 +628,7 @@ Partitioned by time: `decisions_2026`, `decisions_2027`. Retention is a partitio
 
 ### `events`
 
-Partitioned by time: `events_2026`, `events_2027`. Retention is a partition drop rather than a delete.
+Partitioned by time: `events_2026`, `events_2027`, `events_2028`, `events_2029`, `events_2030`, `events_2031`, `events_2032`, `events_2033`, `events_2034`, `events_2035`, `events_overflow`. Retention is a partition drop rather than a delete.
 
 | Column | Type | Null | Default | Notes |
 |---|---|---|---|---|
