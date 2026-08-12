@@ -7,6 +7,8 @@ import (
 	"os"
 	"text/tabwriter"
 
+	"go.londer.be/cardinal/internal/cli"
+	"go.londer.be/cardinal/internal/cli/direct"
 	"go.londer.be/cardinal/internal/store"
 )
 
@@ -36,7 +38,7 @@ func runMigrate(ctx context.Context, args []string) error {
 	// other flag. The DSN is already found at that path by convention; this just
 	// lets it be said out loud, or pointed somewhere else.
 	configPath := fs.String("config", "", "configuration file, for the connection string")
-	if _, err := parse(fs, args); err != nil {
+	if _, err := cli.Parse(fs, args); err != nil {
 		return errUsage
 	}
 	if *configPath != "" && *dsnFlag == "" {
@@ -45,7 +47,7 @@ func runMigrate(ctx context.Context, args []string) error {
 		}
 	}
 
-	s, err := open(ctx, *dsnFlag)
+	s, err := direct.Open(ctx, *dsnFlag)
 	if err != nil {
 		return err
 	}

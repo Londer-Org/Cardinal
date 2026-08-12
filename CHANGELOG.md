@@ -14,6 +14,28 @@ old image.
 
 ## Unreleased
 
+### Changed
+
+- **The published image no longer contains the administrative CLI.** It used to
+  be the entrypoint, and the configuration it reads carries the connection
+  string, so a shell in a running container was an unauthenticated
+  administrator in one command with nothing to discover.
+
+  The server is now `cardinal-server`, holding `serve`, `migrate`, `init` and
+  `config` — what has to reach the database before anybody can sign in.
+  `cardinal` is the administrative CLI and is distributed separately.
+
+  What this buys, stated exactly: whoever holds the database credential still
+  owns the directory, because psql exists and nothing here can prevent that. It
+  raises the cost from "type the command you already know" to "know the
+  credential and bring a tool", and it stops the running server from being the
+  tool.
+
+  **On upgrade:** anywhere you run `cardinal migrate`, `cardinal init`,
+  `cardinal serve` or `cardinal config`, run `cardinal-server` instead. The
+  container's entrypoint changed with it, so a deployment that passes `serve`
+  or `migrate` as the command keeps working unchanged.
+
 ### Fixed
 
 - **Cardinal would have stopped accepting every change on 1 January 2028.**

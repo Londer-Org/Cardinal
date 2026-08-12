@@ -13,6 +13,7 @@ import (
 
 	"go.londer.be/cardinal/internal/ca/sshca"
 	"go.londer.be/cardinal/internal/ca/x509ca"
+	"go.londer.be/cardinal/internal/cli"
 	"go.londer.be/cardinal/internal/config"
 	"go.londer.be/cardinal/internal/server/auth"
 	"go.londer.be/cardinal/internal/server/claims"
@@ -30,7 +31,7 @@ func runServe(ctx context.Context, args []string) error {
 	fs_ := flag.NewFlagSet("serve", flag.ContinueOnError)
 	configPath := fs_.String("config", "cardinal.toml", "path to the configuration file")
 	dev := fs_.Bool("dev", false, "development mode: relaxes cookie security, do not use in production")
-	if _, err := parse(fs_, args); err != nil {
+	if _, err := cli.Parse(fs_, args); err != nil {
 		return errUsage
 	}
 

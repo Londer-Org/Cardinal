@@ -10,6 +10,8 @@ import (
 	"text/tabwriter"
 	"time"
 
+	"go.londer.be/cardinal/internal/cli"
+	"go.londer.be/cardinal/internal/cli/direct"
 	"go.londer.be/cardinal/internal/server/mail"
 	"go.londer.be/cardinal/internal/store"
 )
@@ -42,10 +44,10 @@ func runMail(ctx context.Context, args []string) error {
 func runMailSettings(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("mail settings", flag.ContinueOnError)
 	dsnFlag := fs.String("dsn", "", "PostgreSQL connection string")
-	if _, err := parse(fs, args); err != nil {
+	if _, err := cli.Parse(fs, args); err != nil {
 		return errUsage
 	}
-	s, err := open(ctx, *dsnFlag)
+	s, err := direct.Open(ctx, *dsnFlag)
 	if err != nil {
 		return err
 	}
@@ -85,14 +87,14 @@ func runMailSet(ctx context.Context, args []string) error {
 	disable := fs.Bool("disable", false, "stop sending")
 	configPath := fs.String("config", "", "configuration file, for the encryption key")
 	dsnFlag := fs.String("dsn", "", "PostgreSQL connection string")
-	if _, err := parse(fs, args); err != nil {
+	if _, err := cli.Parse(fs, args); err != nil {
 		return errUsage
 	}
 	if *enable && *disable {
 		return fmt.Errorf("%w: -enable and -disable disagree", errUsage)
 	}
 
-	s, err := open(ctx, *dsnFlag)
+	s, err := direct.Open(ctx, *dsnFlag)
 	if err != nil {
 		return err
 	}
@@ -179,14 +181,14 @@ func runMailTest(ctx context.Context, args []string) error {
 	to := fs.String("to", "", "where to send it (required)")
 	configPath := fs.String("config", "", "configuration file, for the encryption key")
 	dsnFlag := fs.String("dsn", "", "PostgreSQL connection string")
-	if _, err := parse(fs, args); err != nil {
+	if _, err := cli.Parse(fs, args); err != nil {
 		return errUsage
 	}
 	if *to == "" {
 		return fmt.Errorf("%w: cardinal mail test -to <address>", errUsage)
 	}
 
-	s, err := open(ctx, *dsnFlag)
+	s, err := direct.Open(ctx, *dsnFlag)
 	if err != nil {
 		return err
 	}
@@ -209,7 +211,7 @@ func runMailTest(ctx context.Context, args []string) error {
 	// while every other message said the deployment's own name would prove the
 	// relay works and nothing about the messages.
 	data := mail.Data{Login: "(test)", When: time.Now().Format(time.RFC1123)}
-	if cfg, cfgErr := loadConfigForCheck(*configPath); cfgErr == nil {
+	if cfg, cfgErr := direct.LoadConfig(*configPath); cfgErr == nil {
 		data.Product = cfg.WebAuthn.RPDisplayName
 		data.ConsoleURL = cfg.Server.PublicURL
 	}
@@ -241,10 +243,10 @@ func runMailTest(ctx context.Context, args []string) error {
 func runMailStatus(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("mail status", flag.ContinueOnError)
 	dsnFlag := fs.String("dsn", "", "PostgreSQL connection string")
-	if _, err := parse(fs, args); err != nil {
+	if _, err := cli.Parse(fs, args); err != nil {
 		return errUsage
 	}
-	s, err := open(ctx, *dsnFlag)
+	s, err := direct.Open(ctx, *dsnFlag)
 	if err != nil {
 		return err
 	}
@@ -270,10 +272,10 @@ func runMailTemplates(ctx context.Context, args []string) error {
 	dsnFlag := fs.String("dsn", "", "PostgreSQL connection string")
 	show := fs.String("show", "", "print one template's current wording")
 	reset := fs.String("reset", "", "discard an override, returning to the built-in")
-	if _, err := parse(fs, args); err != nil {
+	if _, err := cli.Parse(fs, args); err != nil {
 		return errUsage
 	}
-	s, err := open(ctx, *dsnFlag)
+	s, err := direct.Open(ctx, *dsnFlag)
 	if err != nil {
 		return err
 	}
@@ -321,7 +323,7 @@ func runMailTemplates(ctx context.Context, args []string) error {
 
 // mailSealKey reads the key that protects the relay password.
 func mailSealKey(configPath string) (string, error) {
-	cfg, err := loadConfigForCheck(configPath)
+	cfg, err := direct.LoadConfig(configPath)
 	if err != nil {
 		return "", fmt.Errorf("reading the configuration for mail.encryption_key: %w", err)
 	}

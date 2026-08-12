@@ -187,8 +187,8 @@ With no proxy and no second host:
 cp cardinal.example.toml cardinal.toml   # set rp_id and origins
 make release                             # UI + binary, one artifact
 make migrate
-./bin/cardinal init you                  # admin + policy + enrollment link
-./bin/cardinal serve -config cardinal.toml -dev
+./bin/cardinal-server init you                  # admin + policy + enrollment link
+./bin/cardinal-server serve -config cardinal.toml -dev
 ```
 
 Open the link, register a passkey, sign in. There is no password at any point,

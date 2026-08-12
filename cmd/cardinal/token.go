@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"go.londer.be/cardinal/internal/cli"
+	"go.londer.be/cardinal/internal/cli/direct"
 	"go.londer.be/cardinal/internal/directory"
 	"go.londer.be/cardinal/internal/server/httpapi"
 	"go.londer.be/cardinal/internal/store"
@@ -42,7 +44,7 @@ func runTokenCreate(ctx context.Context, args []string) error {
 		"comma-separated, and required: "+strings.Join(httpapi.AllScopes, ", "))
 	dsnFlag := fs.String("dsn", "", "PostgreSQL connection string")
 
-	pos, err := parse(fs, args)
+	pos, err := cli.Parse(fs, args)
 	if err != nil {
 		return errUsage
 	}
@@ -74,7 +76,7 @@ func runTokenCreate(ctx context.Context, args []string) error {
 			errUsage, strings.Join(httpapi.AllScopes, ", "))
 	}
 
-	s, err := open(ctx, *dsnFlag)
+	s, err := direct.Open(ctx, *dsnFlag)
 	if err != nil {
 		return err
 	}
@@ -107,7 +109,7 @@ func runTokenList(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("token list", flag.ContinueOnError)
 	dsnFlag := fs.String("dsn", "", "PostgreSQL connection string")
 
-	pos, err := parse(fs, args)
+	pos, err := cli.Parse(fs, args)
 	if err != nil {
 		return errUsage
 	}
@@ -115,7 +117,7 @@ func runTokenList(ctx context.Context, args []string) error {
 		return fmt.Errorf("%w: cardinal token list <login>", errUsage)
 	}
 
-	s, err := open(ctx, *dsnFlag)
+	s, err := direct.Open(ctx, *dsnFlag)
 	if err != nil {
 		return err
 	}
@@ -163,7 +165,7 @@ func runTokenRevoke(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("token revoke", flag.ContinueOnError)
 	dsnFlag := fs.String("dsn", "", "PostgreSQL connection string")
 
-	pos, err := parse(fs, args)
+	pos, err := cli.Parse(fs, args)
 	if err != nil {
 		return errUsage
 	}
@@ -176,7 +178,7 @@ func runTokenRevoke(ctx context.Context, args []string) error {
 		return fmt.Errorf("%q is not a token id — see `cardinal token list %s`", pos[1], pos[0])
 	}
 
-	s, err := open(ctx, *dsnFlag)
+	s, err := direct.Open(ctx, *dsnFlag)
 	if err != nil {
 		return err
 	}

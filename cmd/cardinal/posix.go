@@ -10,6 +10,8 @@ import (
 
 	"go.londer.be/cardinal/internal/directory/posix"
 
+	"go.londer.be/cardinal/internal/cli"
+	"go.londer.be/cardinal/internal/cli/direct"
 	"go.londer.be/cardinal/internal/directory"
 	"go.londer.be/cardinal/internal/store"
 )
@@ -41,7 +43,7 @@ func runPOSIX(ctx context.Context, args []string) error {
 // two ranges in one directory, and the damage would not be visible until
 // something collided.
 func posixRange(configPath string) posix.Range {
-	cfg, err := loadConfigForCheck(configPath)
+	cfg, err := direct.LoadConfig(configPath)
 	if err != nil {
 		// Unreadable configuration is not an error here. It is the normal case
 		// for a CLI run against a development database, and Effective() would
@@ -57,7 +59,7 @@ func runPOSIXAssign(ctx context.Context, args []string) error {
 	dsnFlag := fs.String("dsn", "", "PostgreSQL connection string")
 	configPath := fs.String("config", "", "configuration file, for the id range")
 
-	pos, err := parse(fs, args)
+	pos, err := cli.Parse(fs, args)
 	if err != nil {
 		return errUsage
 	}
@@ -72,7 +74,7 @@ func runPOSIXAssign(ctx context.Context, args []string) error {
 
 	idRange := posixRange(*configPath)
 
-	s, err := open(ctx, *dsnFlag)
+	s, err := direct.Open(ctx, *dsnFlag)
 	if err != nil {
 		return err
 	}
@@ -125,7 +127,7 @@ func runPOSIXShow(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("posix show", flag.ContinueOnError)
 	dsnFlag := fs.String("dsn", "", "PostgreSQL connection string")
 
-	pos, err := parse(fs, args)
+	pos, err := cli.Parse(fs, args)
 	if err != nil {
 		return errUsage
 	}
@@ -138,7 +140,7 @@ func runPOSIXShow(ctx context.Context, args []string) error {
 		return err
 	}
 
-	s, err := open(ctx, *dsnFlag)
+	s, err := direct.Open(ctx, *dsnFlag)
 	if err != nil {
 		return err
 	}
@@ -178,7 +180,7 @@ func runPOSIXSet(ctx context.Context, args []string) error {
 	shell := fs.String("shell", "", "login shell")
 	dsnFlag := fs.String("dsn", "", "PostgreSQL connection string")
 
-	pos, err := parse(fs, args)
+	pos, err := cli.Parse(fs, args)
 	if err != nil {
 		return errUsage
 	}
@@ -189,7 +191,7 @@ func runPOSIXSet(ctx context.Context, args []string) error {
 		return fmt.Errorf("%w: give -home, -shell, or both", errUsage)
 	}
 
-	s, err := open(ctx, *dsnFlag)
+	s, err := direct.Open(ctx, *dsnFlag)
 	if err != nil {
 		return err
 	}
@@ -234,11 +236,11 @@ func runPOSIXSet(ctx context.Context, args []string) error {
 func runPOSIXList(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("posix list", flag.ContinueOnError)
 	dsnFlag := fs.String("dsn", "", "PostgreSQL connection string")
-	if _, err := parse(fs, args); err != nil {
+	if _, err := cli.Parse(fs, args); err != nil {
 		return errUsage
 	}
 
-	s, err := open(ctx, *dsnFlag)
+	s, err := direct.Open(ctx, *dsnFlag)
 	if err != nil {
 		return err
 	}

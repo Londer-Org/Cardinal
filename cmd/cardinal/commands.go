@@ -10,6 +10,8 @@ import (
 	"text/tabwriter"
 	"time"
 
+	"go.londer.be/cardinal/internal/cli"
+	"go.londer.be/cardinal/internal/cli/direct"
 	"go.londer.be/cardinal/internal/directory"
 	"go.londer.be/cardinal/internal/directory/temporal"
 	"go.londer.be/cardinal/internal/store"
@@ -17,13 +19,6 @@ import (
 
 // open connects to the directory. Every command needs this and none should
 // proceed without it, so failures here are fatal by design.
-func open(ctx context.Context, dsnFlag string) (*store.Store, error) {
-	s, err := store.Open(ctx, dsn(dsnFlag))
-	if err != nil {
-		return nil, err
-	}
-	return s, nil
-}
 
 // cliType maps a command word onto an entity type. The CLI uses hyphens where
 // the database enum uses underscores, because hyphens read better in a shell.
@@ -62,7 +57,7 @@ func runEntityCommand(ctx context.Context, typeWord string, args []string) error
 	// terminal.
 	owner := fs.String("app", "", "the application this group exists for (groups only)")
 	dsnFlag := fs.String("dsn", "", "PostgreSQL connection string")
-	pos, err := parse(fs, args[1:])
+	pos, err := cli.Parse(fs, args[1:])
 	if err != nil {
 		return errUsage
 	}
@@ -80,7 +75,7 @@ func runEntityCommand(ctx context.Context, typeWord string, args []string) error
 		return err
 	}
 
-	s, err := open(ctx, *dsnFlag)
+	s, err := direct.Open(ctx, *dsnFlag)
 	if err != nil {
 		return err
 	}
@@ -122,7 +117,7 @@ func runGrant(ctx context.Context, args []string) error {
 	until := fs.String("until", "", "end instant, RFC3339")
 	reason := fs.String("reason", "", "why this access was granted")
 	dsnFlag := fs.String("dsn", "", "PostgreSQL connection string")
-	pos, err := parse(fs, args)
+	pos, err := cli.Parse(fs, args)
 	if err != nil {
 		return errUsage
 	}
@@ -148,7 +143,7 @@ func runGrant(ctx context.Context, args []string) error {
 		return validateErr
 	}
 
-	s, err := open(ctx, *dsnFlag)
+	s, err := direct.Open(ctx, *dsnFlag)
 	if err != nil {
 		return err
 	}
@@ -192,7 +187,7 @@ func runRevoke(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("revoke", flag.ContinueOnError)
 	at := fs.String("at", "", "revocation instant, RFC3339 (default: now)")
 	dsnFlag := fs.String("dsn", "", "PostgreSQL connection string")
-	pos, err := parse(fs, args)
+	pos, err := cli.Parse(fs, args)
 	if err != nil {
 		return errUsage
 	}
@@ -209,7 +204,7 @@ func runRevoke(ctx context.Context, args []string) error {
 		when = t
 	}
 
-	s, err := open(ctx, *dsnFlag)
+	s, err := direct.Open(ctx, *dsnFlag)
 	if err != nil {
 		return err
 	}
@@ -239,7 +234,7 @@ func runList(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("list", flag.ContinueOnError)
 	all := fs.Bool("all", false, "include disabled entities")
 	dsnFlag := fs.String("dsn", "", "PostgreSQL connection string")
-	pos, err := parse(fs, args)
+	pos, err := cli.Parse(fs, args)
 	if err != nil {
 		return errUsage
 	}
@@ -252,7 +247,7 @@ func runList(ctx context.Context, args []string) error {
 		}
 	}
 
-	s, err := open(ctx, *dsnFlag)
+	s, err := direct.Open(ctx, *dsnFlag)
 	if err != nil {
 		return err
 	}
@@ -282,7 +277,7 @@ func runList(ctx context.Context, args []string) error {
 func runShow(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("show", flag.ContinueOnError)
 	dsnFlag := fs.String("dsn", "", "PostgreSQL connection string")
-	pos, err := parse(fs, args)
+	pos, err := cli.Parse(fs, args)
 	if err != nil {
 		return errUsage
 	}
@@ -290,7 +285,7 @@ func runShow(ctx context.Context, args []string) error {
 		return fmt.Errorf("%w: cardinal show <type> <name>", errUsage)
 	}
 
-	s, err := open(ctx, *dsnFlag)
+	s, err := direct.Open(ctx, *dsnFlag)
 	if err != nil {
 		return err
 	}
@@ -333,7 +328,7 @@ func runRedact(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("redact", flag.ContinueOnError)
 	yes := fs.Bool("yes", false, "skip the confirmation prompt")
 	dsnFlag := fs.String("dsn", "", "PostgreSQL connection string")
-	pos, err := parse(fs, args)
+	pos, err := cli.Parse(fs, args)
 	if err != nil {
 		return errUsage
 	}
@@ -341,7 +336,7 @@ func runRedact(ctx context.Context, args []string) error {
 		return fmt.Errorf("%w: cardinal redact <type> <name>", errUsage)
 	}
 
-	s, err := open(ctx, *dsnFlag)
+	s, err := direct.Open(ctx, *dsnFlag)
 	if err != nil {
 		return err
 	}
@@ -387,7 +382,7 @@ func runAudit(ctx context.Context, args []string) error {
 
 	fs := flag.NewFlagSet("audit verify", flag.ContinueOnError)
 	dsnFlag := fs.String("dsn", "", "PostgreSQL connection string")
-	pos, err := parse(fs, args[1:])
+	pos, err := cli.Parse(fs, args[1:])
 	if err != nil {
 		return errUsage
 	}
@@ -397,7 +392,7 @@ func runAudit(ctx context.Context, args []string) error {
 		return fmt.Errorf("%w: audit verify takes no arguments, got %q", errUsage, pos[0])
 	}
 
-	s, err := open(ctx, *dsnFlag)
+	s, err := direct.Open(ctx, *dsnFlag)
 	if err != nil {
 		return err
 	}
@@ -455,7 +450,7 @@ func runEntityAvailability(ctx context.Context, typeWord string, args []string, 
 
 	fs := flag.NewFlagSet(typeWord+" "+verb, flag.ContinueOnError)
 	dsnFlag := fs.String("dsn", "", "PostgreSQL connection string")
-	pos, err := parse(fs, args)
+	pos, err := cli.Parse(fs, args)
 	if err != nil {
 		return errUsage
 	}
@@ -463,7 +458,7 @@ func runEntityAvailability(ctx context.Context, typeWord string, args []string, 
 		return fmt.Errorf("%w: cardinal %s %s <name>", errUsage, typeWord, verb)
 	}
 
-	s, err := open(ctx, *dsnFlag)
+	s, err := direct.Open(ctx, *dsnFlag)
 	if err != nil {
 		return err
 	}

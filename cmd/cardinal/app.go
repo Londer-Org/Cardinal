@@ -2,14 +2,14 @@ package main
 
 import (
 	"context"
-	"errors"
 	"flag"
 	"fmt"
 	"os"
 	"strings"
 	"text/tabwriter"
 
-	"go.londer.be/cardinal/internal/config"
+	"go.londer.be/cardinal/internal/cli"
+	"go.londer.be/cardinal/internal/cli/direct"
 	"go.londer.be/cardinal/internal/store"
 )
 
@@ -46,7 +46,7 @@ func runAppRegister(ctx context.Context, args []string) error {
 	configPath := fs.String("config", "", "configuration file, for the recovery-domain check")
 	dsnFlag := fs.String("dsn", "", "PostgreSQL connection string")
 
-	pos, err := parse(fs, args)
+	pos, err := cli.Parse(fs, args)
 	if err != nil {
 		return errUsage
 	}
@@ -62,7 +62,7 @@ func runAppRegister(ctx context.Context, args []string) error {
 		method = store.AuthClientSecretBasic
 	}
 
-	s, err := open(ctx, *dsnFlag)
+	s, err := direct.Open(ctx, *dsnFlag)
 	if err != nil {
 		return err
 	}
@@ -72,7 +72,7 @@ func runAppRegister(ctx context.Context, args []string) error {
 	// still works — it is only unavailable, not silently skipped, and the
 	// difference is stated below.
 	var check func(string) error
-	cfg, cfgErr := loadConfigForCheck(*configPath)
+	cfg, cfgErr := direct.LoadConfig(*configPath)
 	if cfgErr == nil {
 		check = cfg.CheckRelyingPartyDomain
 	}
@@ -109,11 +109,11 @@ func runAppRegister(ctx context.Context, args []string) error {
 func runAppList(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("app list", flag.ContinueOnError)
 	dsnFlag := fs.String("dsn", "", "PostgreSQL connection string")
-	if _, err := parse(fs, args); err != nil {
+	if _, err := cli.Parse(fs, args); err != nil {
 		return errUsage
 	}
 
-	s, err := open(ctx, *dsnFlag)
+	s, err := direct.Open(ctx, *dsnFlag)
 	if err != nil {
 		return err
 	}
@@ -150,19 +150,6 @@ func runAppList(ctx context.Context, args []string) error {
 			strings.Join(c.RedirectURIs, " "))
 	}
 	return w.Flush()
-}
-
-// loadConfigForCheck reads configuration for the recovery-domain check.
-func loadConfigForCheck(path string) (*config.Config, error) {
-	if path != "" {
-		return config.Load(path)
-	}
-	for _, candidate := range configSearchPaths {
-		if cfg, err := config.Load(candidate); err == nil {
-			return cfg, nil
-		}
-	}
-	return nil, errors.New("no readable configuration")
 }
 
 func splitList(v string) []string {

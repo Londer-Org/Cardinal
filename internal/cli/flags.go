@@ -1,11 +1,11 @@
-package main
+package cli
 
 import (
 	"flag"
 	"strings"
 )
 
-// parse is flag.FlagSet.Parse with argument permutation, returning the
+// Parse is flag.FlagSet.Parse with argument permutation, returning the
 // positional arguments.
 //
 // Go's flag package stops parsing at the first non-flag argument, so
@@ -16,7 +16,7 @@ import (
 // what every GNU-style CLI does.
 //
 // Everything after a bare "--" is positional, per convention.
-func parse(fs *flag.FlagSet, argv []string) ([]string, error) {
+func Parse(fs *flag.FlagSet, argv []string) ([]string, error) {
 	flags, positional := permute(fs, argv)
 	if err := fs.Parse(flags); err != nil {
 		return nil, err

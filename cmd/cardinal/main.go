@@ -16,11 +16,7 @@ import (
 
 	"go.londer.be/cardinal/internal/cli/command"
 	"go.londer.be/cardinal/internal/version"
-
-	"github.com/BurntSushi/toml"
 )
-
-const defaultDSN = "postgres://cardinal:cardinal@localhost:5433/cardinal?sslmode=disable" //nolint:gosec // the local development database, whose password is in the Makefile and README already
 
 func main() {
 	// os.Exit is the last thing that happens, and nothing is deferred in this
@@ -101,13 +97,9 @@ func run(ctx context.Context, args []string) error {
 		return client(ctx, rest, command.Memberships)
 	case "history":
 		return client(ctx, rest, command.History)
-	case "init":
-		return runInit(ctx, args[1:])
 	case "version":
 		fmt.Println(version.String())
 		return nil
-	case "migrate":
-		return runMigrate(ctx, rest)
 	case "invite":
 		return runInvite(ctx, args[1:])
 	case "app":
@@ -128,12 +120,8 @@ func run(ctx context.Context, args []string) error {
 		return runOIDC(ctx, rest)
 	case "policy":
 		return runPolicy(ctx, rest)
-	case "serve":
-		return runServe(ctx, rest)
 	case "decisions":
 		return runDecisions(ctx, rest)
-	case "config":
-		return runConfig(ctx, rest)
 	case "redact":
 		return runRedact(ctx, rest)
 	case "audit":
@@ -421,60 +409,4 @@ GLOBAL
 Grants should normally be bounded. Whoever asks for access almost always knows
 when they will stop needing it, and a bounded grant cannot be forgotten.
 `)
-}
-
-// dsn resolves the connection string.
-//
-// Order: explicit flag, then CARDINAL_DSN, then the configuration file, then
-// the development default.
-//
-// Reading the config file matters more than it looks. Without it, an operator
-// who has mounted cardinal.toml into a container still has to repeat -dsn on
-// every administrative command — and the DSN contains a password, so they end
-// up putting a credential in their shell history to run `cardinal list`.
-func dsn(flagValue string) string {
-	if flagValue != "" {
-		return flagValue
-	}
-	if env := os.Getenv("CARDINAL_DSN"); env != "" {
-		return env
-	}
-	if fromConfig := dsnFromConfig(); fromConfig != "" {
-		return fromConfig
-	}
-	return defaultDSN
-}
-
-// configSearchPaths are tried in order. The container path comes first because
-// that is where a deployment mounts it, and a stray cardinal.toml in the
-// working directory should not silently win over the mounted one.
-var configSearchPaths = []string{
-	"/etc/cardinal/cardinal.toml",
-	"cardinal.toml",
-}
-
-// dsnFromConfig reads just the DSN, tolerating a config that is otherwise
-// incomplete.
-//
-// config.Load validates everything and refuses a file missing, say, the
-// WebAuthn origins — correct for starting a server, wrong here. `cardinal
-// migrate` must work against a half-configured deployment, since applying the
-// schema is often the first thing done.
-func dsnFromConfig() string {
-	paths := configSearchPaths
-	if env := os.Getenv("CARDINAL_CONFIG"); env != "" {
-		paths = append([]string{env}, paths...)
-	}
-
-	for _, path := range paths {
-		var partial struct {
-			Database struct {
-				DSN string `toml:"dsn"`
-			} `toml:"database"`
-		}
-		if _, err := toml.DecodeFile(path, &partial); err == nil && partial.Database.DSN != "" {
-			return partial.Database.DSN
-		}
-	}
-	return ""
 }
