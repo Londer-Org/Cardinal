@@ -340,6 +340,18 @@ func (s *Server) csrfProtect(next http.Handler) http.Handler {
 			return
 		}
 
+		// A terminal starting or polling a device sign-in, which is the same
+		// case one step earlier: it holds nothing at all yet.
+		//
+		// Only these two. Looking a code up and approving one are done by a
+		// browser holding a session, and they keep the check — approving is the
+		// step that hands a session over, and it is exactly the request an
+		// attacker would like a victim's browser to make on its own.
+		if r.URL.Path == "/api/cli/device" || r.URL.Path == "/api/cli/device/collect" {
+			next.ServeHTTP(w, r)
+			return
+		}
+
 		// ACME, and the same reason. Every request is a JWS signed by an
 		// account key; there is no cookie, no ambient authority, and a client is
 		// a machine with no browser to be tricked.

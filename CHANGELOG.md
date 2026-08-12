@@ -14,6 +14,32 @@ old image.
 
 ## Unreleased
 
+### Added
+
+- **A terminal can be signed in from a device that is not the one running it.**
+  The existing flow has the console redirect approval to a loopback listener on
+  the machine running the CLI, which does not need a browser to exist — it needs
+  the browser and the CLI to share a loopback interface. That is false the
+  moment the terminal is on a server you are SSH'd into: the approval goes to
+  `127.0.0.1` on whatever machine the browser runs on, and the terminal waits
+  for something that cannot arrive.
+
+  Now the terminal asks first, prints a short code, and polls. Somebody with a
+  browser — a laptop, a phone — opens `/cli-login`, enters the code, sees where
+  the request came from, and approves it.
+
+  The CLI picks a flow and says which: loopback where the browser can reach this
+  machine, the code otherwise.
+
+  **What the new flow gives up, stated because it matters.** Loopback approval
+  is delivered to the machine that asked, so nobody can talk you into approving
+  *their* terminal. This one can be phished, which is the known weakness of the
+  shape. Against it: a five-minute window, approval that still requires a
+  device-bound session, and a screen that shows the address the request came
+  from **as the server saw it** — never a name the terminal chose, because
+  "approve the code from web-01" is exactly the sentence an attacker would like
+  to arrange.
+
 ### Fixed
 
 - **The journal no longer invents who made a change from the command line.**

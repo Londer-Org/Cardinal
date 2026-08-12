@@ -21,6 +21,19 @@ var (
 	LimitLoginFinish = RateLimit{Scope: "login:finish", Limit: 20, Window: time.Minute}
 	LimitRecovery    = RateLimit{Scope: "recovery", Limit: 5, Window: 15 * time.Minute}
 
+	// Looking up a device request by its user code, which is the one value in
+	// that flow short enough to guess at.
+	//
+	// Eight characters from a thirty-symbol alphabet is about 2^39, which no
+	// limit is needed to protect on its own — what this bounds is somebody
+	// sweeping for *any* live request, since at any moment a handful exist and
+	// a hit means a screen offering to approve a stranger's terminal.
+	LimitDeviceLookup = RateLimit{Scope: "device:lookup", Limit: 30, Window: time.Minute}
+
+	// Starting one. Unauthenticated by necessity — the terminal has nothing
+	// yet — so this bounds work on demand rather than guessing.
+	LimitDeviceStart = RateLimit{Scope: "device:start", Limit: 30, Window: time.Minute}
+
 	// Enrolling a host is unauthenticated, so this exists — but it is bounding
 	// the wrong thing to think of it as anti-guessing. The token is 256 bits and
 	// lives an hour; no rate limit is what makes guessing hopeless. What this

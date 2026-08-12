@@ -415,6 +415,27 @@ func (s *Server) Handler() http.Handler {
 		// worthless without a verifier that never left the process.
 		mux.HandleFunc("POST /api/cli/exchange", s.handleCLIExchange)
 
+		// The same handoff, for a terminal whose browser is somewhere else.
+		//
+		// The loopback flow above does not need a browser to exist — it needs
+		// the browser and the CLI to share a loopback interface, which is false
+		// the moment the terminal is on a server you are SSH'd into. Here the
+		// terminal asks first and is approved from whatever has a browser.
+		//
+		// Start and collect are unauthenticated for the same reason exchange
+		// is. Lookup is rate-limited because the user code is the one value
+		// short enough to sweep for, and a hit means a screen offering to
+		// approve a stranger's terminal. Approval is behind requireDeviceBound
+		// like authorize: the point is to hand over what a passkey proved.
+		mux.Handle("POST /api/cli/device",
+			s.rateLimit(store.LimitDeviceStart)(http.HandlerFunc(s.handleDeviceStart)))
+		mux.Handle("POST /api/cli/device/collect",
+			s.rateLimit(store.LimitDeviceStart)(http.HandlerFunc(s.handleDeviceCollect)))
+		mux.Handle("GET /api/cli/device/{code}",
+			s.requireAuth(s.rateLimit(store.LimitDeviceLookup)(http.HandlerFunc(s.handleDeviceLookup))))
+		mux.Handle("POST /api/cli/device/{code}/approve",
+			s.requireAuth(s.requireDeviceBound(http.HandlerFunc(s.handleDeviceApprove))))
+
 		mux.Handle("POST /api/ssh/certificate",
 			s.requireAuth(http.HandlerFunc(s.handleIssueSSHCertificate)))
 	}

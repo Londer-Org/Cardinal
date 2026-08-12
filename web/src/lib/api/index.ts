@@ -60,6 +60,7 @@ import {
   decisionsSchema,
   meSchema,
   cliAuthorizationSchema,
+  devicePendingSchema,
   configReportSchema,
   mailSettingsSchema,
   mailTemplatesSchema,
@@ -149,6 +150,16 @@ export const api = {
       request('/api/cli/authorize', cliAuthorizationSchema, {
         method: 'POST',
         body: { callback, verifierHash },
+      }),
+
+    /** What a device sign-in code refers to, before approving it. */
+    pendingDevice: (code: string) =>
+      request(`/api/cli/device/${encodeURIComponent(code)}`, devicePendingSchema),
+
+    /** Approve one. Requires a device-bound session, like the loopback flow. */
+    approveDevice: (code: string) =>
+      request(`/api/cli/device/${encodeURIComponent(code)}/approve`, z.undefined(), {
+        method: 'POST',
       }),
 
     /**
@@ -766,6 +777,7 @@ export { ApiError, onStepUpNeeded } from './client'
 export * from './requests'
 export type {
   ApprovedRecovery,
+  DevicePending,
   Projection,
   SSFStream,
   SSFStreams,
