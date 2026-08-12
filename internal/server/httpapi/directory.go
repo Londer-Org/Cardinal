@@ -158,7 +158,13 @@ func (s *Server) handleGetUser(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "could not load the account")
 		return
 	}
-	memberships, err := s.store.GroupsOfMember(ctx, entity.ID)
+	at, err := atFrom(r)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	memberships, err := s.store.GroupsOfMemberAt(ctx, entity.ID, at)
 	if err != nil {
 		s.log.ErrorContext(ctx, "reading memberships failed", "error", err)
 		writeError(w, http.StatusInternalServerError, "could not load the account")
@@ -441,7 +447,13 @@ func (s *Server) handleGetGroup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	members, err := s.store.MembersOfGroup(ctx, entity.ID)
+	at, err := atFrom(r)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	members, err := s.store.MembersOfGroupAt(ctx, entity.ID, at)
 	if err != nil {
 		s.log.ErrorContext(ctx, "listing members failed", "error", err)
 		writeError(w, http.StatusInternalServerError, "could not load the group")
@@ -455,13 +467,19 @@ func (s *Server) handleGetGroup(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	writeJSON(w, http.StatusOK, map[string]any{
+	body := map[string]any{
 		"name":        entity.Name,
 		"displayName": entity.DisplayName,
 		"system":      entity.System,
 		"owner":       owner,
 		"members":     describeGrants(members),
-	})
+	}
+	// Echoed so a caller can tell an answer about March from an answer about
+	// now, which otherwise look identical.
+	if !at.IsZero() {
+		body["at"] = at.UTC().Format(time.RFC3339)
+	}
+	writeJSON(w, http.StatusOK, body)
 }
 
 func (s *Server) handleCreateGroup(w http.ResponseWriter, r *http.Request) {

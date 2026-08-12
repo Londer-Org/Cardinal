@@ -334,9 +334,20 @@ func scanNamedGrants(rows interface {
 
 // MembersOfGroup lists a group's direct members as of now.
 func (s *Store) MembersOfGroup(ctx context.Context, groupID uuid.UUID) ([]*NamedGrant, error) {
+	return s.MembersOfGroupAt(ctx, groupID, time.Time{})
+}
+
+// MembersOfGroupAt is the same at a given instant. Pass the zero time for now,
+// as everywhere else that takes one.
+//
+// The names are why this exists beside DirectMembers, which answers the same
+// question in identifiers. A caller rendering "who was in this group in March"
+// wants both, and joining them afterwards would mean a second round trip per
+// member for a question that is one query.
+func (s *Store) MembersOfGroupAt(ctx context.Context, groupID uuid.UUID, at time.Time) ([]*NamedGrant, error) {
 	rows, err := s.pool.Query(ctx, `SELECT`+namedGrantColumns+namedGrantJoins+`
-		 WHERE m.group_id = $1 AND m.valid_period @> now()
-		 ORDER BY e.name`, groupID)
+		 WHERE m.group_id = $1 AND m.valid_period @> $2::timestamptz
+		 ORDER BY e.name`, groupID, orNow(at))
 	if err != nil {
 		return nil, fmt.Errorf("store: listing members: %w", err)
 	}
@@ -350,9 +361,18 @@ func (s *Store) MembersOfGroup(ctx context.Context, groupID uuid.UUID) ([]*Named
 // because that is what they can revoke — a transitive membership has no grant
 // to remove, and offering to remove it would be a lie.
 func (s *Store) GroupsOfMember(ctx context.Context, memberID uuid.UUID) ([]*NamedGrant, error) {
+	return s.GroupsOfMemberAt(ctx, memberID, time.Time{})
+}
+
+// GroupsOfMemberAt is the same at a given instant. Pass the zero time for now.
+//
+// Direct memberships only, like the function it wraps. The transitive closure
+// is ResolveMemberships, and the two are deliberately different answers: this
+// one is what an administrator granted, that one is what policy reads.
+func (s *Store) GroupsOfMemberAt(ctx context.Context, memberID uuid.UUID, at time.Time) ([]*NamedGrant, error) {
 	rows, err := s.pool.Query(ctx, `SELECT`+namedGrantColumns+namedGrantJoins+`
-		 WHERE m.member_id = $1 AND m.valid_period @> now()
-		 ORDER BY g.name`, memberID)
+		 WHERE m.member_id = $1 AND m.valid_period @> $2::timestamptz
+		 ORDER BY g.name`, memberID, orNow(at))
 	if err != nil {
 		return nil, fmt.Errorf("store: listing memberships: %w", err)
 	}
