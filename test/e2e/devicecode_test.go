@@ -1,11 +1,15 @@
 package e2e
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/url"
+	"os"
+	"os/exec"
 	"strings"
 	"testing"
+	"time"
 )
 
 // Signing a terminal in from a device that is not this one.
@@ -281,4 +285,74 @@ func whoami(t *testing.T, c *http.Client, token string) string {
 		t.Fatal(err)
 	}
 	return out.Login
+}
+
+// TestSSHAndTheOtherCommandsShareOneSignIn.
+//
+// `cardinal ssh` kept its own copy of the sign-in flow for a while, so it never
+// gained the device code — and it is the command most often run on a machine
+// somebody is SSH'd into, where the loopback handoff cannot work.
+//
+// Asserted through behaviour rather than by grepping for a function: with no
+// browser and no cached session, both must fail the same way, because both are
+// now asking the same code to sign them in.
+func TestSSHAndTheOtherCommandsShareOneSignIn(t *testing.T) {
+	// The cache is cleared first, because another test in this package seeds it
+	// and a signed-in CLI never reaches the sign-in this asserts on. Found by
+	// the full suite: alone this passed, and after clientcli_test it did not.
+	forgetCachedSession(t)
+
+	// No browser in the container, so both print a code and then wait for
+	// somebody to approve it.
+	//
+	// Killed after a few seconds rather than run to completion: waiting is the
+	// correct behaviour and the whole point, so the assertion is on what was
+	// printed before the wait, not on an exit status.
+	for _, args := range [][]string{
+		{"members", "engineers"},
+		{"ssh", "linux-01"},
+	} {
+		out := clientCLIBriefly(t, 6*time.Second, args...)
+		if !strings.Contains(out, "code:") {
+			t.Errorf("cardinal %v did not offer a device code, so it is not using "+
+				"the shared sign-in:\n%s", args, out)
+		}
+	}
+}
+
+// forgetCachedSession removes whatever a previous test signed in as.
+func forgetCachedSession(t *testing.T) {
+	t.Helper()
+
+	// Through the CLI's own view of the file rather than a shell, which the
+	// distroless image does not have.
+	empty := t.TempDir() + "/cardinal"
+	if err := os.MkdirAll(empty, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(empty+"/sessions.json", []byte(`{"sessions":{}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if out, err := exec.CommandContext(t.Context(), "docker", "cp",
+		empty, containerID(t)+":"+cliConfigDir+"/").CombinedOutput(); err != nil {
+		t.Fatalf("clearing the CLI session cache: %v\n%s", err, out)
+	}
+}
+
+// clientCLIBriefly runs a command that is expected to wait, and returns what it
+// printed before being stopped.
+func clientCLIBriefly(t *testing.T, within time.Duration, args ...string) string {
+	t.Helper()
+
+	ctx, cancel := context.WithTimeout(t.Context(), within)
+	defer cancel()
+
+	full := append([]string{
+		"compose", "-f", "../../examples/compose.yml", "exec",
+		"-e", "XDG_CONFIG_HOME=" + cliConfigDir,
+		"-e", "CARDINAL_SERVER=" + cliServer,
+		"-T", "cardinal", "cardinal",
+	}, args...)
+	out, _ := exec.CommandContext(ctx, "docker", full...).CombinedOutput() //nolint:errcheck // stopped on purpose
+	return string(out)
 }
