@@ -85,7 +85,7 @@ func runSSHCAInit(ctx context.Context, args []string) error {
 	}
 	defer s.Close()
 
-	key, err := s.CreateSSHCAKey(ctx, seal, nil)
+	key, err := s.CreateSSHCAKey(ctx, seal, direct.ActorID())
 	if err != nil {
 		return err
 	}
@@ -96,7 +96,7 @@ func runSSHCAInit(ctx context.Context, args []string) error {
 	fmt.Printf("%s\n", key.PublicKey)
 
 	if *activate {
-		if err := s.ActivateSSHCAKey(ctx, key.ID, 48*time.Hour, nil); err != nil {
+		if err := s.ActivateSSHCAKey(ctx, key.ID, 48*time.Hour, direct.ActorID()); err != nil {
 			return err
 		}
 		fmt.Println("  Signing immediately, because -activate was given.")
@@ -221,7 +221,7 @@ func runSSHCARotate(ctx context.Context, args []string) error {
 	}
 	defer s.Close()
 
-	if err := s.ActivateSSHCAKey(ctx, keyID, *grace, nil); err != nil {
+	if err := s.ActivateSSHCAKey(ctx, keyID, *grace, direct.ActorID()); err != nil {
 		if errors.Is(err, store.ErrNoSSHCA) {
 			return fmt.Errorf("no such key %s, or it is already retired", keyID)
 		}

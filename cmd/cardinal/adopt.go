@@ -255,7 +255,7 @@ func applyClaims(ctx context.Context, s *store.Store, claims map[string]*claim, 
 		changes++
 
 		if apply {
-			if err := s.AdoptPOSIXNumber(ctx, entity.ID, number, nil); err != nil {
+			if err := s.AdoptPOSIXNumber(ctx, entity.ID, number, direct.ActorID()); err != nil {
 				return fmt.Errorf("adopting %s: %w", name, err)
 			}
 		}

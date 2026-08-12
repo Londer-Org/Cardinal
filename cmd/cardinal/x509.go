@@ -87,7 +87,7 @@ func runX509Init(ctx context.Context, args []string) error {
 	}
 	defer s.Close()
 
-	key, err := s.CreateX509CAKey(ctx, seal, *subject, *validity, nil)
+	key, err := s.CreateX509CAKey(ctx, seal, *subject, *validity, direct.ActorID())
 	if err != nil {
 		return err
 	}
@@ -99,7 +99,7 @@ func runX509Init(ctx context.Context, args []string) error {
 	fmt.Printf("  expires      %s\n\n", key.NotAfter.Format(time.RFC3339))
 
 	if *activate {
-		if err := s.ActivateX509CAKey(ctx, key.ID, nil); err != nil {
+		if err := s.ActivateX509CAKey(ctx, key.ID, direct.ActorID()); err != nil {
 			return err
 		}
 		fmt.Println("  Signing immediately, because -activate was given.")
@@ -215,7 +215,7 @@ func runX509Rotate(ctx context.Context, args []string) error {
 	}
 	defer s.Close()
 
-	if err := s.ActivateX509CAKey(ctx, id, nil); err != nil {
+	if err := s.ActivateX509CAKey(ctx, id, direct.ActorID()); err != nil {
 		return err
 	}
 
@@ -264,7 +264,7 @@ func runACMECredentials(ctx context.Context, args []string) error {
 		return err
 	}
 
-	credential, err := s.CreateEABCredential(ctx, host.ID, seal, nil)
+	credential, err := s.CreateEABCredential(ctx, host.ID, seal, direct.ActorID())
 	if err != nil {
 		return err
 	}

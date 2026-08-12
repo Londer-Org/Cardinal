@@ -92,7 +92,7 @@ func runHostEnroll(ctx context.Context, args []string) error {
 	// Issued by nobody, for the same reason invitations are: the CLI reaches the
 	// database directly, and naming an actor who did not authenticate would make
 	// the journal say something untrue.
-	enrollment, err := s.CreateHostEnrollment(ctx, entity.ID, nil)
+	enrollment, err := s.CreateHostEnrollment(ctx, entity.ID, direct.ActorID())
 	if err != nil {
 		return err
 	}

@@ -142,7 +142,7 @@ func runPolicyPublish(ctx context.Context, args []string) error {
 	}
 	defer s.Close()
 
-	version, err := s.PublishPolicy(ctx, string(document), *description, nil)
+	version, err := s.PublishPolicy(ctx, string(document), *description, direct.ActorID())
 	if err != nil {
 		return err
 	}
@@ -160,7 +160,7 @@ func runPolicyPublish(ctx context.Context, args []string) error {
 		return nil
 	}
 
-	if err := s.ActivatePolicy(ctx, version.Version, nil); err != nil {
+	if err := s.ActivatePolicy(ctx, version.Version, direct.ActorID()); err != nil {
 		return err
 	}
 	// This used to say "restart the server, or it keeps serving the previous
@@ -217,7 +217,7 @@ func runPolicyActivate(ctx context.Context, args []string) error {
 	// rollback and find it did not restore what it looked like it would.
 	direct.WarnDangling(ctx, s, engine)
 
-	if err := s.ActivatePolicy(ctx, version, nil); err != nil {
+	if err := s.ActivatePolicy(ctx, version, direct.ActorID()); err != nil {
 		return err
 	}
 	fmt.Printf("version %d is now live\n", version)
