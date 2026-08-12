@@ -644,7 +644,7 @@ Partitioned by time: `events_2026`, `events_2027`, `events_2028`, `events_2029`,
 
 ## Schema
 
-Applied migrations. Written by `cardinal migrate`.
+Applied migrations. Written by `cardinal-server migrate`.
 
 ```mermaid
 erDiagram

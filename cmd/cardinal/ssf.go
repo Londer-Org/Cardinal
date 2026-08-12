@@ -9,6 +9,8 @@ import (
 	"text/tabwriter"
 	"time"
 
+	"go.londer.be/cardinal/internal/cli"
+	"go.londer.be/cardinal/internal/cli/direct"
 	"go.londer.be/cardinal/internal/directory"
 	"go.londer.be/cardinal/internal/server/httpapi"
 	"go.londer.be/cardinal/internal/server/ssf"
@@ -66,7 +68,7 @@ func runSSFStreamAdd(ctx context.Context, args []string) error {
 		"comma-separated event types; the default is all of them")
 	dsnFlag := fs.String("dsn", "", "PostgreSQL connection string")
 
-	pos, err := parse(fs, args)
+	pos, err := cli.Parse(fs, args)
 	if err != nil {
 		return errUsage
 	}
@@ -105,7 +107,7 @@ func runSSFStreamAdd(ctx context.Context, args []string) error {
 		return fmt.Errorf("%w: a stream with no events receives nothing", errUsage)
 	}
 
-	s, err := open(ctx, *dsnFlag)
+	s, err := direct.Open(ctx, *dsnFlag)
 	if err != nil {
 		return err
 	}
@@ -145,11 +147,11 @@ func runSSFStreamAdd(ctx context.Context, args []string) error {
 func runSSFStreamList(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("ssf stream list", flag.ContinueOnError)
 	dsnFlag := fs.String("dsn", "", "PostgreSQL connection string")
-	if _, err := parse(fs, args); err != nil {
+	if _, err := cli.Parse(fs, args); err != nil {
 		return errUsage
 	}
 
-	s, err := open(ctx, *dsnFlag)
+	s, err := direct.Open(ctx, *dsnFlag)
 	if err != nil {
 		return err
 	}
@@ -184,7 +186,7 @@ func runSSFStreamList(ctx context.Context, args []string) error {
 func runSSFStreamRemove(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("ssf stream remove", flag.ContinueOnError)
 	dsnFlag := fs.String("dsn", "", "PostgreSQL connection string")
-	pos, err := parse(fs, args)
+	pos, err := cli.Parse(fs, args)
 	if err != nil {
 		return errUsage
 	}
@@ -192,7 +194,7 @@ func runSSFStreamRemove(ctx context.Context, args []string) error {
 		return fmt.Errorf("%w: cardinal ssf stream remove <application>", errUsage)
 	}
 
-	s, err := open(ctx, *dsnFlag)
+	s, err := direct.Open(ctx, *dsnFlag)
 	if err != nil {
 		return err
 	}
@@ -214,7 +216,7 @@ func runSSFStreamRemove(ctx context.Context, args []string) error {
 func runSSFStreamState(ctx context.Context, resume bool, args []string) error {
 	fs := flag.NewFlagSet("ssf stream state", flag.ContinueOnError)
 	dsnFlag := fs.String("dsn", "", "PostgreSQL connection string")
-	pos, err := parse(fs, args)
+	pos, err := cli.Parse(fs, args)
 	if err != nil {
 		return errUsage
 	}
@@ -222,7 +224,7 @@ func runSSFStreamState(ctx context.Context, resume bool, args []string) error {
 		return fmt.Errorf("%w: cardinal ssf stream <pause|resume> <application>", errUsage)
 	}
 
-	s, err := open(ctx, *dsnFlag)
+	s, err := direct.Open(ctx, *dsnFlag)
 	if err != nil {
 		return err
 	}
@@ -259,11 +261,11 @@ func runSSFStreamState(ctx context.Context, resume bool, args []string) error {
 func runSSFStatus(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("ssf status", flag.ContinueOnError)
 	dsnFlag := fs.String("dsn", "", "PostgreSQL connection string")
-	if _, err := parse(fs, args); err != nil {
+	if _, err := cli.Parse(fs, args); err != nil {
 		return errUsage
 	}
 
-	s, err := open(ctx, *dsnFlag)
+	s, err := direct.Open(ctx, *dsnFlag)
 	if err != nil {
 		return err
 	}
@@ -312,7 +314,7 @@ func runSSFToken(ctx context.Context, args []string) error {
 	ttl := fs.Duration("ttl", 365*24*time.Hour, "how long it is valid")
 	dsnFlag := fs.String("dsn", "", "PostgreSQL connection string")
 
-	pos, err := parse(fs, args)
+	pos, err := cli.Parse(fs, args)
 	if err != nil {
 		return errUsage
 	}
@@ -320,7 +322,7 @@ func runSSFToken(ctx context.Context, args []string) error {
 		return fmt.Errorf("%w: cardinal ssf token <application>", errUsage)
 	}
 
-	s, err := open(ctx, *dsnFlag)
+	s, err := direct.Open(ctx, *dsnFlag)
 	if err != nil {
 		return err
 	}

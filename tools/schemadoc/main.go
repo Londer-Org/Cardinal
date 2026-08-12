@@ -78,7 +78,7 @@ var domains = []struct {
 	},
 	{
 		Title:  "Schema",
-		Note:   "Applied migrations. Written by `cardinal migrate`.",
+		Note:   "Applied migrations. Written by `cardinal-server migrate`.",
 		Tables: []string{"schema_migrations"},
 	},
 }

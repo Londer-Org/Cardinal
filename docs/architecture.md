@@ -147,7 +147,7 @@ cardinal decisions -denied      # only refusals
 
 A refusal with no rule named is reported as `(none matched: default-deny)`
 rather than as a blank column, because nothing having matched is the answer
-rather than missing data. `cardinal config` is the same idea for the other
+rather than missing data. `cardinal-server config` is the same idea for the other
 question asked at that moment — what this deployment is actually running, and
 which values came from the file, the environment or a default nobody chose.
 

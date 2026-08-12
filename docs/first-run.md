@@ -53,7 +53,7 @@ make release            # builds the React UI and embeds it in the binary
 Then set yourself up in one step:
 
 ```sh
-./bin/cardinal init alonfils -display "Arthur Lonfils"
+./bin/cardinal-server init alonfils -display "Arthur Lonfils"
 ```
 
 It publishes the default policy, creates the account, grants it
@@ -191,7 +191,7 @@ audit versus GDPR Article 17 (ADR 0010).
 ## 5. The browser — the part that needs a human
 
 ```sh
-./bin/cardinal serve -config cardinal.toml -dev
+./bin/cardinal-server serve -config cardinal.toml -dev
 ```
 
 Open <http://localhost:8099>.

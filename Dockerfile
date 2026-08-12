@@ -33,15 +33,33 @@ ARG VERSION=dev
 RUN CGO_ENABLED=0 go build \
       -trimpath \
       -ldflags="-s -w -X main.version=${VERSION}" \
+      -o /out/cardinal-server ./cmd/cardinal-server \
+ && CGO_ENABLED=0 go build \
+      -trimpath \
+      -ldflags="-s -w -X main.version=${VERSION}" \
       -o /out/cardinal ./cmd/cardinal
 
 # ── Runtime ─────────────────────────────────────────────────────────────────
 # distroless/static: no shell, no package manager, no libc. Nothing for an
 # attacker who achieves execution to pivot with — which matters more here than
 # in most images, since this process holds the keys to everything else.
-FROM gcr.io/distroless/static-debian12:nonroot
+FROM gcr.io/distroless/static-debian12:nonroot AS runtime
 
-COPY --from=build /out/cardinal /usr/local/bin/cardinal
+# The server, and deliberately not the administrative CLI.
+#
+# This image's entrypoint used to *be* that CLI, and the configuration it reads
+# carries the connection string — so a shell in a running container was an
+# unauthenticated administrator in one command, with nothing to discover:
+#
+#     $ cardinal list group        # no flags, no credential
+#     group  directory-admins  ...
+#
+# What leaving it out buys, stated exactly: whoever holds the database
+# credential still owns the directory, because psql exists and nothing here can
+# prevent that. It raises the cost from "type the command you already know" to
+# "know the credential and bring a tool", and it stops the running server from
+# being the tool. A smaller claim than it looks, and the true one.
+COPY --from=build /out/cardinal-server /usr/local/bin/cardinal-server
 
 # Never root. The binary needs no privileged port and no filesystem writes.
 USER nonroot:nonroot
@@ -51,5 +69,19 @@ EXPOSE 8080
 # The image carries no configuration. cardinal.toml must be mounted and the
 # break-glass public key set, or the server refuses to start — configuration
 # with no safe default has no default (see internal/config).
-ENTRYPOINT ["/usr/local/bin/cardinal"]
+ENTRYPOINT ["/usr/local/bin/cardinal-server"]
 CMD ["serve", "-config", "/etc/cardinal/cardinal.toml"]
+
+# Development and testing only, and never published.
+#
+# The end-to-end stack drives fixtures with the CLI, which needs the database
+# and therefore cannot sign in from a container with no browser. Rather than
+# invent a headless administrative path — the thing ADR 0033 exists to remove —
+# the test stack gets an image that carries the tool and the published one does
+# not.
+FROM runtime AS tools
+COPY --from=build /out/cardinal /usr/local/bin/cardinal
+
+# Last, so it is what `docker build` produces without a target: what ships is
+# the smaller thing, and asking for the larger one is deliberate.
+FROM runtime AS server

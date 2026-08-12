@@ -8,6 +8,8 @@ import (
 	"strings"
 	"text/tabwriter"
 
+	"go.londer.be/cardinal/internal/cli"
+	"go.londer.be/cardinal/internal/cli/direct"
 	"go.londer.be/cardinal/internal/directory"
 	"go.londer.be/cardinal/internal/server/policy"
 	"go.londer.be/cardinal/internal/store"
@@ -79,11 +81,11 @@ func named(names map[string]string, id string) string {
 func runPolicyRuleList(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("policy rule list", flag.ContinueOnError)
 	dsnFlag := fs.String("dsn", "", "PostgreSQL connection string")
-	if _, err := parse(fs, args); err != nil {
+	if _, err := cli.Parse(fs, args); err != nil {
 		return errUsage
 	}
 
-	s, err := open(ctx, *dsnFlag)
+	s, err := direct.Open(ctx, *dsnFlag)
 	if err != nil {
 		return err
 	}
@@ -146,7 +148,7 @@ func runPolicyRuleAdd(ctx context.Context, args []string) error {
 		"publish without activating, to inspect it first")
 	dsnFlag := fs.String("dsn", "", "PostgreSQL connection string")
 
-	pos, err := parse(fs, args[1:])
+	pos, err := cli.Parse(fs, args[1:])
 	if err != nil {
 		return errUsage
 	}
@@ -154,7 +156,7 @@ func runPolicyRuleAdd(ctx context.Context, args []string) error {
 		return fmt.Errorf("%w: a rule needs an id, so a decision can name it", errUsage)
 	}
 
-	s, err := open(ctx, *dsnFlag)
+	s, err := direct.Open(ctx, *dsnFlag)
 	if err != nil {
 		return err
 	}
@@ -226,7 +228,7 @@ func runPolicyRuleRemove(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("policy rule remove", flag.ContinueOnError)
 	stage := fs.Bool("stage", false, "publish without activating")
 	dsnFlag := fs.String("dsn", "", "PostgreSQL connection string")
-	pos, err := parse(fs, args)
+	pos, err := cli.Parse(fs, args)
 	if err != nil {
 		return errUsage
 	}
@@ -234,7 +236,7 @@ func runPolicyRuleRemove(ctx context.Context, args []string) error {
 		return fmt.Errorf("%w: cardinal policy rule remove <id>", errUsage)
 	}
 
-	s, err := open(ctx, *dsnFlag)
+	s, err := direct.Open(ctx, *dsnFlag)
 	if err != nil {
 		return err
 	}
@@ -287,7 +289,7 @@ func publishRuleChange(
 	// Reported before activation, and reported at all, because a rule naming a
 	// group that is not there never matches — and Cedar being default-deny
 	// makes that look exactly like the rule working.
-	warnDangling(ctx, s, engine)
+	direct.WarnDangling(ctx, s, engine)
 
 	if stage {
 		fmt.Printf("  not yet live — activate with `cardinal policy activate %d`\n",

@@ -13,6 +13,8 @@ import (
 	"strconv"
 	"strings"
 
+	"go.londer.be/cardinal/internal/cli"
+	"go.londer.be/cardinal/internal/cli/direct"
 	"go.londer.be/cardinal/internal/directory"
 	"go.londer.be/cardinal/internal/host/shadow"
 	"go.londer.be/cardinal/internal/store"
@@ -70,7 +72,7 @@ func runAdopt(ctx context.Context, args []string) error {
 	yes := fs.Bool("yes", false, "apply the changes rather than only showing them")
 	dsnFlag := fs.String("dsn", "", "PostgreSQL connection string")
 
-	pos, err := parse(fs, args)
+	pos, err := cli.Parse(fs, args)
 	if err != nil {
 		return errUsage
 	}
@@ -110,7 +112,7 @@ func runAdopt(ctx context.Context, args []string) error {
 		return refuseContradictionsErr
 	}
 
-	s, err := open(ctx, *dsnFlag)
+	s, err := direct.Open(ctx, *dsnFlag)
 	if err != nil {
 		return err
 	}

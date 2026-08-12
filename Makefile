@@ -61,14 +61,14 @@ reset: ## Destroy the dev database and recreate it with a first administrator
 	docker compose down -v
 	@$(MAKE) --no-print-directory up
 	@$(MAKE) --no-print-directory migrate
-	@CARDINAL_DSN="$(DSN)" ./bin/cardinal init '$(ADMIN)'
+	@CARDINAL_DSN="$(DSN)" ./bin/cardinal-server init '$(ADMIN)'
 
 # Who `make reset` makes an administrator. Override with `make reset ADMIN=you`.
 ADMIN ?= $(USER)
 
 .PHONY: migrate
 migrate: build ## Apply the schema (same code path as a deployed container)
-	@CARDINAL_DSN="$(DSN)" ./bin/cardinal migrate
+	@CARDINAL_DSN="$(DSN)" ./bin/cardinal-server migrate
 
 .PHONY: psql
 psql: ## Open a psql shell against the dev database
@@ -206,16 +206,20 @@ ui-check: ## Typecheck and lint the frontend
 	cd web && npx tsc --noEmit && npx eslint . --max-warnings 0
 
 .PHONY: build
-build: ## Build the cardinal binary (run `make ui` first for the admin UI)
+build: ## Build both binaries (run `make ui` first for the admin UI)
+	@# Two, and the split is the point: cardinal-server is what a deployment
+	@# runs and what the image carries, and cardinal is the administrative CLI
+	@# that is deliberately not in it.
+	go build -o bin/cardinal-server ./cmd/cardinal-server
 	go build -o bin/cardinal ./cmd/cardinal
 
 .PHONY: release
 release: ui build ## Build the UI and a binary containing it
-	@echo "==> single self-contained binary at bin/cardinal"
+	@echo "==> the server, with the console compiled in, at bin/cardinal-server"
 
 .PHONY: serve
 serve: build ## Run the server in development mode
-	./bin/cardinal serve -config cardinal.toml -dev
+	./bin/cardinal-server serve -config cardinal.toml -dev
 
 .PHONY: version
 version: ## Print the version this tree builds

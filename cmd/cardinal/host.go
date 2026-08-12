@@ -12,6 +12,8 @@ import (
 	"text/tabwriter"
 	"time"
 
+	"go.londer.be/cardinal/internal/cli"
+	"go.londer.be/cardinal/internal/cli/direct"
 	"go.londer.be/cardinal/internal/directory"
 	"go.londer.be/cardinal/internal/host/machine"
 	"go.londer.be/cardinal/internal/store"
@@ -62,7 +64,7 @@ func runHostEnroll(ctx context.Context, args []string) error {
 	configPath := fs.String("config", "", "configuration file, for the public URL")
 	tokenOnly := fs.Bool("token", false, "print only the token")
 
-	pos, err := parse(fs, args)
+	pos, err := cli.Parse(fs, args)
 	if err != nil {
 		return errUsage
 	}
@@ -70,7 +72,7 @@ func runHostEnroll(ctx context.Context, args []string) error {
 		return fmt.Errorf("%w: cardinal host enroll <name>", errUsage)
 	}
 
-	s, err := open(ctx, *dsnFlag)
+	s, err := direct.Open(ctx, *dsnFlag)
 	if err != nil {
 		return err
 	}
@@ -102,7 +104,7 @@ func runHostEnroll(ctx context.Context, args []string) error {
 
 	base := *baseURL
 	if base == "" {
-		if cfg, err := loadConfigForCheck(*configPath); err == nil {
+		if cfg, err := direct.LoadConfig(*configPath); err == nil {
 			base = cfg.Server.PublicURL
 		}
 	}
@@ -140,7 +142,7 @@ func runHostCredentials(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("host credentials", flag.ContinueOnError)
 	dsnFlag := fs.String("dsn", "", "PostgreSQL connection string")
 
-	pos, err := parse(fs, args)
+	pos, err := cli.Parse(fs, args)
 	if err != nil {
 		return errUsage
 	}
@@ -148,7 +150,7 @@ func runHostCredentials(ctx context.Context, args []string) error {
 		return fmt.Errorf("%w: cardinal host credentials <name>", errUsage)
 	}
 
-	s, err := open(ctx, *dsnFlag)
+	s, err := direct.Open(ctx, *dsnFlag)
 	if err != nil {
 		return err
 	}
@@ -199,7 +201,7 @@ func runHostJoin(ctx context.Context, args []string) error {
 	token := fs.String("token", "", "enrollment token from `cardinal host enroll`")
 	keyPath := fs.String("key", machine.DefaultKeyPath, "where to write this host's key")
 
-	if _, err := parse(fs, args); err != nil {
+	if _, err := cli.Parse(fs, args); err != nil {
 		return errUsage
 	}
 	if *server == "" || *token == "" {
@@ -242,7 +244,7 @@ func runHostWhoami(ctx context.Context, args []string) error {
 	server := fs.String("server", "", "base URL of the Cardinal server")
 	keyPath := fs.String("key", machine.DefaultKeyPath, "this host's key")
 
-	if _, err := parse(fs, args); err != nil {
+	if _, err := cli.Parse(fs, args); err != nil {
 		return errUsage
 	}
 	if *server == "" {
@@ -297,7 +299,7 @@ func runHostAlias(ctx context.Context, args []string) error {
 
 	fs := flag.NewFlagSet("host alias", flag.ContinueOnError)
 	dsnFlag := fs.String("dsn", "", "PostgreSQL connection string")
-	pos, err := parse(fs, args[1:])
+	pos, err := cli.Parse(fs, args[1:])
 	if err != nil {
 		return errUsage
 	}
@@ -315,7 +317,7 @@ func runHostAlias(ctx context.Context, args []string) error {
 			map[bool]string{true: "", false: " <name>"}[verb == "list"])
 	}
 
-	s, err := open(ctx, *dsnFlag)
+	s, err := direct.Open(ctx, *dsnFlag)
 	if err != nil {
 		return err
 	}

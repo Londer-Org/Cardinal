@@ -9,6 +9,8 @@ import (
 	"text/tabwriter"
 	"time"
 
+	"go.londer.be/cardinal/internal/cli"
+	"go.londer.be/cardinal/internal/cli/direct"
 	"go.londer.be/cardinal/internal/directory"
 	"go.londer.be/cardinal/internal/store"
 )
@@ -41,7 +43,7 @@ func runInviteIssue(ctx context.Context, args []string) error {
 	dsnFlag := fs.String("dsn", "", "PostgreSQL connection string")
 	configPath := fs.String("config", "", "configuration file, for the public URL")
 
-	pos, err := parse(fs, args)
+	pos, err := cli.Parse(fs, args)
 	if err != nil {
 		return errUsage
 	}
@@ -49,7 +51,7 @@ func runInviteIssue(ctx context.Context, args []string) error {
 		return fmt.Errorf("%w: cardinal invite <login>", errUsage)
 	}
 
-	s, err := open(ctx, *dsnFlag)
+	s, err := direct.Open(ctx, *dsnFlag)
 	if err != nil {
 		return err
 	}
@@ -77,7 +79,7 @@ func runInviteIssue(ctx context.Context, args []string) error {
 
 	base := *baseURL
 	if base == "" {
-		if cfg, err := loadConfigForCheck(*configPath); err == nil {
+		if cfg, err := direct.LoadConfig(*configPath); err == nil {
 			base = cfg.Server.PublicURL
 		}
 	}
@@ -112,11 +114,11 @@ func runInviteIssue(ctx context.Context, args []string) error {
 func runInviteList(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("invite list", flag.ContinueOnError)
 	dsnFlag := fs.String("dsn", "", "PostgreSQL connection string")
-	if _, err := parse(fs, args); err != nil {
+	if _, err := cli.Parse(fs, args); err != nil {
 		return errUsage
 	}
 
-	s, err := open(ctx, *dsnFlag)
+	s, err := direct.Open(ctx, *dsnFlag)
 	if err != nil {
 		return err
 	}
@@ -145,7 +147,7 @@ func runInviteRevoke(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("invite revoke", flag.ContinueOnError)
 	dsnFlag := fs.String("dsn", "", "PostgreSQL connection string")
 
-	pos, err := parse(fs, args)
+	pos, err := cli.Parse(fs, args)
 	if err != nil {
 		return errUsage
 	}
@@ -153,7 +155,7 @@ func runInviteRevoke(ctx context.Context, args []string) error {
 		return fmt.Errorf("%w: cardinal invite revoke <login>", errUsage)
 	}
 
-	s, err := open(ctx, *dsnFlag)
+	s, err := direct.Open(ctx, *dsnFlag)
 	if err != nil {
 		return err
 	}

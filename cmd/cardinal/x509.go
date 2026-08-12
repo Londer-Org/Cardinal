@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"go.londer.be/cardinal/internal/cli"
+	"go.londer.be/cardinal/internal/cli/direct"
 	"go.londer.be/cardinal/internal/config"
 	"go.londer.be/cardinal/internal/directory"
 	"go.londer.be/cardinal/internal/store"
@@ -66,7 +68,7 @@ func runX509Init(ctx context.Context, args []string) error {
 		"start signing immediately; only safe when nothing trusts an older key yet")
 	dsnFlag := fs.String("dsn", "", "PostgreSQL connection string")
 
-	if _, err := parse(fs, args); err != nil {
+	if _, err := cli.Parse(fs, args); err != nil {
 		return errUsage
 	}
 	if *subject == "" {
@@ -79,7 +81,7 @@ func runX509Init(ctx context.Context, args []string) error {
 		return err
 	}
 
-	s, err := open(ctx, *dsnFlag)
+	s, err := direct.Open(ctx, *dsnFlag)
 	if err != nil {
 		return err
 	}
@@ -117,11 +119,11 @@ func runX509Init(ctx context.Context, args []string) error {
 func runX509List(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("x509 ca list", flag.ContinueOnError)
 	dsnFlag := fs.String("dsn", "", "PostgreSQL connection string")
-	if _, err := parse(fs, args); err != nil {
+	if _, err := cli.Parse(fs, args); err != nil {
 		return errUsage
 	}
 
-	s, err := open(ctx, *dsnFlag)
+	s, err := direct.Open(ctx, *dsnFlag)
 	if err != nil {
 		return err
 	}
@@ -156,11 +158,11 @@ func runX509List(ctx context.Context, args []string) error {
 func runX509Trust(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("x509 ca trust", flag.ContinueOnError)
 	dsnFlag := fs.String("dsn", "", "PostgreSQL connection string")
-	if _, err := parse(fs, args); err != nil {
+	if _, err := cli.Parse(fs, args); err != nil {
 		return errUsage
 	}
 
-	s, err := open(ctx, *dsnFlag)
+	s, err := direct.Open(ctx, *dsnFlag)
 	if err != nil {
 		return err
 	}
@@ -192,7 +194,7 @@ func runX509Rotate(ctx context.Context, args []string) error {
 	configPath := fs.String("config", "", "configuration file")
 	dsnFlag := fs.String("dsn", "", "PostgreSQL connection string")
 
-	pos, err := parse(fs, args)
+	pos, err := cli.Parse(fs, args)
 	if err != nil {
 		return errUsage
 	}
@@ -207,7 +209,7 @@ func runX509Rotate(ctx context.Context, args []string) error {
 		return x509SealKeyErr
 	}
 
-	s, err := open(ctx, *dsnFlag)
+	s, err := direct.Open(ctx, *dsnFlag)
 	if err != nil {
 		return err
 	}
@@ -233,7 +235,7 @@ func runACMECredentials(ctx context.Context, args []string) error {
 	configPath := fs.String("config", "", "configuration file")
 	dsnFlag := fs.String("dsn", "", "PostgreSQL connection string")
 
-	pos, err := parse(fs, args)
+	pos, err := cli.Parse(fs, args)
 	if err != nil {
 		return errUsage
 	}
@@ -246,7 +248,7 @@ func runACMECredentials(ctx context.Context, args []string) error {
 		return err
 	}
 
-	s, err := open(ctx, *dsnFlag)
+	s, err := direct.Open(ctx, *dsnFlag)
 	if err != nil {
 		return err
 	}

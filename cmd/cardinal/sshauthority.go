@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"go.londer.be/cardinal/internal/cli"
+	"go.londer.be/cardinal/internal/cli/direct"
 	"go.londer.be/cardinal/internal/config"
 	"go.londer.be/cardinal/internal/store"
 )
@@ -68,7 +70,7 @@ func runSSHCAInit(ctx context.Context, args []string) error {
 		"start signing immediately; only safe when no host trusts an older key yet")
 	dsnFlag := fs.String("dsn", "", "PostgreSQL connection string")
 
-	if _, err := parse(fs, args); err != nil {
+	if _, err := cli.Parse(fs, args); err != nil {
 		return errUsage
 	}
 
@@ -77,7 +79,7 @@ func runSSHCAInit(ctx context.Context, args []string) error {
 		return err
 	}
 
-	s, err := open(ctx, *dsnFlag)
+	s, err := direct.Open(ctx, *dsnFlag)
 	if err != nil {
 		return err
 	}
@@ -123,11 +125,11 @@ func runSSHCAInit(ctx context.Context, args []string) error {
 func runSSHCAList(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("ssh ca list", flag.ContinueOnError)
 	dsnFlag := fs.String("dsn", "", "PostgreSQL connection string")
-	if _, err := parse(fs, args); err != nil {
+	if _, err := cli.Parse(fs, args); err != nil {
 		return errUsage
 	}
 
-	s, err := open(ctx, *dsnFlag)
+	s, err := direct.Open(ctx, *dsnFlag)
 	if err != nil {
 		return err
 	}
@@ -164,11 +166,11 @@ func runSSHCAList(ctx context.Context, args []string) error {
 func runSSHCATrust(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("ssh ca trust", flag.ContinueOnError)
 	dsnFlag := fs.String("dsn", "", "PostgreSQL connection string")
-	if _, err := parse(fs, args); err != nil {
+	if _, err := cli.Parse(fs, args); err != nil {
 		return errUsage
 	}
 
-	s, err := open(ctx, *dsnFlag)
+	s, err := direct.Open(ctx, *dsnFlag)
 	if err != nil {
 		return err
 	}
@@ -198,7 +200,7 @@ func runSSHCARotate(ctx context.Context, args []string) error {
 		"how long the previous key stays trusted after it stops signing")
 	dsnFlag := fs.String("dsn", "", "PostgreSQL connection string")
 
-	pos, err := parse(fs, args)
+	pos, err := cli.Parse(fs, args)
 	if err != nil {
 		return errUsage
 	}
@@ -213,7 +215,7 @@ func runSSHCARotate(ctx context.Context, args []string) error {
 		return sealKeyErr
 	}
 
-	s, err := open(ctx, *dsnFlag)
+	s, err := direct.Open(ctx, *dsnFlag)
 	if err != nil {
 		return err
 	}

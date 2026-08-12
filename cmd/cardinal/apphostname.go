@@ -8,6 +8,8 @@ import (
 	"text/tabwriter"
 	"time"
 
+	"go.londer.be/cardinal/internal/cli"
+	"go.londer.be/cardinal/internal/cli/direct"
 	"go.londer.be/cardinal/internal/directory"
 )
 
@@ -37,7 +39,7 @@ func runAppHostname(ctx context.Context, args []string) error {
 func runAppHostnameAdd(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("app hostname add", flag.ContinueOnError)
 	dsnFlag := fs.String("dsn", "", "PostgreSQL connection string")
-	pos, err := parse(fs, args)
+	pos, err := cli.Parse(fs, args)
 	if err != nil {
 		return errUsage
 	}
@@ -45,7 +47,7 @@ func runAppHostnameAdd(ctx context.Context, args []string) error {
 		return fmt.Errorf("%w: cardinal app hostname add <application> <hostname>", errUsage)
 	}
 
-	s, err := open(ctx, *dsnFlag)
+	s, err := direct.Open(ctx, *dsnFlag)
 	if err != nil {
 		return err
 	}
@@ -77,7 +79,7 @@ func runAppHostnameAdd(ctx context.Context, args []string) error {
 func runAppHostnameRemove(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("app hostname remove", flag.ContinueOnError)
 	dsnFlag := fs.String("dsn", "", "PostgreSQL connection string")
-	pos, err := parse(fs, args)
+	pos, err := cli.Parse(fs, args)
 	if err != nil {
 		return errUsage
 	}
@@ -85,7 +87,7 @@ func runAppHostnameRemove(ctx context.Context, args []string) error {
 		return fmt.Errorf("%w: cardinal app hostname remove <application> <hostname>", errUsage)
 	}
 
-	s, err := open(ctx, *dsnFlag)
+	s, err := direct.Open(ctx, *dsnFlag)
 	if err != nil {
 		return err
 	}
@@ -108,12 +110,12 @@ func runAppHostnameRemove(ctx context.Context, args []string) error {
 func runAppHostnameList(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("app hostname list", flag.ContinueOnError)
 	dsnFlag := fs.String("dsn", "", "PostgreSQL connection string")
-	pos, err := parse(fs, args)
+	pos, err := cli.Parse(fs, args)
 	if err != nil {
 		return errUsage
 	}
 
-	s, err := open(ctx, *dsnFlag)
+	s, err := direct.Open(ctx, *dsnFlag)
 	if err != nil {
 		return err
 	}

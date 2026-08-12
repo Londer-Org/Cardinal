@@ -9,6 +9,8 @@ import (
 	"strings"
 	"time"
 
+	"go.londer.be/cardinal/internal/cli"
+	"go.londer.be/cardinal/internal/cli/direct"
 	"go.londer.be/cardinal/internal/directory"
 	"go.londer.be/cardinal/internal/directory/temporal"
 	"go.londer.be/cardinal/internal/server/policy"
@@ -39,7 +41,7 @@ func runInit(ctx context.Context, args []string) error {
 	configPath := fs.String("config", "", "configuration file")
 	dsnFlag := fs.String("dsn", "", "PostgreSQL connection string")
 
-	pos, err := parse(fs, args)
+	pos, err := cli.Parse(fs, args)
 	if err != nil {
 		return errUsage
 	}
@@ -48,7 +50,7 @@ func runInit(ctx context.Context, args []string) error {
 	}
 	login := pos[0]
 
-	s, err := open(ctx, *dsnFlag)
+	s, err := direct.Open(ctx, *dsnFlag)
 	if err != nil {
 		return err
 	}
@@ -119,7 +121,7 @@ func runInit(ctx context.Context, args []string) error {
 		// catching at first run above all: a rule naming a group that is not
 		// there never matches, and on a directory this empty that is
 		// indistinguishable from every other refusal.
-		warnDangling(ctx, s, engine)
+		direct.WarnDangling(ctx, s, engine)
 	}
 
 	entity, err := directory.NewEntity(directory.TypeUser, login, *display)
@@ -161,7 +163,7 @@ func runInit(ctx context.Context, args []string) error {
 
 	base := *baseURL
 	if base == "" {
-		if cfg, err := loadConfigForCheck(*configPath); err == nil {
+		if cfg, err := direct.LoadConfig(*configPath); err == nil {
 			base = cfg.Server.PublicURL
 		}
 	}

@@ -8,7 +8,7 @@ this page describes the machinery that exists rather than a guarantee.
 **Upgrade.** Migrate, then deploy.
 
 ```sh
-cardinal migrate      # from the new build
+cardinal-server migrate   # from the new build
 # then roll the servers
 ```
 
@@ -42,7 +42,7 @@ touches.
 
 ### This replaced something worse
 
-There was briefly a reversal beside every migration, a `cardinal migrate -to`
+There was briefly a reversal beside every migration, a `cardinal-server migrate -to`
 that applied them, and a `-backup` to be taken first. Honestly read, it offered
 very little: a reversal restores the *shape* of the data and not the data, so
 undoing a `DROP COLUMN` yields a column with nothing in it. It also required
@@ -182,7 +182,7 @@ Both checks live in the binary rather than in a deployment manifest, so they
 hold for a container, a Kubernetes Job, a systemd unit or a laptop.
 
 **A schema behind the binary is refused.** Migrations it needs have not been
-applied; it names them and says to run `cardinal migrate`. This is the check an
+applied; it names them and says to run `cardinal-server migrate`. This is the check an
 upgrade walks into, and it exists because a Kubernetes Job's immutable pod
 template made `kubectl apply` update the Deployment and reject the migration —
 the new server rolled out and the migration never ran.
@@ -315,7 +315,7 @@ leaves those hosts with no identity until it returns.
 | Component | Updates by | Goes back by |
 |---|---|---|
 | `cardinal server` | Pull the image, restart | Deploy the previous image |
-| Database schema | `cardinal migrate` | Nothing — the old build runs against it |
+| Database schema | `cardinal-server migrate` | Nothing — the old build runs against it |
 | `cardinal-agent` | `.deb` / `.rpm`, then restart | Install the previous package ([above](#agents)) |
 | `cardinal` CLI | Binary or package | Install the previous one |
 | Policy | `cardinal policy publish -activate` | Activate an earlier version |

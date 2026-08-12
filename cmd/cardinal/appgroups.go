@@ -7,6 +7,8 @@ import (
 	"os"
 	"text/tabwriter"
 
+	"go.londer.be/cardinal/internal/cli"
+	"go.londer.be/cardinal/internal/cli/direct"
 	"go.londer.be/cardinal/internal/directory"
 	"go.londer.be/cardinal/internal/store"
 )
@@ -46,7 +48,7 @@ func runAppGroups(ctx context.Context, args []string) error {
 func runAppGroupsShow(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("app groups show", flag.ContinueOnError)
 	dsnFlag := fs.String("dsn", "", "PostgreSQL connection string")
-	pos, err := parse(fs, args)
+	pos, err := cli.Parse(fs, args)
 	if err != nil {
 		return errUsage
 	}
@@ -54,7 +56,7 @@ func runAppGroupsShow(ctx context.Context, args []string) error {
 		return fmt.Errorf("%w: cardinal app groups show <application>", errUsage)
 	}
 
-	s, err := open(ctx, *dsnFlag)
+	s, err := direct.Open(ctx, *dsnFlag)
 	if err != nil {
 		return err
 	}
@@ -137,7 +139,7 @@ func runAppGroupsShow(ctx context.Context, args []string) error {
 func runAppGroupsMode(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("app groups mode", flag.ContinueOnError)
 	dsnFlag := fs.String("dsn", "", "PostgreSQL connection string")
-	pos, err := parse(fs, args)
+	pos, err := cli.Parse(fs, args)
 	if err != nil {
 		return errUsage
 	}
@@ -149,7 +151,7 @@ func runAppGroupsMode(ctx context.Context, args []string) error {
 		return fmt.Errorf("%w: the mode is `owned` or `all`, not %q", errUsage, mode)
 	}
 
-	s, err := open(ctx, *dsnFlag)
+	s, err := direct.Open(ctx, *dsnFlag)
 	if err != nil {
 		return err
 	}
@@ -183,7 +185,7 @@ func runAppGroupsSight(ctx context.Context, args []string, allow bool) error {
 	}
 	fs := flag.NewFlagSet("app groups "+verb, flag.ContinueOnError)
 	dsnFlag := fs.String("dsn", "", "PostgreSQL connection string")
-	pos, err := parse(fs, args)
+	pos, err := cli.Parse(fs, args)
 	if err != nil {
 		return errUsage
 	}
@@ -191,7 +193,7 @@ func runAppGroupsSight(ctx context.Context, args []string, allow bool) error {
 		return fmt.Errorf("%w: cardinal app groups %s <application> <group>", errUsage, verb)
 	}
 
-	s, err := open(ctx, *dsnFlag)
+	s, err := direct.Open(ctx, *dsnFlag)
 	if err != nil {
 		return err
 	}

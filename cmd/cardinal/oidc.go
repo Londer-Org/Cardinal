@@ -9,6 +9,8 @@ import (
 	"text/tabwriter"
 	"time"
 
+	"go.londer.be/cardinal/internal/cli"
+	"go.londer.be/cardinal/internal/cli/direct"
 	"go.londer.be/cardinal/internal/config"
 	"go.londer.be/cardinal/internal/store"
 )
@@ -53,11 +55,11 @@ func oidcSealKey(configPath string) (string, error) {
 func runOIDCKeyList(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("oidc key list", flag.ContinueOnError)
 	dsnFlag := fs.String("dsn", "", "PostgreSQL connection string")
-	if _, err := parse(fs, args); err != nil {
+	if _, err := cli.Parse(fs, args); err != nil {
 		return errUsage
 	}
 
-	s, err := open(ctx, *dsnFlag)
+	s, err := direct.Open(ctx, *dsnFlag)
 	if err != nil {
 		return err
 	}
@@ -102,7 +104,7 @@ func runOIDCKeyRotate(ctx context.Context, args []string) error {
 		"how long the previous key keeps verifying; defaults to the longest token lifetime in use")
 	force := fs.Bool("force", false, "rotate even when the grace period is too short")
 
-	if _, err := parse(fs, args); err != nil {
+	if _, err := cli.Parse(fs, args); err != nil {
 		return errUsage
 	}
 
@@ -111,7 +113,7 @@ func runOIDCKeyRotate(ctx context.Context, args []string) error {
 		return err
 	}
 
-	s, err := open(ctx, *dsnFlag)
+	s, err := direct.Open(ctx, *dsnFlag)
 	if err != nil {
 		return err
 	}

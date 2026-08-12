@@ -9,8 +9,9 @@ import (
 	"text/tabwriter"
 	"time"
 
+	"go.londer.be/cardinal/internal/cli"
+	"go.londer.be/cardinal/internal/cli/direct"
 	"go.londer.be/cardinal/internal/server/policy"
-	"go.londer.be/cardinal/internal/store"
 )
 
 func runPolicy(ctx context.Context, args []string) error {
@@ -50,7 +51,7 @@ func runPolicyTest(ctx context.Context, args []string) error {
 	dsnFlag := fs.String("dsn", "",
 		"PostgreSQL connection string; enables the check for groups and "+
 			"applications a rule names but that do not exist")
-	pos, err := parse(fs, args)
+	pos, err := cli.Parse(fs, args)
 	if err != nil {
 		return errUsage
 	}
@@ -82,7 +83,7 @@ func runPolicyTest(ctx context.Context, args []string) error {
 		return nil
 	}
 
-	s, err := open(ctx, *dsnFlag)
+	s, err := direct.Open(ctx, *dsnFlag)
 	if err != nil {
 		return err
 	}
@@ -103,25 +104,6 @@ func runPolicyTest(ctx context.Context, args []string) error {
 	return fmt.Errorf("%s names %d entities that do not exist", pos[0], len(dangling))
 }
 
-// warnDangling reports what a policy set names and the directory does not have.
-//
-// A warning rather than a refusal, on both publish and activate. Publishing a
-// rule for a group about to be created is legitimate, and activate is the
-// rollback path — the command somebody runs while something is on fire, which
-// is the worst possible moment to add a new way for it to fail. `cardinal policy
-// test -dsn` is the gate; these two are the reminder.
-func warnDangling(ctx context.Context, s *store.Store, engine *policy.Engine) {
-	dangling, err := engine.Dangling(ctx, s.PolicyReferenceExists)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "  could not check what this policy names: %v\n", err)
-		return
-	}
-	if len(dangling) == 0 {
-		return
-	}
-	fmt.Fprintf(os.Stderr, "\nwarning: %s", policy.ExplainDangling(dangling))
-}
-
 // policyReloadNotice matches watchPolicy's interval in serve.go.
 //
 // Duplicated as a string rather than imported, because the two live in the same
@@ -134,7 +116,7 @@ func runPolicyPublish(ctx context.Context, args []string) error {
 	description := fs.String("description", "", "what changed and why")
 	activate := fs.Bool("activate", false, "make this version live immediately")
 	dsnFlag := fs.String("dsn", "", "PostgreSQL connection string")
-	pos, err := parse(fs, args)
+	pos, err := cli.Parse(fs, args)
 	if err != nil {
 		return errUsage
 	}
@@ -154,7 +136,7 @@ func runPolicyPublish(ctx context.Context, args []string) error {
 		return err
 	}
 
-	s, err := open(ctx, *dsnFlag)
+	s, err := direct.Open(ctx, *dsnFlag)
 	if err != nil {
 		return err
 	}
@@ -168,7 +150,7 @@ func runPolicyPublish(ctx context.Context, args []string) error {
 	fmt.Printf("published version %d — %d policies\n", version.Version, len(engine.PolicyIDs()))
 	fmt.Printf("  digest %s\n", hex.EncodeToString(version.Digest))
 
-	warnDangling(ctx, s, engine)
+	direct.WarnDangling(ctx, s, engine)
 
 	if !*activate {
 		// Publish and activate are separate so a version can be inspected
@@ -194,7 +176,7 @@ func runPolicyPublish(ctx context.Context, args []string) error {
 func runPolicyActivate(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("policy activate", flag.ContinueOnError)
 	dsnFlag := fs.String("dsn", "", "PostgreSQL connection string")
-	pos, err := parse(fs, args)
+	pos, err := cli.Parse(fs, args)
 	if err != nil {
 		return errUsage
 	}
@@ -207,7 +189,7 @@ func runPolicyActivate(ctx context.Context, args []string) error {
 		return fmt.Errorf("%w: version must be a number", errUsage)
 	}
 
-	s, err := open(ctx, *dsnFlag)
+	s, err := direct.Open(ctx, *dsnFlag)
 	if err != nil {
 		return err
 	}
@@ -233,7 +215,7 @@ func runPolicyActivate(ctx context.Context, args []string) error {
 	// Before activating, not after: rolling back to a version that names a
 	// group somebody has since deleted is a plausible way to reach for the
 	// rollback and find it did not restore what it looked like it would.
-	warnDangling(ctx, s, engine)
+	direct.WarnDangling(ctx, s, engine)
 
 	if err := s.ActivatePolicy(ctx, version, nil); err != nil {
 		return err
@@ -247,11 +229,11 @@ func runPolicyActivate(ctx context.Context, args []string) error {
 func runPolicyList(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("policy list", flag.ContinueOnError)
 	dsnFlag := fs.String("dsn", "", "PostgreSQL connection string")
-	if _, err := parse(fs, args); err != nil {
+	if _, err := cli.Parse(fs, args); err != nil {
 		return errUsage
 	}
 
-	s, err := open(ctx, *dsnFlag)
+	s, err := direct.Open(ctx, *dsnFlag)
 	if err != nil {
 		return err
 	}
@@ -283,11 +265,11 @@ func runPolicyList(ctx context.Context, args []string) error {
 func runPolicyShow(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("policy show", flag.ContinueOnError)
 	dsnFlag := fs.String("dsn", "", "PostgreSQL connection string")
-	if _, err := parse(fs, args); err != nil {
+	if _, err := cli.Parse(fs, args); err != nil {
 		return errUsage
 	}
 
-	s, err := open(ctx, *dsnFlag)
+	s, err := direct.Open(ctx, *dsnFlag)
 	if err != nil {
 		return err
 	}

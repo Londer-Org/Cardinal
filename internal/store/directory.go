@@ -340,10 +340,9 @@ func (s *Store) MembersOfGroup(ctx context.Context, groupID uuid.UUID) ([]*Named
 // MembersOfGroupAt is the same at a given instant. Pass the zero time for now,
 // as everywhere else that takes one.
 //
-// The names are why this exists beside DirectMembers, which answers the same
-// question in identifiers. A caller rendering "who was in this group in March"
-// wants both, and joining them afterwards would mean a second round trip per
-// member for a question that is one query.
+// Names as well as identifiers, because a caller rendering "who was in this
+// group in March" wants both and joining them afterwards would mean a round
+// trip per member for a question that is one query.
 func (s *Store) MembersOfGroupAt(ctx context.Context, groupID uuid.UUID, at time.Time) ([]*NamedGrant, error) {
 	rows, err := s.pool.Query(ctx, `SELECT`+namedGrantColumns+namedGrantJoins+`
 		 WHERE m.group_id = $1 AND m.valid_period @> $2::timestamptz

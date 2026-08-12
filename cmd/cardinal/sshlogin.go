@@ -19,6 +19,8 @@ import (
 	"strings"
 	"time"
 
+	"go.londer.be/cardinal/internal/cli"
+	"go.londer.be/cardinal/internal/cli/direct"
 	"golang.org/x/crypto/ssh"
 )
 
@@ -53,7 +55,7 @@ func runSSH(ctx context.Context, args []string) error {
 	serverFlag := fs.String("server", "", "base URL of the Cardinal server")
 	account := fs.String("l", "", "log in as this local account (default: your own login)")
 	printOnly := fs.Bool("print", false, "print the certificate and exit, without connecting")
-	pos, err := parse(fs, args)
+	pos, err := cli.Parse(fs, args)
 	if err != nil {
 		return errUsage
 	}
@@ -303,7 +305,7 @@ func serverURL(flagValue string) (string, error) {
 	if env := os.Getenv("CARDINAL_SERVER"); env != "" {
 		return strings.TrimRight(env, "/"), nil
 	}
-	if cfg, err := loadConfigForCheck(""); err == nil && cfg.Server.PublicURL != "" {
+	if cfg, err := direct.LoadConfig(""); err == nil && cfg.Server.PublicURL != "" {
 		return strings.TrimRight(cfg.Server.PublicURL, "/"), nil
 	}
 	return "", errors.New("no server URL: pass -server, set CARDINAL_SERVER, " +

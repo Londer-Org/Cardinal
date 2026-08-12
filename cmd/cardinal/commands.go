@@ -10,6 +10,8 @@ import (
 	"text/tabwriter"
 	"time"
 
+	"go.londer.be/cardinal/internal/cli"
+	"go.londer.be/cardinal/internal/cli/direct"
 	"go.londer.be/cardinal/internal/directory"
 	"go.londer.be/cardinal/internal/directory/temporal"
 	"go.londer.be/cardinal/internal/store"
@@ -17,13 +19,6 @@ import (
 
 // open connects to the directory. Every command needs this and none should
 // proceed without it, so failures here are fatal by design.
-func open(ctx context.Context, dsnFlag string) (*store.Store, error) {
-	s, err := store.Open(ctx, dsn(dsnFlag))
-	if err != nil {
-		return nil, err
-	}
-	return s, nil
-}
 
 // cliType maps a command word onto an entity type. The CLI uses hyphens where
 // the database enum uses underscores, because hyphens read better in a shell.
@@ -62,7 +57,7 @@ func runEntityCommand(ctx context.Context, typeWord string, args []string) error
 	// terminal.
 	owner := fs.String("app", "", "the application this group exists for (groups only)")
 	dsnFlag := fs.String("dsn", "", "PostgreSQL connection string")
-	pos, err := parse(fs, args[1:])
+	pos, err := cli.Parse(fs, args[1:])
 	if err != nil {
 		return errUsage
 	}
@@ -80,7 +75,7 @@ func runEntityCommand(ctx context.Context, typeWord string, args []string) error
 		return err
 	}
 
-	s, err := open(ctx, *dsnFlag)
+	s, err := direct.Open(ctx, *dsnFlag)
 	if err != nil {
 		return err
 	}
@@ -116,106 +111,13 @@ func runEntityCommand(ctx context.Context, typeWord string, args []string) error
 	return nil
 }
 
-func runList(ctx context.Context, args []string) error {
-	fs := flag.NewFlagSet("list", flag.ContinueOnError)
-	all := fs.Bool("all", false, "include disabled entities")
-	dsnFlag := fs.String("dsn", "", "PostgreSQL connection string")
-	pos, err := parse(fs, args)
-	if err != nil {
-		return errUsage
-	}
-
-	var typ directory.Type
-	if len(pos) > 0 {
-		typ = cliType(pos[0])
-		if !typ.Valid() {
-			return fmt.Errorf("%w: %q", directory.ErrInvalidType, pos[0])
-		}
-	}
-
-	s, err := open(ctx, *dsnFlag)
-	if err != nil {
-		return err
-	}
-	defer s.Close()
-
-	entities, err := s.ListEntities(ctx, typ, *all)
-	if err != nil {
-		return err
-	}
-	if len(entities) == 0 {
-		fmt.Println("no entities")
-		return nil
-	}
-
-	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "TYPE\tNAME\tID\tSTATUS") //nolint:errcheck // the header is already written, so the status cannot be changed
-	for _, e := range entities {
-		status := "active"
-		if !e.Active() {
-			status = "disabled " + e.DisabledAt.Format(time.DateOnly)
-		}
-		fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", e.Type, e.Name, e.ID, status) //nolint:errcheck // the header is already written, so the status cannot be changed
-	}
-	return w.Flush()
-}
-
-func runShow(ctx context.Context, args []string) error {
-	fs := flag.NewFlagSet("show", flag.ContinueOnError)
-	dsnFlag := fs.String("dsn", "", "PostgreSQL connection string")
-	pos, err := parse(fs, args)
-	if err != nil {
-		return errUsage
-	}
-	if len(pos) != 2 {
-		return fmt.Errorf("%w: cardinal show <type> <name>", errUsage)
-	}
-
-	s, err := open(ctx, *dsnFlag)
-	if err != nil {
-		return err
-	}
-	defer s.Close()
-
-	e, err := s.LookupEntity(ctx, cliType(pos[0]), pos[1])
-	if err != nil {
-		return err
-	}
-
-	fmt.Printf("%s %s\n", e.Type, e.Name)
-	fmt.Printf("  id           %s\n", e.ID)
-	if e.DisplayName != "" {
-		fmt.Printf("  display      %s\n", e.DisplayName)
-	}
-	fmt.Printf("  created      %s\n", e.CreatedAt.Format(time.RFC3339))
-	if !e.Active() {
-		fmt.Printf("  disabled     %s\n", e.DisabledAt.Format(time.RFC3339))
-	}
-
-	memberships, err := s.ResolveMemberships(ctx, e.ID, time.Time{})
-	if err != nil {
-		return err
-	}
-	if len(memberships) > 0 {
-		fmt.Printf("  memberships\n")
-		for _, m := range memberships {
-			via := fmt.Sprintf("inherited, depth %d", m.Depth)
-			if m.Direct() {
-				via = "direct"
-			}
-			fmt.Printf("    %-24s %s\n", m.GroupName, via)
-		}
-	}
-	return nil
-}
-
 func runGrant(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("grant", flag.ContinueOnError)
 	forDur := fs.Duration("for", 0, "grant duration, e.g. 72h")
 	until := fs.String("until", "", "end instant, RFC3339")
 	reason := fs.String("reason", "", "why this access was granted")
 	dsnFlag := fs.String("dsn", "", "PostgreSQL connection string")
-	pos, err := parse(fs, args)
+	pos, err := cli.Parse(fs, args)
 	if err != nil {
 		return errUsage
 	}
@@ -241,7 +143,7 @@ func runGrant(ctx context.Context, args []string) error {
 		return validateErr
 	}
 
-	s, err := open(ctx, *dsnFlag)
+	s, err := direct.Open(ctx, *dsnFlag)
 	if err != nil {
 		return err
 	}
@@ -285,7 +187,7 @@ func runRevoke(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("revoke", flag.ContinueOnError)
 	at := fs.String("at", "", "revocation instant, RFC3339 (default: now)")
 	dsnFlag := fs.String("dsn", "", "PostgreSQL connection string")
-	pos, err := parse(fs, args)
+	pos, err := cli.Parse(fs, args)
 	if err != nil {
 		return errUsage
 	}
@@ -302,7 +204,7 @@ func runRevoke(ctx context.Context, args []string) error {
 		when = t
 	}
 
-	s, err := open(ctx, *dsnFlag)
+	s, err := direct.Open(ctx, *dsnFlag)
 	if err != nil {
 		return err
 	}
@@ -328,175 +230,97 @@ func runRevoke(ctx context.Context, args []string) error {
 	return nil
 }
 
-func runMembers(ctx context.Context, args []string) error {
-	fs := flag.NewFlagSet("members", flag.ContinueOnError)
-	at := fs.String("at", "", "instant to query, RFC3339 (default: now)")
+func runList(ctx context.Context, args []string) error {
+	fs := flag.NewFlagSet("list", flag.ContinueOnError)
+	all := fs.Bool("all", false, "include disabled entities")
 	dsnFlag := fs.String("dsn", "", "PostgreSQL connection string")
-	pos, err := parse(fs, args)
+	pos, err := cli.Parse(fs, args)
 	if err != nil {
 		return errUsage
 	}
-	if len(pos) != 1 {
-		return fmt.Errorf("%w: cardinal members <group>", errUsage)
+
+	var typ directory.Type
+	if len(pos) > 0 {
+		typ = cliType(pos[0])
+		if !typ.Valid() {
+			return fmt.Errorf("%w: %q", directory.ErrInvalidType, pos[0])
+		}
 	}
 
-	when, err := parseInstant(*at)
-	if err != nil {
-		return err
-	}
-
-	s, err := open(ctx, *dsnFlag)
+	s, err := direct.Open(ctx, *dsnFlag)
 	if err != nil {
 		return err
 	}
 	defer s.Close()
 
-	group, err := s.LookupEntity(ctx, directory.TypeGroup, pos[0])
+	entities, err := s.ListEntities(ctx, typ, *all)
 	if err != nil {
 		return err
 	}
-	grants, err := s.DirectMembers(ctx, group.ID, when)
-	if err != nil {
-		return err
-	}
-	if len(grants) == 0 {
-		fmt.Printf("%s has no members at %s\n", group.Name, instantLabel(*at, when))
+	if len(entities) == 0 {
+		fmt.Println("no entities")
 		return nil
 	}
 
-	fmt.Printf("members of %s at %s\n", group.Name, instantLabel(*at, when))
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "  MEMBER\tPERIOD\tREASON") //nolint:errcheck // the header is already written, so the status cannot be changed
-	for _, g := range grants {
-		member, err := s.GetEntity(ctx, g.MemberID)
-		if err != nil {
-			return err
+	fmt.Fprintln(w, "TYPE\tNAME\tID\tSTATUS") //nolint:errcheck // the header is already written, so the status cannot be changed
+	for _, e := range entities {
+		status := "active"
+		if !e.Active() {
+			status = "disabled " + e.DisabledAt.Format(time.DateOnly)
 		}
-		fmt.Fprintf(w, "  %s\t%s\t%s\n", member.Name, g.Period, g.Reason) //nolint:errcheck // the header is already written, so the status cannot be changed
+		fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", e.Type, e.Name, e.ID, status) //nolint:errcheck // the header is already written, so the status cannot be changed
 	}
 	return w.Flush()
 }
 
-func runMemberships(ctx context.Context, args []string) error {
-	fs := flag.NewFlagSet("memberships", flag.ContinueOnError)
-	at := fs.String("at", "", "instant to query, RFC3339 (default: now)")
+func runShow(ctx context.Context, args []string) error {
+	fs := flag.NewFlagSet("show", flag.ContinueOnError)
 	dsnFlag := fs.String("dsn", "", "PostgreSQL connection string")
-	pos, err := parse(fs, args)
-	if err != nil {
-		return errUsage
-	}
-	if len(pos) != 1 {
-		return fmt.Errorf("%w: cardinal memberships <name>", errUsage)
-	}
-
-	when, err := parseInstant(*at)
-	if err != nil {
-		return err
-	}
-
-	s, err := open(ctx, *dsnFlag)
-	if err != nil {
-		return err
-	}
-	defer s.Close()
-
-	member, err := resolveMember(ctx, s, pos[0])
-	if err != nil {
-		return err
-	}
-	memberships, err := s.ResolveMemberships(ctx, member.ID, when)
-	if err != nil {
-		return err
-	}
-	if len(memberships) == 0 {
-		fmt.Printf("%s belongs to no groups at %s\n", member.Name, instantLabel(*at, when))
-		return nil
-	}
-
-	fmt.Printf("%s belongs to, at %s\n", member.Name, instantLabel(*at, when))
-	for _, m := range memberships {
-		via := fmt.Sprintf("inherited, depth %d", m.Depth)
-		if m.Direct() {
-			via = "direct"
-		}
-		fmt.Printf("  %-24s %s\n", m.GroupName, via)
-	}
-	return nil
-}
-
-func runHistory(ctx context.Context, args []string) error {
-	fs := flag.NewFlagSet("history", flag.ContinueOnError)
-	dsnFlag := fs.String("dsn", "", "PostgreSQL connection string")
-	at := fs.String("at", "", "answer for one instant (RFC 3339) rather than listing every grant")
-	pos, err := parse(fs, args)
+	pos, err := cli.Parse(fs, args)
 	if err != nil {
 		return errUsage
 	}
 	if len(pos) != 2 {
-		return fmt.Errorf("%w: cardinal history <group> <member> [-at <timestamp>]", errUsage)
+		return fmt.Errorf("%w: cardinal show <type> <name>", errUsage)
 	}
 
-	// -at is the question an auditor actually asks — "was this person in this
-	// group on the third of March" — and until now the only way to answer it
-	// was to read the grant list and do the interval arithmetic by eye. The
-	// query behind it has existed since the first migration and had no caller.
-	var instant time.Time
-	if *at != "" {
-		instant, err = time.Parse(time.RFC3339, *at)
-		if err != nil {
-			return fmt.Errorf("-at %q is not an RFC 3339 timestamp, e.g. 2026-03-03T00:00:00Z", *at)
-		}
-	}
-
-	s, err := open(ctx, *dsnFlag)
+	s, err := direct.Open(ctx, *dsnFlag)
 	if err != nil {
 		return err
 	}
 	defer s.Close()
 
-	group, err := s.LookupEntity(ctx, directory.TypeGroup, pos[0])
-	if err != nil {
-		return err
-	}
-	member, err := resolveMember(ctx, s, pos[1])
+	e, err := s.LookupEntity(ctx, cliType(pos[0]), pos[1])
 	if err != nil {
 		return err
 	}
 
-	if !instant.IsZero() {
-		wasMember, memberErr := s.IsMemberAt(ctx, member.ID, group.ID, instant)
-		if memberErr != nil {
-			return memberErr
-		}
-		was := "was not"
-		if wasMember {
-			was = "was"
-		}
-		fmt.Printf("%s %s a member of %s at %s\n",
-			member.Name, was, group.Name, instant.Format(time.RFC3339))
-		return nil
+	fmt.Printf("%s %s\n", e.Type, e.Name)
+	fmt.Printf("  id           %s\n", e.ID)
+	if e.DisplayName != "" {
+		fmt.Printf("  display      %s\n", e.DisplayName)
+	}
+	fmt.Printf("  created      %s\n", e.CreatedAt.Format(time.RFC3339))
+	if !e.Active() {
+		fmt.Printf("  disabled     %s\n", e.DisabledAt.Format(time.RFC3339))
 	}
 
-	grants, err := s.GrantHistory(ctx, group.ID, member.ID)
+	memberships, err := s.ResolveMemberships(ctx, e.ID, time.Time{})
 	if err != nil {
 		return err
 	}
-	if len(grants) == 0 {
-		fmt.Printf("%s has never been a member of %s\n", member.Name, group.Name)
-		return nil
-	}
-
-	fmt.Printf("every grant of %s to %s\n", group.Name, member.Name)
-	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "  PERIOD\tACTIVE NOW\tREASON") //nolint:errcheck // the header is already written, so the status cannot be changed
-	for _, g := range grants {
-		active := "no"
-		if g.Period.Active() {
-			active = "yes"
+	if len(memberships) > 0 {
+		fmt.Printf("  memberships\n")
+		for _, m := range memberships {
+			via := fmt.Sprintf("inherited, depth %d", m.Depth)
+			if m.Direct() {
+				via = "direct"
+			}
+			fmt.Printf("    %-24s %s\n", m.GroupName, via)
 		}
-		fmt.Fprintf(w, "  %s\t%s\t%s\n", g.Period, active, g.Reason) //nolint:errcheck // the header is already written, so the status cannot be changed
 	}
-	return w.Flush()
+	return nil
 }
 
 // runRedact erases an entity's personal data for a GDPR Article 17 request.
@@ -504,7 +328,7 @@ func runRedact(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("redact", flag.ContinueOnError)
 	yes := fs.Bool("yes", false, "skip the confirmation prompt")
 	dsnFlag := fs.String("dsn", "", "PostgreSQL connection string")
-	pos, err := parse(fs, args)
+	pos, err := cli.Parse(fs, args)
 	if err != nil {
 		return errUsage
 	}
@@ -512,7 +336,7 @@ func runRedact(ctx context.Context, args []string) error {
 		return fmt.Errorf("%w: cardinal redact <type> <name>", errUsage)
 	}
 
-	s, err := open(ctx, *dsnFlag)
+	s, err := direct.Open(ctx, *dsnFlag)
 	if err != nil {
 		return err
 	}
@@ -558,7 +382,7 @@ func runAudit(ctx context.Context, args []string) error {
 
 	fs := flag.NewFlagSet("audit verify", flag.ContinueOnError)
 	dsnFlag := fs.String("dsn", "", "PostgreSQL connection string")
-	pos, err := parse(fs, args[1:])
+	pos, err := cli.Parse(fs, args[1:])
 	if err != nil {
 		return errUsage
 	}
@@ -568,7 +392,7 @@ func runAudit(ctx context.Context, args []string) error {
 		return fmt.Errorf("%w: audit verify takes no arguments, got %q", errUsage, pos[0])
 	}
 
-	s, err := open(ctx, *dsnFlag)
+	s, err := direct.Open(ctx, *dsnFlag)
 	if err != nil {
 		return err
 	}
@@ -613,24 +437,6 @@ func resolveMember(ctx context.Context, s *store.Store, name string) (*directory
 	return nil, fmt.Errorf("%w: no entity named %q", directory.ErrNotFound, name)
 }
 
-func parseInstant(s string) (time.Time, error) {
-	if s == "" {
-		return time.Time{}, nil // the zero time means "now" downstream
-	}
-	t, err := time.Parse(time.RFC3339, s)
-	if err != nil {
-		return time.Time{}, fmt.Errorf("parsing -at: %w", err)
-	}
-	return t, nil
-}
-
-func instantLabel(raw string, resolved time.Time) string {
-	if raw == "" {
-		return "now"
-	}
-	return resolved.Format(time.RFC3339)
-}
-
 // runEntityAvailability disables or re-enables an entity.
 //
 // One function for both because they are one decision made twice, and a pair of
@@ -644,7 +450,7 @@ func runEntityAvailability(ctx context.Context, typeWord string, args []string, 
 
 	fs := flag.NewFlagSet(typeWord+" "+verb, flag.ContinueOnError)
 	dsnFlag := fs.String("dsn", "", "PostgreSQL connection string")
-	pos, err := parse(fs, args)
+	pos, err := cli.Parse(fs, args)
 	if err != nil {
 		return errUsage
 	}
@@ -652,7 +458,7 @@ func runEntityAvailability(ctx context.Context, typeWord string, args []string, 
 		return fmt.Errorf("%w: cardinal %s %s <name>", errUsage, typeWord, verb)
 	}
 
-	s, err := open(ctx, *dsnFlag)
+	s, err := direct.Open(ctx, *dsnFlag)
 	if err != nil {
 		return err
 	}

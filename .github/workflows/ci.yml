@@ -135,6 +135,24 @@ jobs:
       - name: Build image
         run: docker build -t cardinal:ci .
 
+      # The published image must not carry the administrative CLI.
+      #
+      # It used to be the entrypoint, and the configuration it reads carries the
+      # connection string — so a shell in a running container was an
+      # unauthenticated administrator in one command. Asserted here rather than
+      # trusted to the Dockerfile, because a COPY added for a good reason is
+      # exactly how it would come back.
+      - name: The image carries the server and not the CLI
+        run: |
+          set -eu
+          docker run --rm --entrypoint /usr/local/bin/cardinal-server \
+            cardinal:ci version
+          if docker run --rm --entrypoint /usr/local/bin/cardinal \
+               cardinal:ci version 2>/dev/null; then
+            echo "::error::the published image contains the administrative CLI"
+            exit 1
+          fi
+
   lint:
     name: Lint
     needs: changes

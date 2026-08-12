@@ -34,6 +34,9 @@ services:
     build:
       context: ..
       dockerfile: Dockerfile
+      # The tools image: it carries the CLI, which the seed and the end-to-end
+      # fixtures need. What ships is the default target, which does not.
+      target: tools
     depends_on:
       postgres:
         condition: service_healthy
@@ -48,6 +51,9 @@ services:
     build:
       context: ..
       dockerfile: Dockerfile
+      # The tools image: it carries the CLI, which the seed and the end-to-end
+      # fixtures need. What ships is the default target, which does not.
+      target: tools
     depends_on:
       postgres:
         condition: service_healthy
