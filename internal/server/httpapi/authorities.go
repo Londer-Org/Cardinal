@@ -141,3 +141,38 @@ func (s *Server) x509Authority(ctx context.Context, w http.ResponseWriter) map[s
 		"bundle":  bundle.String(),
 	}
 }
+
+// sshTrustBundle is every trusted SSH authority key, in TrustedUserCAKeys form.
+//
+// Extracted so the routes that create and rotate a key can return it. Whoever
+// just made a key sign is the person who has to distribute the trust, and
+// making them fetch it from a second endpoint is how a fleet ends up rotated
+// but not trusted.
+func (s *Server) sshTrustBundle(ctx context.Context) (string, error) {
+	keys, err := s.store.TrustedSSHCAKeys(ctx)
+	if err != nil {
+		return "", err
+	}
+	var bundle strings.Builder
+	for _, k := range keys {
+		bundle.WriteString(k.PublicKey)
+	}
+	return bundle.String(), nil
+}
+
+// x509TrustBundle is every trusted X.509 authority certificate, PEM encoded.
+func (s *Server) x509TrustBundle(ctx context.Context) (string, error) {
+	keys, err := s.store.TrustedX509CAKeys(ctx)
+	if err != nil {
+		return "", err
+	}
+	var bundle strings.Builder
+	for _, k := range keys {
+		if err := pem.Encode(&bundle, &pem.Block{
+			Type: "CERTIFICATE", Bytes: k.Certificate.Raw,
+		}); err != nil {
+			return "", err
+		}
+	}
+	return bundle.String(), nil
+}

@@ -567,6 +567,16 @@ func (s *Server) Handler() http.Handler {
 	// worth the same tier as the rest.
 	mux.Handle("GET /api/authorities", admin(s.handleAuthorities))
 
+	// Creating one changes nothing until something activates it, which is why
+	// creation and rotation are separate verbs rather than one call with a
+	// flag. Both sit behind the broad tier and therefore behind the step-up
+	// forbid: rotating the authority that signs every host login is not
+	// something to do from a twelve-hour session.
+	mux.Handle("POST /api/authorities/ssh", admin(s.handleCreateSSHAuthority))
+	mux.Handle("POST /api/authorities/ssh/{key}/activate", admin(s.handleRotateSSHAuthority))
+	mux.Handle("POST /api/authorities/x509", admin(s.handleCreateX509Authority))
+	mux.Handle("POST /api/authorities/x509/{key}/activate", admin(s.handleRotateX509Authority))
+
 	mux.Handle("GET /api/audit/events", admin(s.handleListAuditEvents))
 	mux.Handle("POST /api/audit/verify", admin(s.handleVerifyAuditChain))
 
