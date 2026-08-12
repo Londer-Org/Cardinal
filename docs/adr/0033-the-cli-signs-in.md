@@ -1,6 +1,7 @@
 # ADR 0033: The CLI signs in rather than holding the database
 
-- **Status:** Proposed
+- **Status:** Accepted, and amended in place: the bootstrap list was incomplete,
+  and the note under *Two kinds of command* says how it was found.
 - **Date:** 2026-08-11
 - **Relates to:** [ADR 0008](0008-single-binary-go-and-embedded-react.md), whose
   API-first claim this makes true rather than aspirational.
@@ -218,7 +219,9 @@ is wrong.
    "administered by policy" becomes "administered by policy unless you use the
    other one", and the audit story goes with it.
 2. **Bootstrap commands stay on the list above.** Every addition is a command
-   that escapes policy. Adding one is an ADR, not a patch.
+   that escapes policy, and every one has to answer the rule: does it exist to
+   recover from Cardinal refusing you? Adding one is an ADR amendment, not a
+   patch — which is what this record's own correction was.
 3. **No operation gets two implementations.** One path per command, chosen by
    what the command is, never at runtime.
 4. **A device-bound session must not become a long-lived file.** Whatever the
@@ -278,7 +281,7 @@ in the first place.
 
 ## Status of this record
 
-Proposed, and nothing is built. The claim it rests on — that the loopback flow
+Accepted. The API endpoints it needs are built; the CLI is not. The claim it rests on — that the loopback flow
 fails when the browser is elsewhere — was measured against the example stack and
 is quoted above. The rest is design.
 
