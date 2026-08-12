@@ -741,6 +741,9 @@ erDiagram
         timestamp_with_time_zone created_at
         timestamp_with_time_zone expires_at
         timestamp_with_time_zone claimed_at
+        text user_code
+        timestamp_with_time_zone approved_at
+        inet requested_ip
     }
     host_aliases {
         uuid host_id PK
@@ -1008,10 +1011,13 @@ Groups an application is told about that it does not own. The escape hatch for a
 | `id` | `uuid` | no | `uuidv7()` |  |
 | `code_hash` | `text` | no |  |  |
 | `verifier_hash` | `text` | no |  |  |
-| `session_id` | `uuid` | no |  | → `sessions.id` |
+| `session_id` | `uuid` | yes |  | → `sessions.id` |
 | `created_at` | `timestamp with time zone` | no | `now()` |  |
 | `expires_at` | `timestamp with time zone` | no |  |  |
 | `claimed_at` | `timestamp with time zone` | yes |  |  |
+| `user_code` | `text` | yes |  | The short code a person reads and types. Not a credential: it identifies which pending request is being approved, and the device code the terminal kept is what exchanges for a session. |
+| `approved_at` | `timestamp with time zone` | yes |  |  |
+| `requested_ip` | `inet` | yes |  |  |
 
 ### `host_aliases`
 

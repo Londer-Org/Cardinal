@@ -53,17 +53,21 @@ func Client(ctx context.Context, base string) (*api.Client, error) {
 func signIn(ctx context.Context, base string) (*auth.Session, error) {
 	client := &http.Client{Timeout: 30 * time.Second}
 
-	if !auth.CanUseLoopback() {
-		return nil, errors.New(
-			"this terminal cannot complete a browser sign-in: there is no browser " +
-				"here, or this is an SSH session and the approval would be sent to " +
-				"the machine your browser runs on.\n" +
-				"  The flow that works from anywhere is not built yet (ADR 0033); " +
-				"until it is, run this where your browser is")
+	// Which flow runs is chosen and said out loud. Both end in the same
+	// session, so getting it wrong costs a fallback rather than a credential —
+	// which is why a heuristic is allowed here at all.
+	var (
+		session *auth.Session
+		err     error
+	)
+	if auth.CanUseLoopback() {
+		fmt.Fprintf(os.Stderr, "  signing in to %s\n", base)
+		session, err = auth.Loopback(ctx, client, base)
+	} else {
+		// No browser here, or an SSH session — where a loopback approval would
+		// be delivered to the machine the browser runs on and never arrive.
+		session, err = auth.Device(ctx, client, base)
 	}
-
-	fmt.Fprintf(os.Stderr, "  signing in to %s\n", base)
-	session, err := auth.Loopback(ctx, client, base)
 	if err != nil {
 		return nil, err
 	}

@@ -36,6 +36,15 @@ var allowedPayloadKeys = []string{
 	// suspected compromise needs to reconstruct.
 	"key_id",
 
+	// Which handoff signed a terminal in: "loopback" or "device".
+	//
+	// A closed set of two words chosen by Cardinal, never by a caller, so there
+	// is nothing here a person could be identified by. Worth recording because
+	// the two differ in exactly the property an incident asks about: a loopback
+	// approval was delivered to the machine that asked for it, and a device
+	// approval was typed by somebody who could have been talked into it.
+	"flow",
+
 	// An access token's own id. Opaque, and the row it points at is where the
 	// token's name lives — a name the owner wrote, so it stays out of the
 	// chain and in a table erasure can reach.
@@ -147,6 +156,10 @@ var enumPayloadValues = map[string][]string{
 	"auth_method": {
 		"passkey", "totp", "recovery_code", "break_glass", "bootstrap",
 	},
+
+	// Which handoff signed a terminal in. Two values, both chosen here rather
+	// than by any caller, which is what makes the key safe to record at all.
+	"flow": {"loopback", "device"},
 }
 
 func validatePayloadValue(key string, value any) error {

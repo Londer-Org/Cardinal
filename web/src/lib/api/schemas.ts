@@ -657,6 +657,20 @@ export const cliAuthorizationSchema = z.object({
 export type CLIAuthorization = z.infer<typeof cliAuthorizationSchema>
 
 /**
+ * A pending device sign-in, as the console is about to show it.
+ *
+ * `requestedFrom` is the address the server saw, never a name the terminal
+ * chose: "approve the code from web-01" is exactly the sentence somebody
+ * running this attack would like to be able to arrange.
+ */
+export const devicePendingSchema = z.object({
+  userCode: z.string(),
+  expiresAt: z.string(),
+  requestedFrom: z.string(),
+});
+export type DevicePending = z.infer<typeof devicePendingSchema>;
+
+/**
  * One configured value as the running server sees it.
  *
  * `ignored` is the reason this page exists: a setting parsed, validated and read
