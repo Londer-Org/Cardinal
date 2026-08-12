@@ -16,8 +16,59 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # What a change can actually affect, so the rest can skip what it cannot.
+  #
+  # Job-level `if` rather than `paths-ignore` on the workflow: a workflow that
+  # does not run reports nothing, and a check that never reports is one branch
+  # protection waits for forever. A job that is skipped still reports.
+  #
+  # The mapping lives in a script so it can be tested, and it is
+  # (internal/lint/ci_filter_test.go). It is the one piece of this pipeline
+  # whose failure mode is a green tick on something nobody checked.
+  changes:
+    name: What changed
+    runs-on: ubuntu-latest
+    outputs:
+      go: ${{ steps.scope.outputs.go }}
+      frontend: ${{ steps.scope.outputs.frontend }}
+      image: ${{ steps.scope.outputs.image }}
+      e2e: ${{ steps.scope.outputs.e2e }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          # The whole history, because the range below reaches back to a base
+          # commit a shallow clone would not have.
+          fetch-depth: 0
+
+      - name: Work out what changed
+        id: scope
+        run: |
+          set -eu
+          if [ "${{ github.event_name }}" = pull_request ]; then
+            range="${{ github.event.pull_request.base.sha }}...HEAD"
+          elif git rev-parse --verify -q HEAD^ >/dev/null; then
+            range="HEAD^ HEAD"
+          else
+            range=""
+          fi
+
+          # Fail towards running everything. Not knowing what changed is a
+          # reason to check all of it, never a reason to skip.
+          if [ -z "$range" ] || ! git diff --name-only $range > changed.txt; then
+            echo "::warning::could not work out what changed — running everything"
+            printf 'go=true\nfrontend=true\nimage=true\ne2e=true\n' >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "changed:"
+          sed 's/^/  /' changed.txt
+          echo
+          .github/scripts/changed-areas.sh < changed.txt | tee -a "$GITHUB_OUTPUT"
+
   build:
     name: Build and vet
+    needs: changes
+    if: needs.changes.outputs.go == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -43,6 +94,8 @@ jobs:
 
   frontend:
     name: Frontend
+    needs: changes
+    if: needs.changes.outputs.frontend == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -72,6 +125,8 @@ jobs:
 
   image:
     name: Container image builds
+    needs: changes
+    if: needs.changes.outputs.image == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -82,6 +137,8 @@ jobs:
 
   lint:
     name: Lint
+    needs: changes
+    if: needs.changes.outputs.go == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -100,6 +157,8 @@ jobs:
 
   vulncheck:
     name: Vulnerability scan
+    needs: changes
+    if: needs.changes.outputs.go == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -113,6 +172,8 @@ jobs:
 
   test:
     name: Tests (PostgreSQL ${{ matrix.postgres }})
+    needs: changes
+    if: needs.changes.outputs.go == 'true'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -147,6 +208,8 @@ jobs:
 
   e2e:
     name: End-to-end
+    needs: changes
+    if: needs.changes.outputs.e2e == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5

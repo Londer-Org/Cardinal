@@ -227,6 +227,28 @@ including end-to-end — before publishing anything, then builds the archives,
 the `.deb` and `.rpm`, and multi-architecture images to
 `londerbe/cardinal:0.5.0` and `:latest`.
 
+### What CI runs on a pull request
+
+Only what the change can affect. A first job works out which areas moved and the
+rest are gated on it, so a documentation-only change skips the tests, the image
+and the six minutes of end-to-end.
+
+Two of the mappings are not what you would guess, and both are in
+`.github/scripts/changed-areas.sh` with a test in `internal/lint`:
+
+- **`docs/schema.md` is a Go change.** It is generated from the live schema and
+  compared against it by a test, so editing it by hand is caught.
+- **A `.ts` or `.tsx` file is a Go change too.** The comment check in
+  `internal/lint` walks them, so a comment in the console can fail a Go test.
+
+The bias is one-directional: when in doubt, run it. A filter that wrongly runs a
+job costs four minutes, and one that wrongly skips a job reports success for
+something nobody checked. If the workflow cannot work out what changed, it says
+so and runs everything.
+
+Changing anything under `.github/` runs all of it, because a pipeline that
+cannot exercise its own change is not being tested.
+
 The number is a **constant compiled in**, not derived from the tag, and the
 release refuses to publish if the two disagree. That is not belt-and-braces:
 `.goreleaser.yaml` previously injected `-X main.version` into a symbol no package
