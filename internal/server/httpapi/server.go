@@ -477,6 +477,8 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("POST /api/directory/groups", people(s.handleCreateGroup))
 	mux.Handle("GET /api/directory/groups/{name}", people(s.handleGetGroup))
 	mux.Handle("POST /api/directory/groups/{name}/members", people(s.handleGrantMembership))
+	mux.Handle("GET /api/directory/groups/{name}/members/{member}/history",
+		people(s.handleGrantHistory))
 	mux.Handle("DELETE /api/directory/groups/{name}/members/{member}", people(s.handleRevokeMembership))
 
 	mux.Handle("GET /api/applications", apps(s.handleListApplications))
