@@ -3,6 +3,7 @@ package httpapi
 import (
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"net/http"
 	"strconv"
 	"time"
@@ -191,4 +192,128 @@ func (s *Server) handleActivatePolicyVersion(w http.ResponseWriter, r *http.Requ
 		"live":        version,
 		"policyCount": len(engine.PolicyIDs()),
 	})
+}
+
+// publishRequest is a policy document, as text.
+type publishRequest struct {
+	Document    string `json:"document"`
+	Description string `json:"description"`
+
+	// Activate publishes and makes live in one call. Separate by default,
+	// because a version nobody looked at governing every door is the thing
+	// publish and activate are two verbs to prevent.
+	Activate bool `json:"activate"`
+}
+
+type publishResponse struct {
+	Version     int64  `json:"version"`
+	Digest      string `json:"digest"`
+	PolicyCount int    `json:"policyCount"`
+	Live        bool   `json:"live"`
+
+	// Dangling names what the document mentions that the directory does not
+	// have. Not an error: a rule naming a group that is not there never
+	// matches, and under a default-deny engine that looks exactly like the rule
+	// working, so it is reported rather than left to be discovered.
+	Dangling []danglingReference `json:"dangling,omitempty"`
+}
+
+// danglingReference is one name a policy makes and the directory does not keep.
+type danglingReference struct {
+	// Policy is the rule's @id, so a caller can say where to look rather than
+	// only what is missing.
+	Policy     string `json:"policy"`
+	Kind       string `json:"kind"`
+	Identifier string `json:"identifier"`
+}
+
+// handlePublishPolicyVersion stores a new version, and optionally activates it.
+//
+// The comment beside the route registration used to say there was deliberately
+// no publish endpoint. That was about the console, and it still holds there:
+// a policy set typed into a browser is one nobody reviewed, and the argument
+// for policy-as-code is that it is diffable before it governs anything.
+//
+// This exists because the CLI is becoming a client of the API rather than of
+// the database (ADR 0033), and `cardinal policy publish` sends a file that came
+// from git — the pipeline shape that reasoning wants, not a text box.
+//
+// Worth being clear about what that costs: "no policy editor in the browser"
+// stops being structural and becomes a decision the console keeps making. It
+// keeps making it.
+func (s *Server) handlePublishPolicyVersion(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	session, _ := SessionFrom(ctx)
+
+	var req publishRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if req.Document == "" {
+		writeError(w, http.StatusBadRequest, "no policy document")
+		return
+	}
+
+	// Compiled before it is stored, exactly as the CLI does. A version that
+	// cannot load is one no server can ever activate, so storing it produces a
+	// row whose only purpose is to be a trap in the rollback list.
+	engine, err := policy.NewEngine([]byte(req.Document), 0)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "this policy does not compile: "+err.Error())
+		return
+	}
+
+	actorID := session.SubjectID
+	stored, err := s.store.PublishPolicy(ctx, req.Document, req.Description, &actorID)
+	if err != nil {
+		s.log.ErrorContext(ctx, "publishing a policy version failed", "error", err)
+		writeError(w, http.StatusInternalServerError, "could not publish that policy")
+		return
+	}
+
+	out := publishResponse{
+		Version:     stored.Version,
+		Digest:      hex.EncodeToString(stored.Digest),
+		PolicyCount: len(engine.PolicyIDs()),
+	}
+
+	// Best effort. A version is published either way, and failing the request
+	// because the warning could not be computed would make the report more
+	// dangerous than what it reports on.
+	if dangling, dErr := engine.Dangling(ctx, s.store.PolicyReferenceExists); dErr != nil {
+		s.log.WarnContext(ctx, "could not check what a published policy names", "error", dErr)
+	} else {
+		for _, ref := range dangling {
+			out.Dangling = append(out.Dangling, danglingReference{
+				Policy: ref.Policy, Kind: ref.Kind, Identifier: ref.Identifier,
+			})
+		}
+	}
+
+	s.log.WarnContext(ctx, "policy set published",
+		"version", stored.Version, "by", session.SubjectID, "activate", req.Activate)
+
+	if !req.Activate {
+		writeJSON(w, http.StatusCreated, out)
+		return
+	}
+
+	if err := s.store.ActivatePolicy(ctx, stored.Version, &actorID); err != nil {
+		// Published and not activated, which is a state the caller has to be
+		// told about precisely: retrying the whole request would publish a
+		// second identical version.
+		s.log.ErrorContext(ctx, "activating a freshly published policy failed", "error", err)
+		writeError(w, http.StatusInternalServerError, fmt.Sprintf(
+			"version %d was published but could not be activated; activate it directly",
+			stored.Version))
+		return
+	}
+
+	s.ReloadPolicy(ctx, engine)
+	out.Live = true
+	s.log.WarnContext(ctx, "policy set activated on publish",
+		"version", stored.Version, "by", session.SubjectID)
+
+	writeJSON(w, http.StatusCreated, out)
 }
