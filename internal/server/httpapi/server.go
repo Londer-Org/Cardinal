@@ -543,11 +543,13 @@ func (s *Server) Handler() http.Handler {
 	// answers, including who may activate the next one, so it is not something
 	// to hold by virtue of managing accounts.
 	//
-	// There is deliberately no publish endpoint. A policy set belongs in git,
-	// reviewed and tested before it is live; one typed into a browser is one
-	// nobody read. Rollback is the exception because it happens during an
-	// incident, and requiring a shell on the server first is the wrong shape
-	// for that moment.
+	// Publishing is here too, and the console does not offer it. A policy set
+	// belongs in git, reviewed and tested before it is live; one typed into a
+	// browser is one nobody read. The endpoint exists because the CLI is
+	// becoming a client of this API rather than of the database (ADR 0033),
+	// and it sends a file that came from git. Rollback is in the console
+	// because it happens during an incident, and requiring a shell on the
+	// server first is the wrong shape for that moment.
 	admin := func(h http.HandlerFunc) http.Handler {
 		return s.requireAuth(s.requirePermission(policy.ActionAdministerData, h))
 	}
@@ -605,6 +607,7 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("DELETE /api/policy/rules/{id}", admin(s.handleRemoveRule))
 
 	mux.Handle("GET /api/policy/versions", admin(s.handleListPolicyVersions))
+	mux.Handle("POST /api/policy/versions", admin(s.handlePublishPolicyVersion))
 	mux.Handle("GET /api/policy/versions/{version}", admin(s.handleGetPolicyVersion))
 	mux.Handle("POST /api/policy/versions/{version}/activate",
 		admin(s.handleActivatePolicyVersion))
