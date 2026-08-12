@@ -29,7 +29,7 @@ var ErrUsage = errors.New("usage")
 // window.
 func Client(ctx context.Context, base string) (*api.Client, error) {
 	reauth := func(ctx context.Context) (*auth.Session, error) {
-		return signIn(ctx, base)
+		return SignIn(ctx, base)
 	}
 
 	session, err := auth.Cached(base)
@@ -37,20 +37,28 @@ func Client(ctx context.Context, base string) (*api.Client, error) {
 		return api.New(base, session, reauth), nil
 	}
 
-	session, err = signIn(ctx, base)
+	session, err = SignIn(ctx, base)
 	if err != nil {
 		return nil, err
 	}
 	return api.New(base, session, reauth), nil
 }
 
-// signIn runs whichever flow can work here, and says which it chose.
+// SignIn obtains a session, from the cache when there is a usable one.
+//
+// Exported because `cardinal ssh` needs it without needing an API client: it
+// asks for a certificate and then hands it to ssh-agent, which no typed client
+// method describes. Before this it had its own copy of the whole flow, so it
+// never gained the device code — and the command most often run on a machine
+// somebody is SSH'd into was the one that needed it most.
+//
+// Runs whichever flow can work here, and says which it chose.
 //
 // Loopback needs a browser that can reach *this machine's* loopback, which is
 // not the same as a browser existing: over SSH the approval is redirected to
 // the machine the browser runs on, and the terminal waits for something that
 // cannot arrive. So the choice is made and announced rather than assumed.
-func signIn(ctx context.Context, base string) (*auth.Session, error) {
+func SignIn(ctx context.Context, base string) (*auth.Session, error) {
 	client := &http.Client{Timeout: 30 * time.Second}
 
 	// Which flow runs is chosen and said out loud. Both end in the same
