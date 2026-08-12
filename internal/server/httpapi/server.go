@@ -455,6 +455,9 @@ func (s *Server) Handler() http.Handler {
 	// POSIX identity. The uid is never in the request — it is allocated once
 	// and is permanent, because every file on every disk records it.
 	mux.Handle("PUT /api/directory/users/{login}/posix", people(s.handleAssignPOSIX))
+	mux.Handle("POST /api/directory/users/{login}/posix/adopt", people(s.handleAdoptPOSIX))
+	mux.Handle("PUT /api/directory/groups/{name}/posix", people(s.handleAssignGroupPOSIX))
+	mux.Handle("GET /api/posix", people(s.handleListPOSIX))
 
 	mux.Handle("GET /api/directory/groups", people(s.handleListGroups))
 	// The same tier as people and groups: a host is a directory entity, and
