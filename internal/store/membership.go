@@ -105,36 +105,6 @@ func (s *Store) Revoke(ctx context.Context, groupID, memberID uuid.UUID, at time
 	})
 }
 
-// DirectMembers lists entities directly in a group at the given instant.
-// Pass the zero time for "now".
-func (s *Store) DirectMembers(ctx context.Context, groupID uuid.UUID, at time.Time) ([]temporal.Grant, error) {
-	at = orNow(at)
-
-	rows, err := s.pool.Query(ctx, `
-		SELECT member_id, lower(valid_period),
-		       nullif(upper(valid_period), 'infinity'),
-		       granted_by, coalesce(reason, '')
-		  FROM group_members
-		 WHERE group_id = $1 AND valid_period @> $2::timestamptz
-		 ORDER BY lower(valid_period)`,
-		groupID, at)
-	if err != nil {
-		return nil, fmt.Errorf("store: listing members: %w", err)
-	}
-	defer rows.Close()
-
-	var out []temporal.Grant
-	for rows.Next() {
-		g := temporal.Grant{GroupID: groupID}
-		if err := rows.Scan(&g.MemberID, &g.Period.From, &g.Period.Until,
-			&g.GrantedBy, &g.Reason); err != nil {
-			return nil, fmt.Errorf("store: scanning member: %w", err)
-		}
-		out = append(out, g)
-	}
-	return out, rows.Err()
-}
-
 // ResolveMemberships returns every group an entity belongs to at the given
 // instant, transitively through nested groups. Pass the zero time for "now".
 //

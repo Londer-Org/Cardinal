@@ -14,6 +14,7 @@ import (
 	"os/signal"
 	"syscall"
 
+	"go.londer.be/cardinal/internal/cli/command"
 	"go.londer.be/cardinal/internal/version"
 
 	"github.com/BurntSushi/toml"
@@ -82,12 +83,24 @@ func run(ctx context.Context, args []string) error {
 		return runGrant(ctx, rest)
 	case "revoke":
 		return runRevoke(ctx, rest)
+
+	// Reading membership is the first group moved onto the API (ADR 0033).
+	// These sign in rather than opening the database, so policy governs what
+	// they may see.
+	//
+	// Granting and revoking stay on the database for now, and the reason is
+	// worth knowing before moving them: granting requires a device-bound
+	// credential used minutes ago, so no unattended process can ever do it.
+	// That is the intended answer to "our pipeline needs to grant memberships"
+	// and it applies equally to this repository's own seeding and fixtures,
+	// which grant from a container with no browser in it. Moving them needs an
+	// answer to that first.
 	case "members":
-		return runMembers(ctx, rest)
+		return client(ctx, rest, command.Members)
 	case "memberships":
-		return runMemberships(ctx, rest)
+		return client(ctx, rest, command.Memberships)
 	case "history":
-		return runHistory(ctx, rest)
+		return client(ctx, rest, command.History)
 	case "init":
 		return runInit(ctx, args[1:])
 	case "version":
