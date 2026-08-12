@@ -14,6 +14,23 @@ old image.
 
 ## Unreleased
 
+### Fixed
+
+- **The journal no longer invents who made a change from the command line.**
+  `cardinal grant engineers alice` recorded alice as her own granter, because
+  `granted_by` is `NOT NULL` and her identifier was to hand. No query could tell
+  that from a real self-grant, so an auditor asking who put alice in engineers
+  was told "alice" and had no way to know the answer was made up. Creating an
+  entity recorded no actor at all.
+
+  Both now name `direct-database`, a system service account created by migration
+  0035 that means exactly what it says: the change came through the command line
+  against the database, where there is no authenticated person. It has no
+  passkeys and cannot be signed into.
+
+  Attribution nobody can check is worse than none, because it reads as evidence.
+  Changes made through the API still record the person who made them.
+
 ### Changed
 
 - **The published image no longer contains the administrative CLI.** It used to

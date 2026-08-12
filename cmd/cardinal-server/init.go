@@ -106,11 +106,11 @@ func runInit(ctx context.Context, args []string) error {
 		if newEngineErr != nil {
 			return fmt.Errorf("%s does not parse: %w", source, newEngineErr)
 		}
-		version, publishErr := s.PublishPolicy(ctx, string(document), "first-run default", nil)
+		version, publishErr := s.PublishPolicy(ctx, string(document), "first-run default", direct.ActorID())
 		if publishErr != nil {
 			return fmt.Errorf("publishing policy: %w", publishErr)
 		}
-		if activateErr := s.ActivatePolicy(ctx, version.Version, nil); activateErr != nil {
+		if activateErr := s.ActivatePolicy(ctx, version.Version, direct.ActorID()); activateErr != nil {
 			return fmt.Errorf("activating policy: %w", activateErr)
 		}
 		fmt.Fprintf(os.Stderr, "  policy set        version %d, from %s\n",
@@ -128,7 +128,7 @@ func runInit(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
-	if createEntityErr := s.CreateEntity(ctx, entity, nil); createEntityErr != nil {
+	if createEntityErr := s.CreateEntity(ctx, entity, direct.ActorID()); createEntityErr != nil {
 		if errors.Is(createEntityErr, directory.ErrAlreadyExists) {
 			// The account may exist from a partial run. Continue rather than
 			// making the operator work out which half succeeded.

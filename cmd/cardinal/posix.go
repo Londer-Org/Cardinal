@@ -85,7 +85,7 @@ func runPOSIXAssign(ctx context.Context, args []string) error {
 		return fmt.Errorf("no such %s %q", pos[0], pos[1])
 	}
 
-	identity, err := s.AssignPOSIXIdentity(ctx, entity.ID, idRange, nil)
+	identity, err := s.AssignPOSIXIdentity(ctx, entity.ID, idRange, direct.ActorID())
 	if err != nil {
 		if errors.Is(err, store.ErrPOSIXRangeExhausted) {
 			fmt.Fprintln(os.Stderr,
@@ -221,7 +221,7 @@ func runPOSIXSet(ctx context.Context, args []string) error {
 		*shell = current.LoginShell
 	}
 
-	if err := s.SetPOSIXAttributes(ctx, entity.ID, *home, *shell, nil); err != nil {
+	if err := s.SetPOSIXAttributes(ctx, entity.ID, *home, *shell, direct.ActorID()); err != nil {
 		return err
 	}
 

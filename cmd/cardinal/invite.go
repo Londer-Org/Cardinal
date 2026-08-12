@@ -165,7 +165,7 @@ func runInviteRevoke(ctx context.Context, args []string) error {
 	if err != nil {
 		return fmt.Errorf("no such user %q", pos[0])
 	}
-	if err := s.RevokeInvitation(ctx, entity.ID, nil); err != nil {
+	if err := s.RevokeInvitation(ctx, entity.ID, direct.ActorID()); err != nil {
 		return err
 	}
 

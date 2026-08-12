@@ -277,7 +277,7 @@ func publishRuleChange(
 		return err
 	}
 
-	version, err := s.PublishPolicy(ctx, document, description, nil)
+	version, err := s.PublishPolicy(ctx, document, description, direct.ActorID())
 	if err != nil {
 		return err
 	}
@@ -296,7 +296,7 @@ func publishRuleChange(
 			version.Version)
 		return nil
 	}
-	if err := s.ActivatePolicy(ctx, version.Version, nil); err != nil {
+	if err := s.ActivatePolicy(ctx, version.Version, direct.ActorID()); err != nil {
 		return err
 	}
 	fmt.Printf("  live — every server picks this up within %s\n", policyReloadNotice)

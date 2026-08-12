@@ -96,7 +96,7 @@ Time-bounded membership. Revoke with DELETE ... FOR PORTION OF, which truncates 
 | `group_id` | `uuid` | no |  | → `entities.id` |
 | `member_id` | `uuid` | no |  | → `entities.id` |
 | `valid_period` | `tstzrange` | no |  |  |
-| `granted_by` | `uuid` | no |  | → `entities.id` |
+| `granted_by` | `uuid` | no |  | → `entities.id` — Who granted this. The synthetic service account direct-database (00000000-0000-7000-8000-0000000000d1) means the grant was made through the command line against the database, where there is no authenticated person to name — not that nobody knows, but that the path has no identity to record. |
 | `reason` | `text` | yes |  | Free-text justification. Personal data may appear here, so it is nulled on erasure. Never copy this into an event payload -- see ADR 0010. |
 
 ### `attribute_definitions`

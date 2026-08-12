@@ -87,7 +87,7 @@ func runTokenCreate(ctx context.Context, args []string) error {
 		return fmt.Errorf("no such user %q", pos[0])
 	}
 
-	token, err := s.CreateAccessToken(ctx, entity.ID, *name, *ttl, wanted, nil)
+	token, err := s.CreateAccessToken(ctx, entity.ID, *name, *ttl, wanted, direct.ActorID())
 	if err != nil {
 		return err
 	}
@@ -189,7 +189,7 @@ func runTokenRevoke(ctx context.Context, args []string) error {
 		return fmt.Errorf("no such user %q", pos[0])
 	}
 
-	if err := s.RevokeAccessToken(ctx, tokenID, entity.ID, nil); err != nil {
+	if err := s.RevokeAccessToken(ctx, tokenID, entity.ID, direct.ActorID()); err != nil {
 		if errors.Is(err, store.ErrNoSuchToken) {
 			return fmt.Errorf("no live token %s for %s", tokenID, entity.Name)
 		}

@@ -89,11 +89,11 @@ func runEntityCommand(ctx context.Context, typeWord string, args []string) error
 		e.OwnerID = &app.ID
 	}
 
-	// No actor: this path has no authenticated administrator to name. The CLI
-	// holds the database credential rather than a session, so there is nobody
-	// to attribute this to without inventing one. Recorded as unknown rather
-	// than as somebody, which is the honest of the two wrong answers.
-	if err := s.CreateEntity(ctx, e, nil); err != nil {
+	// The direct path, which is what acted. There is no authenticated person
+	// here — the CLI holds the database credential rather than a session — and
+	// the entity named says exactly that rather than leaving an audit view with
+	// nothing to render (migration 0035).
+	if err := s.CreateEntity(ctx, e, direct.ActorID()); err != nil {
 		return err
 	}
 
@@ -158,15 +158,14 @@ func runGrant(ctx context.Context, args []string) error {
 		return err
 	}
 
-	// GrantedBy is the member themselves, which is wrong: it reads as though
-	// they granted their own membership. Left visible rather than papered over
-	// — the column does not accept NULL, and choosing what the CLI should
-	// present as its identity is a decision, not a rename.
+	// Granted by the direct path, which is what happened. This used to record
+	// the member as their own granter — a self-grant no query could tell from a
+	// real one (migration 0035).
 	if err := s.Grant(ctx, temporal.Grant{
 		GroupID:   group.ID,
 		MemberID:  member.ID,
 		Period:    period,
-		GrantedBy: member.ID,
+		GrantedBy: direct.Actor,
 		Reason:    *reason,
 	}, nil); err != nil {
 		return err
@@ -219,7 +218,7 @@ func runRevoke(ctx context.Context, args []string) error {
 		return err
 	}
 
-	if err := s.Revoke(ctx, group.ID, member.ID, when, nil); err != nil {
+	if err := s.Revoke(ctx, group.ID, member.ID, when, direct.ActorID()); err != nil {
 		return err
 	}
 
@@ -365,7 +364,7 @@ func runRedact(ctx context.Context, args []string) error {
 		}
 	}
 
-	if err := s.RedactEntity(ctx, e.ID, nil); err != nil {
+	if err := s.RedactEntity(ctx, e.ID, direct.ActorID()); err != nil {
 		return err
 	}
 
@@ -470,7 +469,7 @@ func runEntityAvailability(ctx context.Context, typeWord string, args []string, 
 	}
 
 	if enable {
-		if enableEntityErr := s.EnableEntity(ctx, entity.ID, nil); enableEntityErr != nil {
+		if enableEntityErr := s.EnableEntity(ctx, entity.ID, direct.ActorID()); enableEntityErr != nil {
 			return enableEntityErr
 		}
 		fmt.Printf("enabled %s %s\n", typeWord, entity.Name)
@@ -480,13 +479,13 @@ func runEntityAvailability(ctx context.Context, typeWord string, args []string, 
 		return nil
 	}
 
-	if disableEntityErr := s.DisableEntity(ctx, entity.ID, nil); disableEntityErr != nil {
+	if disableEntityErr := s.DisableEntity(ctx, entity.ID, direct.ActorID()); disableEntityErr != nil {
 		return disableEntityErr
 	}
 
 	// Sessions and tokens, for the same reason the API does it: an account
 	// disabled while its holder stays signed in is not disabled.
-	sessions, err := s.RevokeAllSessions(ctx, entity.ID, nil)
+	sessions, err := s.RevokeAllSessions(ctx, entity.ID, direct.ActorID())
 	if err != nil {
 		return err
 	}

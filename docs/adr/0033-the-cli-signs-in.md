@@ -16,8 +16,13 @@ issues statements. Three consequences, none of them intended:
 - **No policy.** Cedar answers questions about a principal, and there is no
   authenticated principal on that path — only a database credential. A policy
   set that refuses somebody administration refuses them nothing here.
-- **No actor.** Entity creation records none; a grant records the member as its
-  own granter, so `cardinal grant engineers alice` says alice granted alice.
+- **No actor.** Entity creation recorded none; a grant recorded the member as
+  its own granter, so `cardinal grant engineers alice` said alice granted alice.
+  Fixed since this was written: both now name a system service account,
+  `direct-database`, which means the change came through the command line
+  against the database and there is no person to name. The path still escapes
+  policy — that is what it is for — but the journal no longer pretends
+  otherwise.
 - **Only from the database host.** Which is a machine nobody logs into except
   at setup, for debugging, or as root — a strange place for the primary
   administrative interface to live.
