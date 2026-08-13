@@ -7,44 +7,85 @@ import (
 
 // What the journal says about a change nobody authenticated for.
 //
-// `cardinal grant engineers alice` used to record alice as her own granter,
-// because granted_by is NOT NULL and her id was to hand. No query could tell
-// that from a real self-grant, so an auditor asking "who put alice in
-// engineers" was told "alice" and had no way to know the answer was invented.
+// A grant made against the database used to record its own member as the
+// granter, because granted_by is NOT NULL and their id was to hand. No query
+// could tell that from a real self-grant, so an auditor asking "who put alice
+// in engineers" was told "alice" and had no way to know the answer was
+// invented.
 //
 // Attribution nobody can check is worse than none: it reads as evidence.
 
-// TestADirectGrantIsNotRecordedAsASelfGrant.
+// TestNobodyIsRecordedAsHavingMadeThemselvesAnAdministrator.
 //
-// The regression this exists for, asserted against the row rather than the
-// output: the CLI could print anything.
-func TestADirectGrantIsNotRecordedAsASelfGrant(t *testing.T) {
+// Asserted across the whole directory rather than against one command, because
+// what matters is the state an auditor would read, and every path that can
+// write this row has to hold the property: first-run setup, the seeding this
+// stack does with the connection string, and the API.
+//
+// Grants through the API are the honest case and record the person who made
+// them. A row where the member is their own granter is either a real
+// self-grant — which the temporal model refuses here, since an administrator
+// already holds the group they would be granting — or an actor nobody chose,
+// invented because the column cannot be null.
+//
+// A separate test covers cardinal-server init, which is the remaining path
+// that grants with nobody signed in and cannot run against this stack:
+// cmd/cardinal-server/init_test.go.
+func TestNobodyIsRecordedAsHavingMadeThemselvesAnAdministrator(t *testing.T) {
+	rows := seedQuery(t, `
+		SELECT count(*)::text
+		  FROM group_members m
+		  JOIN entities grp ON grp.id = m.group_id
+		 WHERE grp.name = 'directory-admins'
+		   AND m.valid_period @> now()`)
+	if rows == "0" {
+		t.Fatal("no current administrators, so this asserted nothing")
+	}
+
+	selfGranted := seedQuery(t, `
+		SELECT coalesce(string_agg(e.name, ', '), '')
+		  FROM group_members m
+		  JOIN entities grp ON grp.id = m.group_id
+		  JOIN entities e   ON e.id   = m.member_id
+		 WHERE grp.name = 'directory-admins'
+		   AND m.member_id = m.granted_by
+		   AND m.valid_period @> now()`)
+
+	if selfGranted != "" {
+		t.Errorf("%s appear to have granted themselves directory-admins; "+
+			"whatever wrote those rows had no authenticated person and should "+
+			"have said so", selfGranted)
+	}
+}
+
+// TestAGrantThroughTheAPINamesThePersonWhoMadeIt.
+//
+// The other half: naming the direct path is only honest because the path that
+// does have somebody behind it names them. A handler that recorded
+// direct-database for an authenticated request would make every grant
+// unattributable while still passing the test above.
+func TestAGrantThroughTheAPINamesThePersonWhoMadeIt(t *testing.T) {
 	const group = "e2e-direct-actor"
 
 	tryCardinalCLI(t, "group", "create", group)
 	t.Cleanup(func() { revokeAfterwards(group, "e2e-user") })
-	// Deliberately the CLI, and deliberately not grantFixture: what this
-	// asserts is what the database path records, so a fixture that went
-	// through the API would be testing the other path entirely.
-	tryCardinalCLI(t, "grant", group, "e2e-user", "-reason", "direct actor e2e")
+	grantFixture(t, group, "e2e-user", "direct actor e2e")
 
 	granter := seedQuery(t, `
 		SELECT g.name
 		  FROM group_members m
-		  JOIN entities e ON e.id = m.member_id
+		  JOIN entities e   ON e.id   = m.member_id
 		  JOIN entities grp ON grp.id = m.group_id
-		  JOIN entities g ON g.id = m.granted_by
+		  JOIN entities g   ON g.id   = m.granted_by
 		 WHERE grp.name = '`+group+`' AND e.name = 'e2e-user'
 		   AND m.valid_period @> now()`)
 
-	if granter == "e2e-user" {
-		t.Fatal("the grant records the member as their own granter, which is what " +
-			"migration 0035 exists to stop — an auditor cannot tell this from a " +
-			"real self-grant")
+	if granter == "direct-database" {
+		t.Fatal("a grant made over the API with a session recorded the direct " +
+			"path; there was a person, and the journal should name them")
 	}
-	if granter != "direct-database" {
-		t.Errorf("granted_by is %q; the command line against the database should "+
-			"name direct-database", granter)
+	if granter != adminLogin {
+		t.Errorf("granted_by is %q; the fixture signs in as %s", granter, adminLogin)
 	}
 }
 

@@ -75,22 +75,20 @@ func run(ctx context.Context, args []string) error {
 		return runList(ctx, rest)
 	case "show":
 		return runShow(ctx, rest)
-	case "grant":
-		return runGrant(ctx, rest)
-	case "revoke":
-		return runRevoke(ctx, rest)
-
-	// Reading membership is the first group moved onto the API (ADR 0033).
-	// These sign in rather than opening the database, so policy governs what
-	// they may see.
+	// Membership goes through the API (ADR 0033): these sign in rather than
+	// opening the database, so policy governs both what they may see and what
+	// they may change, and the journal names the person rather than the path.
 	//
-	// Granting and revoking stay on the database for now, and the reason is
-	// worth knowing before moving them: granting requires a device-bound
-	// credential used minutes ago, so no unattended process can ever do it.
-	// That is the intended answer to "our pipeline needs to grant memberships"
-	// and it applies equally to this repository's own seeding and fixtures,
-	// which grant from a container with no browser in it. Moving them needs an
-	// answer to that first.
+	// Granting this way requires a device-bound credential used minutes ago,
+	// which no unattended process can produce. That is deliberate, and it is
+	// the reason this repository's own end-to-end fixtures mint a session
+	// against the database and call the API with it rather than granting
+	// through the CLI: the escape hatch for automation is the connection
+	// string, which is already the thing that owns the directory outright.
+	case "grant":
+		return client(ctx, rest, command.Grant)
+	case "revoke":
+		return client(ctx, rest, command.Revoke)
 	case "members":
 		return client(ctx, rest, command.Members)
 	case "memberships":
@@ -409,10 +407,10 @@ GLOBAL
                 which is right unless a multiplexer or a remote desktop makes
                 the guess wrong
 
-  Reading membership — members, memberships, history — and ssh sign in and ask
-  the API, so policy governs them and the journal names who ran them. The rest
-  still open the database, where it does not: passing -dsn to one that has
-  moved prints that rather than a connection.
+  Membership — grant, revoke, members, memberships, history — and ssh sign in
+  and ask the API, so policy governs them and the journal names who ran them.
+  The rest still open the database, where it does not: passing -dsn to one that
+  has moved prints that rather than a connection.
 
 Grants should normally be bounded. Whoever asks for access almost always knows
 when they will stop needing it, and a bounded grant cannot be forgotten.

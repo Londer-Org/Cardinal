@@ -11,10 +11,87 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"time"
 
 	"go.londer.be/cardinal/internal/cli"
+	"go.londer.be/cardinal/internal/cli/api"
 	"go.londer.be/cardinal/internal/cli/render"
 )
+
+// Grant adds somebody to a group.
+func Grant(ctx context.Context, server string, flow cli.AuthFlow, args []string) error {
+	fs := flag.NewFlagSet("grant", flag.ContinueOnError)
+	for_ := fs.Duration("for", 0, "how long the membership lasts, e.g. 72h")
+	until := fs.String("until", "", "when it ends, RFC3339")
+	reason := fs.String("reason", "", "why, preserved even after revocation")
+	pos, err := parse(fs, args)
+	if err != nil {
+		return cli.ErrUsage
+	}
+	if len(pos) != 2 {
+		return fmt.Errorf("%w: cardinal grant <group> <member>", cli.ErrUsage)
+	}
+
+	req := api.GrantRequest{Member: pos[1], Reason: *reason}
+	switch {
+	case *for_ > 0 && *until != "":
+		return fmt.Errorf("%w: -for and -until say the same thing two ways", cli.ErrUsage)
+	case *for_ > 0:
+		end := time.Now().Add(*for_)
+		req.Until = &end
+	case *until != "":
+		end, parseErr := time.Parse(time.RFC3339, *until)
+		if parseErr != nil {
+			return fmt.Errorf("-until must be an RFC3339 instant: %w", parseErr)
+		}
+		req.Until = &end
+	}
+
+	client, err := cli.Client(ctx, server, flow)
+	if err != nil {
+		return err
+	}
+	if err := client.Grant(ctx, pos[0], req); err != nil {
+		return err
+	}
+
+	fmt.Printf("granted %s membership of %s\n", pos[1], pos[0])
+	if req.Until == nil {
+		fmt.Printf("  note    consider -for or -until; unbounded grants are the ones that get forgotten\n")
+	} else {
+		fmt.Printf("  until   %s\n", req.Until.Format(time.RFC3339))
+	}
+	return nil
+}
+
+// Revoke ends a membership, keeping its history.
+func Revoke(ctx context.Context, server string, flow cli.AuthFlow, args []string) error {
+	fs := flag.NewFlagSet("revoke", flag.ContinueOnError)
+	at := fs.String("at", "", "revocation instant, RFC3339 (default: now)")
+	pos, err := parse(fs, args)
+	if err != nil {
+		return cli.ErrUsage
+	}
+	if len(pos) != 2 {
+		return fmt.Errorf("%w: cardinal revoke <group> <member>", cli.ErrUsage)
+	}
+	when, err := instant(*at)
+	if err != nil {
+		return err
+	}
+
+	client, err := cli.Client(ctx, server, flow)
+	if err != nil {
+		return err
+	}
+	if err := client.Revoke(ctx, pos[0], pos[1], when); err != nil {
+		return err
+	}
+
+	fmt.Printf("revoked %s from %s, at %s\n", pos[1], pos[0], describeInstant(when))
+	fmt.Printf("  the grant keeps its history, including the reason it was made for\n")
+	return nil
+}
 
 // Members lists who is in a group, now or at an instant.
 func Members(ctx context.Context, server string, flow cli.AuthFlow, args []string) error {

@@ -148,7 +148,7 @@ func tieredClient(t *testing.T, login, groupID string) (*http.Client, string) {
 	seedSQL(t, `DELETE FROM group_members
 	             WHERE member_id = (SELECT id FROM entities WHERE name = '`+login+`')`)
 	seedSQL(t, `INSERT INTO group_members (group_id, member_id, granted_by, valid_period)
-	            SELECT '`+groupID+`', e.id, e.id, tstzrange(now(), 'infinity')
+	            SELECT '`+groupID+`', e.id, '00000000-0000-7000-8000-0000000000d1', tstzrange(now(), 'infinity')
 	              FROM entities e WHERE e.name = '`+login+`'`)
 
 	seedSQL(t, `DELETE FROM sessions WHERE token_hash = sha256('`+token+`'::bytea)`)

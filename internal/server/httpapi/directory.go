@@ -671,9 +671,27 @@ func (s *Server) handleRevokeMembership(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	// An instant to revoke at, for the case the access actually ended earlier
+	// than somebody got around to saying so. Absent means now, which is what
+	// every caller before this got.
+	//
+	// It closes the period at that instant and never reopens one, so the two
+	// directions do different things: an earlier instant shortens a membership
+	// that has already happened, and a later one schedules its end, leaving the
+	// person a member until then. Measured against the running stack in
+	// test/e2e/directory_test.go rather than reasoned about.
+	at, err := atFrom(r)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if at.IsZero() {
+		at = time.Now()
+	}
+
 	// Revocation truncates the period rather than deleting the row, so who
 	// granted it and why outlive the access itself (ADR 0001).
-	if err := s.store.Revoke(ctx, group.ID, member.ID, time.Now(), &session.SubjectID); err != nil {
+	if err := s.store.Revoke(ctx, group.ID, member.ID, at, &session.SubjectID); err != nil {
 		if errors.Is(err, directory.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "no current membership to revoke")
 			return

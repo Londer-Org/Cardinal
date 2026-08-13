@@ -76,8 +76,9 @@ func runInit(ctx context.Context, args []string) error {
 		}
 		return fmt.Errorf(
 			"this directory already has administrators (%s).\n"+
-				"  init is for a fresh deployment. To add another, use:\n"+
-				"    cardinal user create <login> && cardinal grant directory-admins <login>",
+				"  init is for a fresh deployment. To add another, an existing\n"+
+				"  administrator invites them and grants the group, from the console\n"+
+				"  or with cardinal, both of which sign in and are governed by policy",
 			strings.Join(names, ", "))
 	}
 
@@ -142,14 +143,15 @@ func runInit(ctx context.Context, args []string) error {
 	}
 	fmt.Fprintf(os.Stderr, "  administrator     %s\n", entity.Name)
 
-	// Granted by nobody: the CLI reaches the database directly and has no
-	// authenticated operator behind it. Recording a subject who did not act
-	// would make the audit trail worse than leaving it null.
+	// Granted by the direct path, which is what actually happened: first-run
+	// setup reaches the database and there is no authenticated operator behind
+	// it. Naming the new administrator here would say they granted themselves
+	// the group, and nothing downstream could tell that from a real self-grant.
 	if grantErr := s.Grant(ctx, temporal.Grant{
 		GroupID:   admins.ID,
 		MemberID:  entity.ID,
 		Period:    temporal.FromTime(time.Now()),
-		GrantedBy: entity.ID,
+		GrantedBy: direct.Actor,
 		Reason:    "first-run setup",
 	}, nil); grantErr != nil {
 		return fmt.Errorf("granting directory-admins: %w", grantErr)

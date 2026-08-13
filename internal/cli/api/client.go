@@ -44,16 +44,31 @@ func New(base string, session *auth.Session, reauth func(context.Context) (*auth
 // Login is who the client is acting as.
 func (c *Client) Login() string { return c.session.Login }
 
-// get is the whole surface so far, because only read commands have moved.
+// get, post and send are the whole surface.
 //
-// It retries once after signing in again, and only for a 401: a session that
+// Each retries once after signing in again, and only for a 401: a session that
 // expired between two commands is ordinary, and making somebody re-run the
 // command to find that out would be a worse interface than the database one
-// this replaces. The write verbs arrive with the first command that needs one
-// rather than waiting here unused.
+// this replaces.
 func (c *Client) get(ctx context.Context, path string, out any) error {
 	return c.retrying(ctx, func(token string) error {
 		return auth.GetJSON(ctx, c.http, c.base+path, token, out)
+	})
+}
+
+func (c *Client) post(ctx context.Context, path string, body, out any) error {
+	return c.retrying(ctx, func(token string) error {
+		return auth.PostJSON(ctx, c.http, c.base+path, token, body, out)
+	})
+}
+
+func (c *Client) send(ctx context.Context, method, path string, out any) error {
+	return c.retrying(ctx, func(token string) error {
+		req, err := http.NewRequestWithContext(ctx, method, c.base+path, nil)
+		if err != nil {
+			return err
+		}
+		return auth.Do(c.http, req, token, out)
 	})
 }
 

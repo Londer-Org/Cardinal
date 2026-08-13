@@ -428,11 +428,11 @@ e2e-seed: ## Create the end-to-end user and activate the policy set
 	@# Empty on a fresh install on purpose: registering an application makes it
 	@# findable, and this is the deliberate act that makes it reachable.
 	@#
-	@# Through the API as an administrator, not through `cardinal grant`, which
-	@# is moving off the database (ADR 0033). Granting will then need a
-	@# device-bound credential used minutes ago, so no unattended process can
-	@# ever do it — the intended answer to "our pipeline needs to grant
-	@# memberships", and it applies to this file.
+	@# Through the API as an administrator, because that is the only way left:
+	@# `cardinal grant` signs in (ADR 0033), and it needs a device-bound
+	@# credential used minutes ago, which no unattended process can produce.
+	@# That is the intended answer to "our pipeline needs to grant memberships",
+	@# and it applies to this file.
 	@#
 	@# What makes it possible here is the database credential, and minting a
 	@# session with it is the honest form of that: the grant still goes through
@@ -614,13 +614,17 @@ restore-drill: build ## Back up, restore to a scratch DB, and verify the audit c
 e2e-grant: ## Grant over the API, as a seeded administrator (seeding only)
 	@$(MAKE) --no-print-directory e2e-wait
 	@# The administrator this acts as, and a session for it. Both by SQL,
-	@# because there is nobody to authenticate as until there is.
+	@# because there is nobody to authenticate as until there is — so the grant
+	@# names direct-database, which is what wrote it. Naming the seeder would
+	@# put "granted themselves admin" in the fixture data of a product whose
+	@# point is that the journal can be trusted.
 	@$(COMPOSE_E2E) exec -T postgres psql -U cardinal -d cardinal -q \
 		-c "INSERT INTO entities (type, name, display_name) \
 		    VALUES ('user', 'e2e-seeder', 'End-to-end seeding') \
 		    ON CONFLICT (type, name) DO NOTHING" \
 		-c "INSERT INTO group_members (group_id, member_id, granted_by, valid_period) \
-		    SELECT '00000000-0000-7000-8000-00000000ad11', e.id, e.id, \
+		    SELECT '00000000-0000-7000-8000-00000000ad11', e.id, \
+		           '00000000-0000-7000-8000-0000000000d1', \
 		           tstzrange(now(), 'infinity') \
 		      FROM entities e WHERE e.name = 'e2e-seeder' \
 		    ON CONFLICT DO NOTHING" >/dev/null
