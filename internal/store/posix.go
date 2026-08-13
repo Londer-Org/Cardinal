@@ -102,14 +102,6 @@ type POSIXIdentity struct {
 // Adoptable reports whether this number may still be changed.
 func (p POSIXIdentity) Adoptable() bool { return p.FirstServedAt == nil }
 
-// PrimaryGroup is the user-private group a user belongs to.
-//
-// Same name, same number. Not a directory group and not stored anywhere — the
-// convention is that every user has one, so there is nothing to record.
-func (p POSIXIdentity) PrimaryGroup() (name string, gid int) {
-	return p.Name, p.Number
-}
-
 // posixAllocationLock serialises number allocation.
 //
 // An arbitrary constant; only its uniqueness within this database matters. The

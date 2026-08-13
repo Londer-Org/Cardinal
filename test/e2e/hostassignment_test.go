@@ -82,23 +82,23 @@ func hostAccessFixture(t *testing.T) (restore func()) {
 	// helper it used tolerates a non-zero exit — which is what tolerating one
 	// buys and costs.
 	createFixture(t, "user", "e2e-sysadmin")
-	tryCardinalCLI(t, "posix", "assign", "user", "e2e-sysadmin")
+	posixFixture(t, "user", "e2e-sysadmin")
 	grantFixture(t, "e2e-linux-admins", "e2e-sysadmin")
 	grantFixture(t, "e2e-linux-users", "e2e-sysadmin")
 
 	// May log in and may not sudo. Without them, "everybody gets root" and
 	// "the right people get root" are the same passing test.
 	createFixture(t, "user", "e2e-nonroot")
-	tryCardinalCLI(t, "posix", "assign", "user", "e2e-nonroot")
+	posixFixture(t, "user", "e2e-nonroot")
 	grantFixture(t, "e2e-linux-users", "e2e-nonroot")
 
 	// Has a uid and no grant at all. The one that proves the host is not simply
 	// being handed every numbered account in the directory.
 	createFixture(t, "user", "e2e-outsider")
-	tryCardinalCLI(t, "posix", "assign", "user", "e2e-outsider")
+	posixFixture(t, "user", "e2e-outsider")
 
 	// A group with a gid, so memberships project to numbers.
-	tryCardinalCLI(t, "posix", "assign", "group", "e2e-linux-users")
+	posixFixture(t, "group", "e2e-linux-users")
 
 	usersGroup := seedQuery(t,
 		`SELECT id FROM entities WHERE type = 'group' AND name = 'e2e-linux-users'`)
@@ -424,7 +424,7 @@ func TestServingAnAssignmentClosesTheAdoptionWindow(t *testing.T) {
 	defer hostAccessFixture(t)()
 
 	createFixture(t, "user", "e2e-adoptme")
-	tryCardinalCLI(t, "posix", "assign", "user", "e2e-adoptme")
+	posixFixture(t, "user", "e2e-adoptme")
 	grantFixture(t, "e2e-linux-users", "e2e-adoptme")
 
 	// Established rather than assumed. The stack outlives a `go test` run, so on

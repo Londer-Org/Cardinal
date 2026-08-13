@@ -111,7 +111,7 @@ func run(ctx context.Context, args []string) error {
 	case "ssf":
 		return runSSF(ctx, rest)
 	case "posix":
-		return runPOSIX(ctx, rest)
+		return client(ctx, rest, command.POSIX)
 	case "x509":
 		return runX509(ctx, rest)
 	case "oidc":
@@ -416,11 +416,12 @@ GLOBAL
                 which is right unless a multiplexer or a remote desktop makes
                 the guess wrong
 
-  Membership, entities and applications — grant, revoke, members, memberships,
-  history, <type> create, disable, enable and every app subcommand — sign in
-  and ask the API, as do ssh and host join. Policy governs them and the journal
-  names who ran them. The rest still open the database, where it does not:
-  passing -dsn to one that has moved prints that rather than a connection.
+  Membership, entities, applications and POSIX identity — grant, revoke,
+  members, memberships, history, <type> create, disable, enable, and every app
+  and posix subcommand — sign in and ask the API, as do ssh and host join.
+  Policy governs them and the journal names who ran them. The rest still open
+  the database, where it does not: passing -dsn to one that has moved prints
+  that rather than a connection.
 
 Grants should normally be bounded. Whoever asks for access almost always knows
 when they will stop needing it, and a bounded grant cannot be forgotten.

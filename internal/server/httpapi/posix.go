@@ -37,6 +37,11 @@ type posixIdentityResponse struct {
 	// can still be adopted; set means it is on a filesystem somewhere and
 	// changing it moves files rather than editing a row.
 	FirstServedAt *time.Time `json:"firstServedAt"`
+
+	// Adoptable is FirstServedAt being null, said outright. Derivable, and
+	// stated anyway: a caller deciding whether to offer an adoption should not
+	// have to know that the absence of a timestamp is what permits it.
+	Adoptable bool `json:"adoptable"`
 }
 
 func describePOSIX(p *store.POSIXIdentity) posixIdentityResponse {
@@ -47,6 +52,7 @@ func describePOSIX(p *store.POSIXIdentity) posixIdentityResponse {
 		HomeDirectory: p.HomeDirectory,
 		LoginShell:    p.LoginShell,
 		FirstServedAt: p.FirstServedAt,
+		Adoptable:     p.Adoptable(),
 	}
 }
 
