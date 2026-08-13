@@ -458,9 +458,28 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("GET /api/directory/users", people(s.handleListUsers))
 	mux.Handle("POST /api/directory/users", people(s.handleCreateUser))
 	mux.Handle("GET /api/directory/users/{login}", people(s.handleGetUser))
-	mux.Handle("DELETE /api/directory/users/{login}", people(s.handleDisableUser))
-	mux.Handle("POST /api/directory/users/{login}/enable", people(s.handleEnableUser))
 	mux.Handle("PATCH /api/directory/users/{login}", people(s.handleUpdateUserProfile))
+
+	// Creating an entity, and taking one out of service, for every type the
+	// directory has. Users keep a create endpoint of their own because it can
+	// issue an enrolment link in the same request and no other type can be
+	// signed into at all; everything else is the same operation on a different
+	// type column, so it is the same handler.
+	//
+	// Registered from a list rather than by hand: a type that gained a route
+	// here and not there is how five of these came to exist for users only.
+	for _, kind := range []directory.Type{
+		directory.TypeGroup, directory.TypeServiceAccount,
+		directory.TypeApplication, directory.TypeDevice, directory.TypeRole,
+	} {
+		mux.Handle("POST /api/directory/"+kind.Plural(), people(s.handleCreateEntity(kind)))
+	}
+	for _, kind := range directory.AllTypes {
+		mux.Handle("DELETE /api/directory/"+kind.Plural()+"/{name}",
+			people(s.handleSetAvailability(kind, false)))
+		mux.Handle("POST /api/directory/"+kind.Plural()+"/{name}/enable",
+			people(s.handleSetAvailability(kind, true)))
+	}
 
 	// Renaming, which the data model exists to make ordinary: the identity is
 	// an immutable id and the name is an attribute, so this is one UPDATE and
@@ -498,7 +517,6 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("DELETE /api/directory/hosts/{name}/aliases/{alias}",
 		people(s.handleRemoveHostAlias))
 	mux.Handle("GET /api/directory/applications", people(s.handleListApplicationNames))
-	mux.Handle("POST /api/directory/groups", people(s.handleCreateGroup))
 	mux.Handle("GET /api/directory/groups/{name}", people(s.handleGetGroup))
 	mux.Handle("POST /api/directory/groups/{name}/members", people(s.handleGrantMembership))
 	mux.Handle("GET /api/directory/groups/{name}/members/{member}/history",

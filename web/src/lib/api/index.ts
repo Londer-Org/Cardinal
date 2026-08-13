@@ -45,6 +45,7 @@ import {
   credentialSchema,
   applicationRefsSchema,
   directoryGroupDetailSchema,
+  availabilitySchema,
   directoryGroupsSchema,
   accessTokensSchema,
   createdTokenSchema,
@@ -463,8 +464,8 @@ export const api = {
       }),
 
     disableUser: (login: string) =>
-      request(`/api/directory/users/${encodeURIComponent(login)}`, z.undefined(),
-        { method: 'DELETE' }),
+      request(`/api/directory/users/${encodeURIComponent(login)}`,
+        availabilitySchema, { method: 'DELETE' }),
 
     /**
      * Renames anything.
@@ -496,7 +497,7 @@ export const api = {
 
     enableUser: (login: string) =>
       request(`/api/directory/users/${encodeURIComponent(login)}/enable`,
-        z.object({ login: z.string(), note: z.string() }), { method: 'POST' }),
+        availabilitySchema, { method: 'POST' }),
 
     groups: (page: PageQuery, kind: GroupKind = '') =>
       request(

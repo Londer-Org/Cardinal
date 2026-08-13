@@ -10,8 +10,8 @@ import (
 
 // Setting a test up through the API rather than through the CLI.
 //
-// The commands these replace are moving off the database (ADR 0033), and
-// granting will then require a device-bound credential used minutes ago — so no
+// The commands these replace have moved off the database (ADR 0033), and
+// granting requires a device-bound credential used minutes ago — so no
 // unattended process can ever do it. That is the intended answer to "our
 // pipeline needs to grant memberships", and it applies to this suite: there is
 // no browser in the container these ran in.
@@ -115,4 +115,87 @@ func revokeAfterwards(group, member string) {
 		return
 	}
 	_ = resp.Body.Close() //nolint:errcheck // best effort cleanup
+}
+
+// createFixture makes an entity, tolerating one that is already there.
+//
+// Through the API for the same reason grantFixture is: creating an entity signs
+// in now, and there is no browser in the container these ran in.
+//
+// What this replaced ran the CLI through a helper that discards the exit
+// status, so a fixture which had stopped working looked exactly like one that
+// had not, and the failure surfaced somewhere else entirely. This one fails
+// where the mistake is.
+func createFixture(t *testing.T, typeWord, name string, display ...string) {
+	t.Helper()
+
+	c, csrf := adminClient(t)
+
+	// Users have an endpoint of their own, because they are the only type that
+	// can be signed into and so the only one with an invitation to issue.
+	path, body := "/api/directory/"+plural(typeWord), map[string]any{"name": name}
+	if typeWord == "user" {
+		path, body = "/api/directory/users", map[string]any{"login": name}
+	}
+	if len(display) > 0 {
+		body["displayName"] = display[0]
+	}
+
+	resp, err := c.Do(jsonRequest(t, http.MethodPost, path, csrf, body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer drain(resp)
+
+	// 409 is a name already taken, which is the desired end state: re-running a
+	// fixture is ordinary, and the suite reseeds.
+	switch resp.StatusCode {
+	case http.StatusCreated, http.StatusOK, http.StatusConflict:
+		return
+	default:
+		t.Fatalf("creating %s %s returned %d", typeWord, name, resp.StatusCode)
+	}
+}
+
+// availabilityFixture disables or enables an entity, tolerating one that is
+// already in the state asked for.
+func availabilityFixture(t *testing.T, typeWord, name string, enable bool) {
+	t.Helper()
+
+	c, csrf := adminClient(t)
+
+	method, path := http.MethodDelete, "/api/directory/"+plural(typeWord)+"/"+name
+	if enable {
+		method, path = http.MethodPost, path+"/enable"
+	}
+
+	resp, err := c.Do(jsonRequest(t, method, path, csrf, nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer drain(resp)
+
+	// 409 is "already in that state", which is the end state asked for. The
+	// suite reseeds and several tests disable the same account.
+	switch resp.StatusCode {
+	case http.StatusOK, http.StatusNoContent, http.StatusConflict:
+		return
+	default:
+		t.Fatalf("setting %s %s to enabled=%v returned %d",
+			typeWord, name, enable, resp.StatusCode)
+	}
+}
+
+// plural is the collection segment for a type word, mirroring Type.Plural.
+//
+// Spelled again here rather than imported, deliberately: this suite exercises
+// the API from outside, and a test that builds its URLs from the server's own
+// table would agree with the server about a path neither of them serves.
+func plural(typeWord string) string {
+	switch typeWord {
+	case "service-account":
+		return "service-accounts"
+	default:
+		return typeWord + "s"
+	}
 }

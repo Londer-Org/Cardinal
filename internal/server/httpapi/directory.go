@@ -251,9 +251,18 @@ func (s *Server) handleCreateUser(w http.ResponseWriter, r *http.Request) {
 
 	actorID := session.SubjectID
 	if err := s.store.CreateEntity(ctx, entity, &actorID); err != nil {
-		// Passed through rather than flattened: "already exists" and "name is
-		// not valid" send the operator to different places.
-		writeError(w, http.StatusBadRequest, err.Error())
+		// Distinguished rather than flattened, and by status as well as by
+		// message: a name already taken is a conflict a caller can retry around
+		// or ignore, and a name that is not valid is one it must not. Every
+		// other type answers this way, and a users endpoint that did not would
+		// make "already exists" indistinguishable from a rejected name to
+		// anything reading the code alone.
+		switch {
+		case errors.Is(err, directory.ErrAlreadyExists):
+			writeError(w, http.StatusConflict, err.Error())
+		default:
+			writeError(w, http.StatusBadRequest, err.Error())
+		}
 		return
 	}
 
@@ -277,89 +286,6 @@ func (s *Server) handleCreateUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusCreated, out)
-}
-
-// handleEnableUser undoes a disable.
-//
-// The other half of a control that had none. Sessions and access tokens are
-// deliberately not restored — disabling revoked them, and a token that was live
-// while an account was cut off is exactly what should not resume working.
-func (s *Server) handleEnableUser(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	session, _ := SessionFrom(ctx)
-
-	// LookupEntity does not filter on disabled — names resolve either way,
-	// which is what makes finding a disabled account possible at all.
-	entity, err := s.store.LookupEntity(ctx, directory.TypeUser, r.PathValue("login"))
-	if err != nil {
-		writeError(w, http.StatusNotFound, "no such user")
-		return
-	}
-
-	actorID := session.SubjectID
-	if err := s.store.EnableEntity(ctx, entity.ID, &actorID); err != nil {
-		if errors.Is(err, directory.ErrNotFound) {
-			writeError(w, http.StatusConflict, "that account is not disabled")
-			return
-		}
-		s.log.ErrorContext(ctx, "enabling user failed", "error", err)
-		writeError(w, http.StatusInternalServerError, "could not enable the account")
-		return
-	}
-
-	s.log.InfoContext(ctx, "user enabled", "login", entity.Name, "by", session.SubjectID)
-
-	writeJSON(w, http.StatusOK, map[string]any{
-		"login": entity.Name,
-		// Said explicitly, because somebody re-enabling an account expects it to
-		// be as it was and it is not quite.
-		"note": "sessions and access tokens were revoked when this account was " +
-			"disabled and have not been restored; they will need to sign in again",
-	})
-}
-
-func (s *Server) handleDisableUser(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	session, _ := SessionFrom(ctx)
-
-	entity, err := s.store.LookupEntity(ctx, directory.TypeUser, r.PathValue("login"))
-	if err != nil {
-		writeError(w, http.StatusNotFound, "no such user")
-		return
-	}
-
-	// Disabling yourself is a mistake nobody means to make, and the recovery
-	// costs a shell on the host. Cardinal has no reason to help.
-	if entity.ID == session.SubjectID {
-		writeError(w, http.StatusBadRequest,
-			"you cannot disable your own account — ask another administrator")
-		return
-	}
-
-	actorID := session.SubjectID
-	if err := s.store.DisableEntity(ctx, entity.ID, &actorID); err != nil {
-		s.log.ErrorContext(ctx, "disabling user failed", "error", err)
-		writeError(w, http.StatusInternalServerError, "could not disable the account")
-		return
-	}
-
-	// Sessions do not survive it. Disabling an account whose holder stays signed
-	// in until their cookie expires is not disabling it.
-	if _, err := s.store.RevokeAllSessions(ctx, entity.ID, &actorID); err != nil {
-		s.log.ErrorContext(ctx, "revoking sessions for disabled user failed", "error", err)
-	}
-
-	// Nor do access tokens, for the same reason and more urgently: a session
-	// ends on its own within hours, whereas a token in someone's pipeline is
-	// valid until its expiry, and nobody watching the account list would see it
-	// still working.
-	if _, err := s.store.RevokeAllAccessTokens(ctx, entity.ID); err != nil {
-		s.log.ErrorContext(ctx, "revoking access tokens for disabled user failed", "error", err)
-	}
-
-	s.log.InfoContext(ctx, "user disabled",
-		"login", entity.Name, "actor", session.SubjectID)
-	w.WriteHeader(http.StatusNoContent)
 }
 
 // ── Groups ──────────────────────────────────────────────────────────────────
@@ -480,60 +406,6 @@ func (s *Server) handleGetGroup(w http.ResponseWriter, r *http.Request) {
 		body["at"] = at.UTC().Format(time.RFC3339)
 	}
 	writeJSON(w, http.StatusOK, body)
-}
-
-func (s *Server) handleCreateGroup(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	session, _ := SessionFrom(ctx)
-
-	var req struct {
-		Name        string `json:"name"`
-		DisplayName string `json:"displayName"`
-
-		// Owner names the application this group exists for. Organisational
-		// only: Cardinal treats an owned group exactly like any other, and it
-		// still reaches the application through the groups claim.
-		Owner string `json:"owner"`
-	}
-	if err := decodeJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
-		return
-	}
-
-	entity, err := directory.NewEntity(directory.TypeGroup,
-		strings.TrimSpace(req.Name), strings.TrimSpace(req.DisplayName))
-	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
-		return
-	}
-
-	// A group created through the API is never a system group. Conferring
-	// authority within Cardinal is a decision the policy set makes, and it
-	// should not be reachable by choosing a name in a form.
-	ownerName := strings.TrimSpace(req.Owner)
-	if ownerName != "" {
-		app, err := s.store.LookupEntity(ctx, directory.TypeApplication, ownerName)
-		if err != nil {
-			writeError(w, http.StatusNotFound, "no such application")
-			return
-		}
-		entity.OwnerID = &app.ID
-	}
-
-	actorID := session.SubjectID
-	if err := s.store.CreateEntity(ctx, entity, &actorID); err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
-		return
-	}
-
-	s.log.InfoContext(ctx, "group created",
-		"name", entity.Name, "owner", ownerName, "actor", session.SubjectID)
-
-	// Reports the owner it was given. Echoing an empty one back would tell the
-	// caller their request was ignored when it was not.
-	writeJSON(w, http.StatusCreated, groupResponse{
-		Name: entity.Name, DisplayName: entity.DisplayName, Owner: ownerName,
-	})
 }
 
 type grantRequest struct {

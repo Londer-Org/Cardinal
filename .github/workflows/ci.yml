@@ -219,10 +219,29 @@ jobs:
       # TestMain exits 1 with "the stack is not running" rather than skipping —
       # deliberately, so somebody running it by hand is told what to do rather
       # than handed a dial timeout.
+      # Two commands rather than one, because two packages start a PostgreSQL
+      # of their own — internal/store for the temporal invariants, and
+      # cmd/cardinal-server for first-run setup, which needs a directory with
+      # no administrators in it and so cannot share one. Run together they were
+      # both up at once on a two-core runner under -race, and the store suite
+      # failed part-way through: every test after a certain point could not
+      # connect to a container that had been answering, while the other
+      # package's tests had just finished.
+      #
+      # Which container died, and why, was not established — a runner is gone
+      # by the time its log can be read. What is established is that one
+      # PostgreSQL at a time does not do this, that it reproduces on neither
+      # machine available here, and that splitting these two groups costs a
+      # few seconds where `-p 1` across every package costs about thirty.
       - name: Test
         env:
           CARDINAL_TEST_POSTGRES_IMAGE: postgres:${{ matrix.postgres }}
-        run: go test ./internal/... ./cmd/... ./migrations/... -race -count=1 -timeout 10m
+        run: go test ./internal/... ./migrations/... -race -count=1 -timeout 10m
+
+      - name: Test the server commands
+        env:
+          CARDINAL_TEST_POSTGRES_IMAGE: postgres:${{ matrix.postgres }}
+        run: go test ./cmd/... -race -count=1 -timeout 10m
 
   e2e:
     name: End-to-end

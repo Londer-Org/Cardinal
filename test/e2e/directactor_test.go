@@ -67,7 +67,7 @@ func TestNobodyIsRecordedAsHavingMadeThemselvesAnAdministrator(t *testing.T) {
 func TestAGrantThroughTheAPINamesThePersonWhoMadeIt(t *testing.T) {
 	const group = "e2e-direct-actor"
 
-	tryCardinalCLI(t, "group", "create", group)
+	createFixture(t, "group", group)
 	t.Cleanup(func() { revokeAfterwards(group, "e2e-user") })
 	grantFixture(t, group, "e2e-user", "direct actor e2e")
 
@@ -119,23 +119,36 @@ func TestTheDirectIdentityCannotBeMistakenForAPerson(t *testing.T) {
 
 // TestTheJournalNamesTheDirectPathForOtherChangesToo.
 //
-// Not only grants. Creating an entity used to record no actor at all, which is
-// less wrong and still leaves an audit view with nothing to render.
+// Not only grants. A change made against the database used to record no actor
+// at all, which is less wrong than inventing one and still leaves an audit view
+// with nothing to render.
+//
+// Asserted through invitations, which are still a direct command and are the
+// sharpest case left: an invitation is a credential, and "somebody with the
+// connection string issued one" is exactly what the journal has to be able to
+// say. Entity creation used to be the subject here and has moved onto the API,
+// where it records the person instead.
 func TestTheJournalNamesTheDirectPathForOtherChangesToo(t *testing.T) {
 	const name = "e2e-direct-actor-user"
 
-	tryCardinalCLI(t, "user", "create", name)
+	createFixture(t, "user", name)
+	tryCardinalCLI(t, "invite", name)
 
 	actor := seedQuery(t, `
 		SELECT coalesce(a.name, '(none)')
 		  FROM events ev
 		  JOIN entities e ON e.id = ev.entity_id
 		  LEFT JOIN entities a ON a.id = ev.actor_id
-		 WHERE e.name = '`+name+`'
+		 WHERE e.name = '`+name+`' AND ev.action = 'invitation.issued'
 		 ORDER BY ev.occurred_at DESC LIMIT 1`)
 
+	if actor == "(none)" {
+		t.Fatal("issuing an invitation from the command line recorded no actor; " +
+			"an audit view has nothing to render for the change that hands " +
+			"somebody a way in")
+	}
 	if actor != "direct-database" {
-		t.Errorf("creating a user from the command line recorded the actor as %q; "+
-			"the path is known exactly, only the person is not", actor)
+		t.Errorf("it recorded the actor as %q; the path is known exactly, only "+
+			"the person is not", actor)
 	}
 }

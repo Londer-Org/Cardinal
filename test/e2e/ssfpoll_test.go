@@ -57,9 +57,9 @@ func pollingReceiver(t *testing.T, application string) string {
 func queueEvents(t *testing.T, login string) {
 	t.Helper()
 
-	tryCardinalCLI(t, "user", "create", login, "-display", "Poll probe")
-	tryCardinalCLI(t, "user", "enable", login)
-	cardinalCLI(t, "user", "disable", login)
+	createFixture(t, "user", login, "Poll probe")
+	availabilityFixture(t, "user", login, true)
+	availabilityFixture(t, "user", login, false)
 }
 
 func poll(t *testing.T, token string, body any) (*http.Response, pollResponseBody) {

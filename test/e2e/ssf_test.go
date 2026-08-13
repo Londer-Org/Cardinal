@@ -80,7 +80,7 @@ func TestDisablingAnAccountReachesTheApplications(t *testing.T) {
 	login := "e2e-ssf-subject"
 
 	seedSQL(t, `UPDATE entities SET name = name || '-' || id WHERE name = '`+login+`'`)
-	cardinalCLI(t, "user", "create", login)
+	createFixture(t, "user", login)
 
 	subject := strings.TrimSpace(seedQuery(t,
 		`SELECT id FROM entities WHERE name = '`+login+`'`))
@@ -90,7 +90,7 @@ func TestDisablingAnAccountReachesTheApplications(t *testing.T) {
 
 	// Through the CLI, which is the path that reported nothing before events
 	// were read from the journal.
-	cardinalCLI(t, "user", "disable", login)
+	availabilityFixture(t, "user", login, false)
 
 	revoked := waitForEvent(t, subject,
 		"https://schemas.openid.net/secevent/caep/event-type/session-revoked")

@@ -35,7 +35,7 @@ func enrolledHost(t *testing.T, name string) *machine.Identity {
 
 	// Idempotent by tolerance rather than by check: the suite may have run
 	// before against the same stack, and a host that already exists is fine.
-	tryCardinalCLI(t, "host", "create", name)
+	createFixture(t, "host", name)
 
 	out := cardinalCLI(t, "host", "enroll", name, "-token")
 	token := strings.TrimSpace(out)
@@ -357,7 +357,7 @@ func TestReEnrollingInvalidatesTheOldKey(t *testing.T) {
 
 // TestSpentTokenIsRefused, at the HTTP layer rather than the store's.
 func TestSpentTokenIsRefused(t *testing.T) {
-	tryCardinalCLI(t, "host", "create", "e2e-host-07")
+	createFixture(t, "host", "e2e-host-07")
 	token := strings.TrimSpace(cardinalCLI(t, "host", "enroll", "e2e-host-07", "-token"))
 
 	redeem := func() int {

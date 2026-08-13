@@ -3,6 +3,7 @@ package e2e
 import (
 	"encoding/json"
 	"net/http"
+	"net/url"
 	"strings"
 	"testing"
 )
@@ -38,8 +39,8 @@ func TestRenamingMovesNothingElse(t *testing.T) {
 	             WHERE member_id IN (SELECT id FROM entities
 	                                  WHERE type = 'user' AND name IN ('`+before+`', '`+after+`'))`)
 	seedSQL(t, `DELETE FROM entities WHERE type = 'user' AND name IN ('`+before+`', '`+after+`')`)
-	tryCardinalCLI(t, "user", "create", before)
-	tryCardinalCLI(t, "group", "create", "e2e-rename-group")
+	createFixture(t, "user", before)
+	createFixture(t, "group", "e2e-rename-group")
 	grantFixture(t, "e2e-rename-group", before)
 
 	id := seedQuery(t, `SELECT id FROM entities WHERE type = 'user' AND name = '`+before+`'`)
@@ -81,7 +82,7 @@ func TestRenamingMovesNothingElse(t *testing.T) {
 
 	// The old name is free again, which is what makes a rename an edit rather
 	// than a reservation.
-	tryCardinalCLI(t, "user", "create", before)
+	createFixture(t, "user", before)
 	if seedQuery(t, `SELECT count(*) FROM entities WHERE type = 'user' AND name = '`+before+`'`) != "1" {
 		t.Error("the old name could not be reused after the rename")
 	}
@@ -89,8 +90,8 @@ func TestRenamingMovesNothingElse(t *testing.T) {
 
 // TestRenamingRefusesACollisionAndSystemGroups.
 func TestRenamingRefusesACollisionAndSystemGroups(t *testing.T) {
-	tryCardinalCLI(t, "user", "create", "e2e-rename-a")
-	tryCardinalCLI(t, "user", "create", "e2e-rename-b")
+	createFixture(t, "user", "e2e-rename-a")
+	createFixture(t, "user", "e2e-rename-b")
 
 	admin, csrf := adminClient(t)
 
@@ -209,7 +210,7 @@ func clientAuthError(t *testing.T, clientID, secret string) string {
 // a machine as them however the policy is written.
 func TestAssigningAPOSIXIdentityFromTheConsole(t *testing.T) {
 	const login = "e2e-posix-console"
-	tryCardinalCLI(t, "user", "create", login)
+	createFixture(t, "user", login)
 
 	admin, csrf := adminClient(t)
 
@@ -255,7 +256,7 @@ func TestAssigningAPOSIXIdentityFromTheConsole(t *testing.T) {
 // which has its own endpoint and its own consequences.
 func TestAnAdministratorCanCorrectSomebodyElsesDetails(t *testing.T) {
 	const login = "e2e-admin-edits"
-	tryCardinalCLI(t, "user", "create", login)
+	createFixture(t, "user", login)
 
 	admin, csrf := adminClient(t)
 
@@ -352,4 +353,54 @@ func userDetail(t *testing.T, c *http.Client, login string) userDetailBody {
 		t.Fatal(err)
 	}
 	return out
+}
+
+// TestDisablingEndsTheSessionsItSaysItEnds.
+//
+// The claim disabling makes: an account cut off while its holder stays signed
+// in is not cut off. Every other test of disabling reads the journal or the
+// events that leave Cardinal, and none of them touches the session — so the
+// revocation could be removed entirely and the suite stayed green. Found by
+// removing it.
+//
+// Asserted against a request, not against a row. A row saying the period closed
+// is the mechanism; what matters is that the credential stops working.
+func TestDisablingEndsTheSessionsItSaysItEnds(t *testing.T) {
+	const login = "e2e-disable-cuts-off"
+	const token = "e2e-disable-cuts-off-session-token-0123456789ab"
+
+	createFixture(t, "user", login)
+	availabilityFixture(t, "user", login, true)
+
+	seedSQL(t, `DELETE FROM sessions WHERE token_hash = sha256('`+token+`'::bytea)`)
+	seedSQL(t, `INSERT INTO sessions
+	              (subject_id, token_hash, valid_period, auth_method, auth_at,
+	               device_bound, absolute_expiry)
+	            SELECT e.id, sha256('`+token+`'::bytea),
+	                   tstzrange(now(), now() + interval '1 hour'), 'passkey', now(),
+	                   true, now() + interval '7 days'
+	              FROM entities e WHERE e.name = '`+login+`'`)
+
+	c := client(t)
+	c.Jar.SetCookies(&url.URL{Scheme: "http", Host: hostCardinal},
+		[]*http.Cookie{{Name: "cardinal_session", Value: token, Path: "/"}})
+
+	// It works first, or the second half proves nothing: a session that never
+	// authenticated would fail after the disable for the wrong reason.
+	before := request(t, c, http.MethodGet, hostCardinal, "/api/auth/me", "application/json")
+	drain(before)
+	if before.StatusCode != http.StatusOK {
+		t.Fatalf("the seeded session did not authenticate to begin with: %d",
+			before.StatusCode)
+	}
+
+	availabilityFixture(t, "user", login, false)
+
+	after := request(t, c, http.MethodGet, hostCardinal, "/api/auth/me", "application/json")
+	drain(after)
+	if after.StatusCode == http.StatusOK {
+		t.Error("the session still authenticates after the account was disabled, " +
+			"so whoever held it is signed in to an account that no longer exists " +
+			"as far as anybody looking at the directory is concerned")
+	}
 }

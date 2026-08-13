@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"go.londer.be/cardinal/internal/cli"
+	"go.londer.be/cardinal/internal/cli/command"
 	"go.londer.be/cardinal/internal/cli/direct"
 	"go.londer.be/cardinal/internal/directory"
 	"go.londer.be/cardinal/internal/host/machine"
@@ -42,7 +43,9 @@ func runHost(ctx context.Context, args []string) error {
 	case "acme-credentials":
 		return runACMECredentials(ctx, args[1:])
 	default:
-		return runEntityCommand(ctx, "host", args)
+		// create, disable and enable, which a host has like any other entity
+		// and which go through the API like any other entity's.
+		return client(ctx, args, command.Entity("host"))
 	}
 }
 

@@ -66,7 +66,7 @@ func auditEvents(t *testing.T, c *http.Client, query string) auditPage {
 // UUIDs — and the viewer's job is to resolve them at read time.
 func TestTheJournalResolvesIdentifiersToNames(t *testing.T) {
 	const login = "e2e-audit-subject"
-	tryCardinalCLI(t, "user", "create", login)
+	createFixture(t, "user", login)
 
 	admin, _ := adminClient(t)
 	page := auditEvents(t, admin, "?limit=200")
@@ -142,7 +142,7 @@ func TestPagingByCursorNeitherSkipsNorRepeats(t *testing.T) {
 
 	// Append something between the two reads. With an offset this is exactly
 	// what shifts the window and duplicates a row.
-	tryCardinalCLI(t, "user", "create", "e2e-audit-interleaved")
+	createFixture(t, "user", "e2e-audit-interleaved")
 
 	second := auditEvents(t, admin, "?limit=5&before="+strconv.FormatInt(first.Before, 10))
 	if len(second.Events) == 0 {
@@ -198,7 +198,7 @@ func TestVerifyingTheChainFromTheConsole(t *testing.T) {
 // though somebody had chosen it.
 func TestAnErasedAccountIsShownAsErased(t *testing.T) {
 	const login = "e2e-audit-erased"
-	tryCardinalCLI(t, "user", "create", login)
+	createFixture(t, "user", login)
 
 	subject := seedQuery(t,
 		`SELECT id FROM entities WHERE type = 'user' AND name = '`+login+`'`)

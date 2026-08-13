@@ -64,7 +64,7 @@ func find(t *testing.T, hosts []inventoryHost, name string) inventoryHost {
 // one that was working — and whether it was working *recently* is the whole
 // question.
 func TestInventoryDistinguishesNeverEnrolledFromSilent(t *testing.T) {
-	tryCardinalCLI(t, "host", "create", "e2e-inv-fresh")
+	createFixture(t, "host", "e2e-inv-fresh")
 
 	enrolled := enrolledHost(t, "e2e-inv-seen")
 	// enrolledHost signs a request as part of its own check, so this one has
@@ -96,7 +96,7 @@ func TestInventoryDistinguishesNeverEnrolledFromSilent(t *testing.T) {
 // exactly what an operator comes to this page looking for, and hiding it would
 // answer "no such host" to the question "did we disable that one?".
 func TestInventoryIncludesDisabledHosts(t *testing.T) {
-	tryCardinalCLI(t, "host", "create", "e2e-inv-off")
+	createFixture(t, "host", "e2e-inv-off")
 	seedSQL(t, `UPDATE entities SET disabled_at = now() WHERE name = 'e2e-inv-off'`)
 
 	off := find(t, inventory(t, "e2e-inv-off"), "e2e-inv-off")
@@ -112,8 +112,8 @@ func TestInventoryIncludesDisabledHosts(t *testing.T) {
 // one no policy rule can reach — it resolves nobody and grants nobody, which
 // looks exactly like the agent being broken.
 func TestInventoryCountsAliasesAndGroups(t *testing.T) {
-	tryCardinalCLI(t, "host", "create", "e2e-inv-named")
-	tryCardinalCLI(t, "group", "create", "e2e-inv-fleet")
+	createFixture(t, "host", "e2e-inv-named")
+	createFixture(t, "group", "e2e-inv-fleet")
 	tryCardinalCLI(t, "host", "alias", "add", "e2e-inv-named", "e2e-inv-alias-one")
 	tryCardinalCLI(t, "host", "alias", "add", "e2e-inv-named", "e2e-inv-alias-two")
 	grantFixture(t, "e2e-inv-fleet", "e2e-inv-named")
@@ -133,7 +133,7 @@ func TestInventoryCountsAliasesAndGroups(t *testing.T) {
 // to it, and they do not necessarily know its directory name — that is the
 // whole reason aliases exist.
 func TestInventoryIsSearchableByAlias(t *testing.T) {
-	tryCardinalCLI(t, "host", "create", "e2e-inv-searchme")
+	createFixture(t, "host", "e2e-inv-searchme")
 	tryCardinalCLI(t, "host", "alias", "add", "e2e-inv-searchme", "e2e-inv-findable.example")
 
 	hosts := inventory(t, "e2e-inv-findable")

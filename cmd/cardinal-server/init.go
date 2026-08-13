@@ -153,12 +153,12 @@ func runInit(ctx context.Context, args []string) error {
 		Period:    temporal.FromTime(time.Now()),
 		GrantedBy: direct.Actor,
 		Reason:    "first-run setup",
-	}, nil); grantErr != nil {
+	}, direct.ActorID()); grantErr != nil {
 		return fmt.Errorf("granting directory-admins: %w", grantErr)
 	}
 	fmt.Fprintln(os.Stderr, "  group             directory-admins")
 
-	issued, err := s.IssueInvitation(ctx, entity.ID, nil, store.InvitationTTL)
+	issued, err := s.IssueInvitation(ctx, entity.ID, direct.ActorID(), store.InvitationTTL)
 	if err != nil {
 		return err
 	}

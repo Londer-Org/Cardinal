@@ -70,7 +70,7 @@ func run(ctx context.Context, args []string) error {
 	case "host":
 		return runHost(ctx, rest)
 	case "user", "group", "service-account", "application", "device", "role":
-		return runEntityCommand(ctx, cmd, rest)
+		return client(ctx, rest, command.Entity(cmd))
 	case "list":
 		return runList(ctx, rest)
 	case "show":
@@ -149,7 +149,11 @@ RUNNING IT
 
 ENTITIES
   user create <name> [-display <text>]     Create a user
+      -invite                                and print an enrolment link now,
+                                             rather than as a second command
   group create <name> [-display <text>]    Create a group
+      -app <application>                     the application it exists for, so
+                                             that application is told about it
   host create <name> [-display <text>]     Create a host
   application create <name>                Create an application, for one behind
                                            a proxy: no OIDC registration needed
@@ -407,10 +411,11 @@ GLOBAL
                 which is right unless a multiplexer or a remote desktop makes
                 the guess wrong
 
-  Membership — grant, revoke, members, memberships, history — and ssh sign in
-  and ask the API, so policy governs them and the journal names who ran them.
-  The rest still open the database, where it does not: passing -dsn to one that
-  has moved prints that rather than a connection.
+  Membership, creating an entity and taking one out of service — grant, revoke,
+  members, memberships, history, <type> create, disable and enable — sign in
+  and ask the API, as do ssh and host join. Policy governs them and the journal
+  names who ran them. The rest still open the database, where it does not:
+  passing -dsn to one that has moved prints that rather than a connection.
 
 Grants should normally be bounded. Whoever asks for access almost always knows
 when they will stop needing it, and a bounded grant cannot be forgotten.

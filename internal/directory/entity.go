@@ -46,6 +46,24 @@ var AllTypes = []Type{
 	TypeApplication, TypeDevice, TypeRole,
 }
 
+// plurals is the URL segment each type appears under, and the word the CLI
+// prints. Spelled out rather than derived: "service_account" would pluralise to
+// something with an underscore in a path, and a rule with one exception in it
+// is harder to check than a list.
+var plurals = map[Type]string{
+	TypeUser:           "users",
+	TypeGroup:          "groups",
+	TypeHost:           "hosts",
+	TypeServiceAccount: "service-accounts",
+	TypeApplication:    "applications",
+	TypeDevice:         "devices",
+	TypeRole:           "roles",
+}
+
+// Plural returns the collection name for a type. Empty for a type that is not
+// one of AllTypes, which the caller should have rejected already.
+func (t Type) Plural() string { return plurals[t] }
+
 // Valid reports whether t is one of the types this directory knows.
 func (t Type) Valid() bool { return slices.Contains(AllTypes, t) }
 
