@@ -68,11 +68,12 @@ func runInviteIssue(ctx context.Context, args []string) error {
 		return err
 	}
 
-	// Issued by nobody: the CLI reaches the database directly and has no
-	// authenticated operator behind it. That is honest rather than convenient —
-	// recording a subject who did not act would make the audit trail worse than
-	// leaving it null.
-	issued, err := s.IssueInvitation(ctx, entity.ID, nil, *ttl)
+	// Issued by the direct path, which is what acted: this command reaches the
+	// database and has no authenticated operator behind it. Recording nothing
+	// was the earlier answer and is worse than it sounds — an invitation is a
+	// way in, and "somebody issued one" with no way to say which path is the
+	// change an audit view has nothing at all to render for.
+	issued, err := s.IssueInvitation(ctx, entity.ID, direct.ActorID(), *ttl)
 	if err != nil {
 		return err
 	}

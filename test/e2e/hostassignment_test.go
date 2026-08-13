@@ -70,9 +70,9 @@ func (a assignmentBody) names() []string {
 func hostAccessFixture(t *testing.T) (restore func()) {
 	t.Helper()
 
-	tryCardinalCLI(t, "group", "create", "e2e-linux-users")
-	tryCardinalCLI(t, "group", "create", "e2e-linux-hosts")
-	tryCardinalCLI(t, "group", "create", "e2e-linux-admins")
+	createFixture(t, "group", "e2e-linux-users")
+	createFixture(t, "group", "e2e-linux-hosts")
+	createFixture(t, "group", "e2e-linux-admins")
 
 	// Permitted, and given a uid.
 	//
@@ -81,20 +81,20 @@ func hostAccessFixture(t *testing.T) (restore func()) {
 	// yet. It failed on every fresh database and nothing said so, because the
 	// helper it used tolerates a non-zero exit — which is what tolerating one
 	// buys and costs.
-	tryCardinalCLI(t, "user", "create", "e2e-sysadmin")
+	createFixture(t, "user", "e2e-sysadmin")
 	tryCardinalCLI(t, "posix", "assign", "user", "e2e-sysadmin")
 	grantFixture(t, "e2e-linux-admins", "e2e-sysadmin")
 	grantFixture(t, "e2e-linux-users", "e2e-sysadmin")
 
 	// May log in and may not sudo. Without them, "everybody gets root" and
 	// "the right people get root" are the same passing test.
-	tryCardinalCLI(t, "user", "create", "e2e-nonroot")
+	createFixture(t, "user", "e2e-nonroot")
 	tryCardinalCLI(t, "posix", "assign", "user", "e2e-nonroot")
 	grantFixture(t, "e2e-linux-users", "e2e-nonroot")
 
 	// Has a uid and no grant at all. The one that proves the host is not simply
 	// being handed every numbered account in the directory.
-	tryCardinalCLI(t, "user", "create", "e2e-outsider")
+	createFixture(t, "user", "e2e-outsider")
 	tryCardinalCLI(t, "posix", "assign", "user", "e2e-outsider")
 
 	// A group with a gid, so memberships project to numbers.
@@ -117,7 +117,7 @@ func hostAccessFixture(t *testing.T) (restore func()) {
 func enrolledHostInGroup(t *testing.T, name string) *machine.Identity {
 	t.Helper()
 
-	tryCardinalCLI(t, "host", "create", name)
+	createFixture(t, "host", name)
 	grantFixture(t, "e2e-linux-hosts", name)
 
 	return enrolledHost(t, name)
@@ -239,7 +239,7 @@ func TestPermittedUsersWithoutNumbersAreReported(t *testing.T) {
 	defer hostAccessFixture(t)()
 
 	// Permitted, deliberately never given a uid.
-	tryCardinalCLI(t, "user", "create", "e2e-nouid")
+	createFixture(t, "user", "e2e-nouid")
 	grantFixture(t, "e2e-linux-users", "e2e-nouid")
 
 	host := enrolledHostInGroup(t, "e2e-linux-03")
@@ -423,7 +423,7 @@ func TestTheRenderedSudoersFileNamesOnlyTheSudoers(t *testing.T) {
 func TestServingAnAssignmentClosesTheAdoptionWindow(t *testing.T) {
 	defer hostAccessFixture(t)()
 
-	tryCardinalCLI(t, "user", "create", "e2e-adoptme")
+	createFixture(t, "user", "e2e-adoptme")
 	tryCardinalCLI(t, "posix", "assign", "user", "e2e-adoptme")
 	grantFixture(t, "e2e-linux-users", "e2e-adoptme")
 

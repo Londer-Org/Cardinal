@@ -149,7 +149,7 @@ func TestTheConsoleCanAnswerBeforeAHostHasEverEnrolled(t *testing.T) {
 	defer hostAccessFixture(t)()
 
 	const host = "e2e-never-enrolled.prod"
-	tryCardinalCLI(t, "host", "create", host)
+	createFixture(t, "host", host)
 	grantFixture(t, "e2e-linux-hosts", host)
 
 	admin, _ := adminClient(t)
@@ -174,7 +174,7 @@ func TestTheConsoleCanAnswerBeforeAHostHasEverEnrolled(t *testing.T) {
 // use would pass every test that only checked for a 201.
 func TestAnEnrollmentTokenFromTheConsoleActuallyEnrols(t *testing.T) {
 	const host = "e2e-console-enrol.prod"
-	tryCardinalCLI(t, "host", "create", host)
+	createFixture(t, "host", host)
 
 	admin, csrf := adminClient(t)
 
@@ -228,8 +228,8 @@ func TestAnEnrollmentTokenFromTheConsoleActuallyEnrols(t *testing.T) {
 func TestAliasesFromTheConsole(t *testing.T) {
 	const first = "e2e-alias-one.prod"
 	const second = "e2e-alias-two.prod"
-	tryCardinalCLI(t, "host", "create", first)
-	tryCardinalCLI(t, "host", "create", second)
+	createFixture(t, "host", first)
+	createFixture(t, "host", second)
 
 	admin, csrf := adminClient(t)
 

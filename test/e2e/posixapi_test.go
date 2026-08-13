@@ -35,7 +35,7 @@ func TestAGroupCanBeGivenAGidOverTheAPI(t *testing.T) {
 	c, csrf := adminClient(t)
 	group := "e2e-posix-" + strconv.FormatInt(time.Now().UnixNano()%100000, 10)
 
-	cardinalCLI(t, "group", "create", group)
+	createFixture(t, "group", group)
 
 	var first posixBody
 	resp := putJSON(t, c, "/api/directory/groups/"+group+"/posix", csrf, nil, &first)
@@ -71,7 +71,7 @@ func TestTheNumbersHandedOutCanBeListed(t *testing.T) {
 	c, csrf := adminClient(t)
 	group := "e2e-posix-list-" + strconv.FormatInt(time.Now().UnixNano()%100000, 10)
 
-	cardinalCLI(t, "group", "create", group)
+	createFixture(t, "group", group)
 	var assigned posixBody
 	putJSON(t, c, "/api/directory/groups/"+group+"/posix", csrf, nil, &assigned)
 
@@ -107,7 +107,7 @@ func TestANumberAMachineAlreadyUsesCanBeAdopted(t *testing.T) {
 	c, csrf := adminClient(t)
 	login := "e2e-adopt-" + strconv.FormatInt(time.Now().UnixNano()%100000, 10)
 
-	cardinalCLI(t, "user", "create", login)
+	createFixture(t, "user", login)
 
 	var assigned posixBody
 	if status := putJSON(t, c, "/api/directory/users/"+login+"/posix", csrf,
@@ -155,7 +155,7 @@ func TestAReservedNumberIsRefusedWithAReason(t *testing.T) {
 	c, csrf := adminClient(t)
 	login := "e2e-adopt-reserved-" + strconv.FormatInt(time.Now().UnixNano()%100000, 10)
 
-	cardinalCLI(t, "user", "create", login)
+	createFixture(t, "user", login)
 	putJSON(t, c, "/api/directory/users/"+login+"/posix", csrf, map[string]any{}, nil)
 
 	for _, number := range []int{0, 1, 999, 61500} {

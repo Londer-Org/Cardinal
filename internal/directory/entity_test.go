@@ -1,6 +1,7 @@
 package directory_test
 
 import (
+	"net/url"
 	"strings"
 	"testing"
 
@@ -188,4 +189,32 @@ func TestActiveAndRedactedReadTheirTimestamps(t *testing.T) {
 	e.RedactedAt = &now
 	assert.True(t, e.Redacted(),
 		"the WebAuthn login path refuses a redacted entity, so this predicate is a gate")
+}
+
+// TestEveryTypeHasACollectionName.
+//
+// The routes and the CLI both build paths from Plural, so a type missing one
+// would register `POST /api/directory//{name}` — a path that answers, does not
+// 404, and is reachable by nobody who read the documentation. A type that
+// shared another's word would be worse: two types disabled through one route,
+// with the second registration panicking at start-up if we were lucky.
+func TestEveryTypeHasACollectionName(t *testing.T) {
+	seen := map[string]directory.Type{}
+	for _, kind := range directory.AllTypes {
+		word := kind.Plural()
+		if word == "" {
+			t.Errorf("%s has no collection name, so its routes would have an empty "+
+				"path segment", kind)
+			continue
+		}
+		if other, ok := seen[word]; ok {
+			t.Errorf("%s and %s are both %q", kind, other, word)
+		}
+		seen[word] = kind
+
+		// A path segment, so nothing that has to be escaped to be one.
+		if word != url.PathEscape(word) {
+			t.Errorf("%s is %q, which is not usable in a URL as written", kind, word)
+		}
+	}
 }

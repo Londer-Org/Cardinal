@@ -303,6 +303,20 @@ export type DirectoryGroup = z.infer<typeof directoryGroupSchema>
 
 export const directoryGroupsSchema = paged(directoryGroupSchema)
 
+/**
+ * What disabling or enabling something reports back.
+ *
+ * The counts are the part worth showing: an account disabled while its holder
+ * stays signed in is not disabled, and the number of sessions that ended is the
+ * only evidence from here that it worked. Zero on an enable, which restores
+ * neither.
+ */
+export const availabilitySchema = z.object({
+  name: z.string(),
+  sessionsRevoked: z.number(),
+  tokensRevoked: z.number(),
+})
+
 export const directoryHostSchema = z.object({
   name: z.string(),
   displayName: z.string(),

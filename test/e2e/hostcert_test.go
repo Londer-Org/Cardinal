@@ -156,7 +156,7 @@ func TestAHostGetsACertificateForItsDirectoryName(t *testing.T) {
 // nothing more — and it must not be refused either, because a refusal would tell
 // the attacker the field is read at all.
 func TestPrincipalsComeFromTheDirectoryAndNotTheRequest(t *testing.T) {
-	tryCardinalCLI(t, "host", "create", "e2e-cert-payments")
+	createFixture(t, "host", "e2e-cert-payments")
 	host := enrolledHost(t, "e2e-cert-02")
 
 	_, publicKey := hostKeyRequest(t)
@@ -195,7 +195,7 @@ func TestPrincipalsComeFromTheDirectoryAndNotTheRequest(t *testing.T) {
 // types needs to prove the name they do type, and it has to be written down
 // rather than derived.
 func TestAliasesAppearInTheCertificate(t *testing.T) {
-	tryCardinalCLI(t, "host", "create", "e2e-cert-03")
+	createFixture(t, "host", "e2e-cert-03")
 	tryCardinalCLI(t, "host", "alias", "add", "e2e-cert-03", "e2e-git.example")
 	host := enrolledHost(t, "e2e-cert-03")
 

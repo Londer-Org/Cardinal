@@ -128,8 +128,8 @@ verify-passkey: ## Register a passkey and sign in with it, in a real browser
 	@# Chrome's virtual authenticator makes the ceremony real in every respect
 	@# except the hardware — the browser checks the origin against the relying
 	@# party and signs, and Cardinal verifies it exactly as it would a YubiKey.
-	@$(COMPOSE_E2E) exec -T cardinal cardinal user create passkey-check \
-		-display 'Passkey Check' >/dev/null 2>&1 || true
+	@$(MAKE) --no-print-directory e2e-entity KIND=users NAME=passkey-check \
+		DISPLAY='Passkey Check'
 	@invite=$$($(COMPOSE_E2E) exec -T cardinal cardinal invite passkey-check 2>&1 \
 		| grep -oE 'https://[^ ]+' | head -1); \
 	[ -n "$$invite" ] || { echo 'could not issue an invitation'; exit 1; }; \
@@ -396,19 +396,21 @@ COMPOSE_E2E := docker compose -f examples/compose.yml
 
 .PHONY: e2e-seed
 e2e-seed: ## Create the end-to-end user and activate the policy set
-	@# Errors are NOT swallowed here. An earlier version used `|| true`, and a
-	@# failed user creation then surfaced much later as a confusing
-	@# "session invalid" much later, from a seeded session pointing at nothing.
-	@$(COMPOSE_E2E) exec -T cardinal \
-		cardinal user create e2e-user -display 'End-to-end User' 2>&1 \
-		| grep -qE 'created|already exists' \
-		|| { echo 'ERROR: could not create e2e-user'; \
-		     $(COMPOSE_E2E) exec -T cardinal cardinal user create e2e-user; exit 1; }
+	@# The policy set goes first, and the order is load-bearing now rather than
+	@# incidental. Everything below this line reaches the API, and Cardinal
+	@# answers 503 to every request until it has a policy set to decide with —
+	@# so a seed that created the user first would sit in e2e-api's retry loop
+	@# for thirty seconds and then fail, having published nothing.
 	@docker cp policies/cardinal.cedar \
 		"$$($(COMPOSE_E2E) ps -q cardinal)":/tmp/cardinal.cedar
 	@$(COMPOSE_E2E) exec -T cardinal \
 		cardinal policy publish /tmp/cardinal.cedar -description 'e2e stack' -activate \
 		| sed 's/^/  /'
+	@# Errors are NOT swallowed here. An earlier version used `|| true`, and a
+	@# failed user creation then surfaced much later as a confusing
+	@# "session invalid", from a seeded session pointing at nothing.
+	@$(MAKE) --no-print-directory e2e-entity KIND=users NAME=e2e-user \
+		DISPLAY='End-to-end User'
 	@# The application behind Traefik, and the hostname it answers to.
 	@#
 	@# forwardAuth is handed a hostname and resolves it to an application, whose
@@ -416,10 +418,8 @@ e2e-seed: ## Create the end-to-end user and activate the policy set
 	@# every request to app.cardinal.test is refused before policy is consulted
 	@# — which is the correct answer for an address nobody registered, and is
 	@# what the stack looked like before this existed.
-	@$(COMPOSE_E2E) exec -T cardinal \
-		cardinal application create protected-app -display 'Protected App' 2>&1 \
-		| grep -qE 'created|already exists' \
-		|| { echo 'ERROR: could not create the protected application'; exit 1; }
+	@$(MAKE) --no-print-directory e2e-entity KIND=applications \
+		NAME=protected-app DISPLAY='Protected App'
 	@$(COMPOSE_E2E) exec -T cardinal \
 		cardinal app hostname add protected-app app.cardinal.test 2>&1 \
 		| grep -qE 'answers for|already holds' \
@@ -610,14 +610,14 @@ restore-drill: build ## Back up, restore to a scratch DB, and verify the audit c
 # an incident: a plain pg_restore proves the data came back, but verifying the
 # hash chain proves it came back *unaltered* — which is the question that
 # actually matters after a compromise.
-.PHONY: e2e-grant
-e2e-grant: ## Grant over the API, as a seeded administrator (seeding only)
+.PHONY: e2e-api
+e2e-api: ## One authenticated API call, as a seeded administrator (seeding only)
 	@$(MAKE) --no-print-directory e2e-wait
 	@# The administrator this acts as, and a session for it. Both by SQL,
-	@# because there is nobody to authenticate as until there is — so the grant
-	@# names direct-database, which is what wrote it. Naming the seeder would
-	@# put "granted themselves admin" in the fixture data of a product whose
-	@# point is that the journal can be trusted.
+	@# because there is nobody to authenticate as until there is — so the
+	@# membership names direct-database, which is what wrote it. Naming the
+	@# seeder would put "granted themselves admin" in the fixture data of a
+	@# product whose point is that the journal can be trusted.
 	@$(COMPOSE_E2E) exec -T postgres psql -U cardinal -d cardinal -q \
 		-c "INSERT INTO entities (type, name, display_name) \
 		    VALUES ('user', 'e2e-seeder', 'End-to-end seeding') \
@@ -639,6 +639,10 @@ e2e-grant: ## Grant over the API, as a seeded administrator (seeding only)
 	@# after a restart there is a server that answers and cannot decide
 	@# anything. Reaching the database directly never had to know that; this is
 	@# what going through the API costs, and it is worth the cost.
+	@#
+	@# 409 counts as success everywhere it is tolerated: the seed is re-run
+	@# against a stack that outlives it, so "already there" is the end state
+	@# asked for rather than a failure.
 	@token=$$(head -c 32 /dev/urandom | base64 | tr -dc 'A-Za-z0-9' | head -c 43); \
 	$(COMPOSE_E2E) exec -T postgres psql -U cardinal -d cardinal -q \
 		-c "INSERT INTO sessions (subject_id, token_hash, valid_period, auth_method, \
@@ -652,15 +656,33 @@ e2e-grant: ## Grant over the API, as a seeded administrator (seeding only)
 			--resolve "id.cardinal.test:$(CARDINAL_PORT):127.0.0.1" \
 			-H "Authorization: Bearer $$token" \
 			-H 'Content-Type: application/json' \
-			-d "{\"member\":\"$(MEMBER)\"}" \
-			"https://id.cardinal.test:$(CARDINAL_PORT)/api/directory/groups/$(GROUP)/members"); \
+			-d '$(BODY)' \
+			"https://id.cardinal.test:$(CARDINAL_PORT)$(APIPATH)"); \
 		case "$$code" in \
 			2*|409) exit 0;; \
 			503) sleep 1;; \
-			*) echo "ERROR: granting $(MEMBER) to $(GROUP) returned $$code"; exit 1;; \
+			*) echo "ERROR: $(APIPATH) returned $$code"; exit 1;; \
 		esac; \
 	done; \
 	echo "ERROR: authorization was still unavailable after 30s"; exit 1
+
+.PHONY: e2e-grant
+e2e-grant: ## Grant over the API, as a seeded administrator (seeding only)
+	@$(MAKE) --no-print-directory e2e-api \
+		APIPATH=/api/directory/groups/$(GROUP)/members \
+		BODY='{"member":"$(MEMBER)"}'
+
+.PHONY: e2e-entity
+e2e-entity: ## Create an entity over the API, as a seeded administrator (seeding only)
+	@# Users have an endpoint of their own and name the field `login`, because
+	@# they are the only type that can be signed into.
+	@if [ "$(KIND)" = "users" ]; then \
+		$(MAKE) --no-print-directory e2e-api APIPATH=/api/directory/users \
+			BODY='{"login":"$(NAME)","displayName":"$(DISPLAY)"}'; \
+	else \
+		$(MAKE) --no-print-directory e2e-api APIPATH=/api/directory/$(KIND) \
+			BODY='{"name":"$(NAME)","displayName":"$(DISPLAY)"}'; \
+	fi
 
 .PHONY: e2e-wait
 e2e-wait: ## Wait until the server answers

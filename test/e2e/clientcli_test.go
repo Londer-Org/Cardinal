@@ -33,7 +33,7 @@ const cliConfigDir = "/tmp"
 func TestTheCLIReadsMembershipThroughTheAPI(t *testing.T) {
 	const group = "e2e-client-cli"
 
-	tryCardinalCLI(t, "group", "create", group)
+	createFixture(t, "group", group)
 	t.Cleanup(func() { revokeAfterwards(group, "e2e-user") })
 	grantFixture(t, group, "e2e-user", "client cli e2e")
 
@@ -60,7 +60,7 @@ func TestTheCLIReadsMembershipThroughTheAPI(t *testing.T) {
 func TestTheCLIAnswersForAnInstantThatIsNotNow(t *testing.T) {
 	const group = "e2e-client-cli-at"
 
-	tryCardinalCLI(t, "group", "create", group)
+	createFixture(t, "group", group)
 	t.Cleanup(func() { revokeAfterwards(group, "e2e-user") })
 	grantFixture(t, group, "e2e-user", "before the revocation")
 

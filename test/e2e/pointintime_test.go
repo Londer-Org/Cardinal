@@ -46,7 +46,7 @@ func TestTheDirectoryAnswersForAnInstantThatIsNotNow(t *testing.T) {
 	c, _ := adminClient(t)
 	const group = "e2e-pit"
 
-	cardinalCLI(t, "group", "create", group)
+	createFixture(t, "group", group)
 	t.Cleanup(func() { revokeAfterwards(group, "e2e-user") })
 
 	grantFixture(t, group, "e2e-user", "point-in-time e2e")
@@ -92,7 +92,7 @@ func TestHistoryKeepsWhatARevocationClosed(t *testing.T) {
 	c, _ := adminClient(t)
 	const group = "e2e-pit-history"
 
-	cardinalCLI(t, "group", "create", group)
+	createFixture(t, "group", group)
 	t.Cleanup(func() { revokeAfterwards(group, "e2e-user") })
 
 	grantFixture(t, group, "e2e-user", "kept after revocation")
