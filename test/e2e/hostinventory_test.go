@@ -116,7 +116,7 @@ func TestInventoryCountsAliasesAndGroups(t *testing.T) {
 	tryCardinalCLI(t, "group", "create", "e2e-inv-fleet")
 	tryCardinalCLI(t, "host", "alias", "add", "e2e-inv-named", "e2e-inv-alias-one")
 	tryCardinalCLI(t, "host", "alias", "add", "e2e-inv-named", "e2e-inv-alias-two")
-	tryCardinalCLI(t, "grant", "e2e-inv-fleet", "e2e-inv-named")
+	grantFixture(t, "e2e-inv-fleet", "e2e-inv-named")
 
 	named := find(t, inventory(t, "e2e-inv-named"), "e2e-inv-named")
 	if named.Aliases != 2 {

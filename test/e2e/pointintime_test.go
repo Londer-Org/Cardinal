@@ -47,9 +47,9 @@ func TestTheDirectoryAnswersForAnInstantThatIsNotNow(t *testing.T) {
 	const group = "e2e-pit"
 
 	cardinalCLI(t, "group", "create", group)
-	t.Cleanup(func() { cliBackground("revoke", group, "e2e-user") })
+	t.Cleanup(func() { revokeAfterwards(group, "e2e-user") })
 
-	tryCardinalCLI(t, "grant", group, "e2e-user", "-reason", "point-in-time e2e")
+	grantFixture(t, group, "e2e-user", "point-in-time e2e")
 
 	// Sampled after the grant lands rather than before it, so the instant is
 	// unambiguously inside the period rather than on its boundary.
@@ -61,7 +61,7 @@ func TestTheDirectoryAnswersForAnInstantThatIsNotNow(t *testing.T) {
 		t.Fatalf("expected one member before revoking, got %d", len(before.Members))
 	}
 
-	cardinalCLI(t, "revoke", group, "e2e-user")
+	revokeFixture(t, group, "e2e-user")
 
 	now := groupAt(t, c, group, "")
 	if len(now.Members) != 0 {
@@ -93,12 +93,12 @@ func TestHistoryKeepsWhatARevocationClosed(t *testing.T) {
 	const group = "e2e-pit-history"
 
 	cardinalCLI(t, "group", "create", group)
-	t.Cleanup(func() { cliBackground("revoke", group, "e2e-user") })
+	t.Cleanup(func() { revokeAfterwards(group, "e2e-user") })
 
-	tryCardinalCLI(t, "grant", group, "e2e-user", "-reason", "kept after revocation")
+	grantFixture(t, group, "e2e-user", "kept after revocation")
 	time.Sleep(time.Second)
 	during := time.Now().UTC()
-	cardinalCLI(t, "revoke", group, "e2e-user")
+	revokeFixture(t, group, "e2e-user")
 
 	history := grantHistory(t, c, group, "e2e-user", during.Format(time.RFC3339))
 

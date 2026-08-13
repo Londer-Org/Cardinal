@@ -606,12 +606,14 @@ func (s *Server) handleGrantMembership(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Members may be users or groups: nesting is how role inheritance is
-	// expressed, and refusing it here would make the console strictly weaker
-	// than the CLI.
+	// Members may be any type that holds a membership — a person, a nested
+	// group, a host in env:prod, an application in the group a policy rule
+	// names. Refusing any of them here would make this API strictly weaker
+	// than the CLI, which is the direction that matters: the CLI is moving
+	// onto it (ADR 0033), and a gap becomes a command that stops working.
 	member, err := s.lookupMember(ctx, strings.TrimSpace(req.Member))
 	if err != nil {
-		writeError(w, http.StatusNotFound, "no such user or group")
+		writeError(w, http.StatusNotFound, "no such member: nothing of any type is named that")
 		return
 	}
 
@@ -665,7 +667,7 @@ func (s *Server) handleRevokeMembership(w http.ResponseWriter, r *http.Request) 
 	}
 	member, err := s.lookupMember(ctx, r.PathValue("member"))
 	if err != nil {
-		writeError(w, http.StatusNotFound, "no such user or group")
+		writeError(w, http.StatusNotFound, "no such member: nothing of any type is named that")
 		return
 	}
 
@@ -688,10 +690,29 @@ func (s *Server) handleRevokeMembership(w http.ResponseWriter, r *http.Request) 
 
 // lookupMember resolves a name that may be a user or a group.
 func (s *Server) lookupMember(ctx context.Context, name string) (*directory.Entity, error) {
-	if e, err := s.store.LookupEntity(ctx, directory.TypeUser, name); err == nil {
-		return e, nil
+	// Every type that can hold a membership, in the order a name is most likely
+	// to be one.
+	//
+	// Users and groups were the whole list until the CLI's own commands started
+	// moving to this API and the difference showed: a host joins env:prod, and
+	// an application joins the group a policy rule names — `cardinal grant
+	// staff-apps grafana` is in the documentation and is how an application
+	// becomes reachable at all. Both were refused here as "no such user or
+	// group", which is a sentence about the lookup rather than about the name.
+	for _, kind := range []directory.Type{
+		directory.TypeUser,
+		directory.TypeGroup,
+		directory.TypeHost,
+		directory.TypeApplication,
+		directory.TypeServiceAccount,
+		directory.TypeDevice,
+		directory.TypeRole,
+	} {
+		if e, err := s.store.LookupEntity(ctx, kind, name); err == nil {
+			return e, nil
+		}
 	}
-	return s.store.LookupEntity(ctx, directory.TypeGroup, name)
+	return nil, directory.ErrNotFound
 }
 
 // hostResponse is one machine in the inventory.

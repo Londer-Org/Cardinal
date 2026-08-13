@@ -150,7 +150,7 @@ func TestTheConsoleCanAnswerBeforeAHostHasEverEnrolled(t *testing.T) {
 
 	const host = "e2e-never-enrolled.prod"
 	tryCardinalCLI(t, "host", "create", host)
-	tryCardinalCLI(t, "grant", "e2e-linux-hosts", host)
+	grantFixture(t, "e2e-linux-hosts", host)
 
 	admin, _ := adminClient(t)
 	detail := hostDetail(t, admin, host)

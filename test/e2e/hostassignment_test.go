@@ -73,18 +73,24 @@ func hostAccessFixture(t *testing.T) (restore func()) {
 	tryCardinalCLI(t, "group", "create", "e2e-linux-users")
 	tryCardinalCLI(t, "group", "create", "e2e-linux-hosts")
 	tryCardinalCLI(t, "group", "create", "e2e-linux-admins")
-	tryCardinalCLI(t, "grant", "e2e-linux-admins", "e2e-sysadmin")
 
 	// Permitted, and given a uid.
+	//
+	// Created before being granted anything, which it was not: the grant into
+	// e2e-linux-admins came three lines earlier, when the account did not exist
+	// yet. It failed on every fresh database and nothing said so, because the
+	// helper it used tolerates a non-zero exit — which is what tolerating one
+	// buys and costs.
 	tryCardinalCLI(t, "user", "create", "e2e-sysadmin")
 	tryCardinalCLI(t, "posix", "assign", "user", "e2e-sysadmin")
-	tryCardinalCLI(t, "grant", "e2e-linux-users", "e2e-sysadmin")
+	grantFixture(t, "e2e-linux-admins", "e2e-sysadmin")
+	grantFixture(t, "e2e-linux-users", "e2e-sysadmin")
 
 	// May log in and may not sudo. Without them, "everybody gets root" and
 	// "the right people get root" are the same passing test.
 	tryCardinalCLI(t, "user", "create", "e2e-nonroot")
 	tryCardinalCLI(t, "posix", "assign", "user", "e2e-nonroot")
-	tryCardinalCLI(t, "grant", "e2e-linux-users", "e2e-nonroot")
+	grantFixture(t, "e2e-linux-users", "e2e-nonroot")
 
 	// Has a uid and no grant at all. The one that proves the host is not simply
 	// being handed every numbered account in the directory.
@@ -112,7 +118,7 @@ func enrolledHostInGroup(t *testing.T, name string) *machine.Identity {
 	t.Helper()
 
 	tryCardinalCLI(t, "host", "create", name)
-	tryCardinalCLI(t, "grant", "e2e-linux-hosts", name)
+	grantFixture(t, "e2e-linux-hosts", name)
 
 	return enrolledHost(t, name)
 }
@@ -234,7 +240,7 @@ func TestPermittedUsersWithoutNumbersAreReported(t *testing.T) {
 
 	// Permitted, deliberately never given a uid.
 	tryCardinalCLI(t, "user", "create", "e2e-nouid")
-	tryCardinalCLI(t, "grant", "e2e-linux-users", "e2e-nouid")
+	grantFixture(t, "e2e-linux-users", "e2e-nouid")
 
 	host := enrolledHostInGroup(t, "e2e-linux-03")
 	assignment := fetchAssignment(t, host)
@@ -419,7 +425,7 @@ func TestServingAnAssignmentClosesTheAdoptionWindow(t *testing.T) {
 
 	tryCardinalCLI(t, "user", "create", "e2e-adoptme")
 	tryCardinalCLI(t, "posix", "assign", "user", "e2e-adoptme")
-	tryCardinalCLI(t, "grant", "e2e-linux-users", "e2e-adoptme")
+	grantFixture(t, "e2e-linux-users", "e2e-adoptme")
 
 	// Established rather than assumed. The stack outlives a `go test` run, so on
 	// the second run this identity has already been served by the first — which
