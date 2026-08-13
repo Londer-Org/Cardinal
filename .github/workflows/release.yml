@@ -47,8 +47,14 @@ jobs:
             exit 1
           fi
 
+      # Split for the reason ci.yml gives at length: two packages start a
+      # PostgreSQL of their own, and running both at once made the store suite
+      # lose its container part-way through.
       - name: Test
-        run: go test ./internal/... ./cmd/... ./migrations/... -race -count=1 -timeout 10m
+        run: go test ./internal/... ./migrations/... -race -count=1 -timeout 10m
+
+      - name: Test the server commands
+        run: go test ./cmd/... -race -count=1 -timeout 10m
 
       - name: Trust a local certificate authority
         run: |

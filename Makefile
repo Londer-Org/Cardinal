@@ -82,7 +82,15 @@ test: ## Run unit and integration tests
 	@# hand is told what to do — which means `go test ./...` cannot pass on a
 	@# clean checkout. CI has excluded it from the start; this target did not,
 	@# so the README's own five-line quickstart ended in a failure.
-	go test ./internal/... ./cmd/... ./migrations/... -race -count=1
+	@#
+	@# Two commands, matching CI: internal/store and cmd/cardinal-server each
+	@# start a PostgreSQL of their own — first-run setup needs a directory with
+	@# no administrators in it, so it cannot share one — and running both at
+	@# once cost the store suite its container on a CI runner. It has never
+	@# done that on a developer machine, which is the point: this is where the
+	@# two are kept apart so nobody has to find out again.
+	go test ./internal/... ./migrations/... -race -count=1
+	go test ./cmd/... -race -count=1
 
 .PHONY: schema
 schema: ## Regenerate docs/schema.md from the running database
