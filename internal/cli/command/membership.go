@@ -17,7 +17,7 @@ import (
 )
 
 // Members lists who is in a group, now or at an instant.
-func Members(ctx context.Context, server string, args []string) error {
+func Members(ctx context.Context, server string, flow cli.AuthFlow, args []string) error {
 	fs := flag.NewFlagSet("members", flag.ContinueOnError)
 	at := fs.String("at", "", "instant to query, RFC3339 (default: now)")
 	pos, err := parse(fs, args)
@@ -32,7 +32,7 @@ func Members(ctx context.Context, server string, args []string) error {
 		return err
 	}
 
-	client, err := cli.Client(ctx, server)
+	client, err := cli.Client(ctx, server, flow)
 	if err != nil {
 		return err
 	}
@@ -55,7 +55,7 @@ func Members(ctx context.Context, server string, args []string) error {
 }
 
 // Memberships lists the groups somebody is directly in.
-func Memberships(ctx context.Context, server string, args []string) error {
+func Memberships(ctx context.Context, server string, flow cli.AuthFlow, args []string) error {
 	fs := flag.NewFlagSet("memberships", flag.ContinueOnError)
 	at := fs.String("at", "", "instant to query, RFC3339 (default: now)")
 	pos, err := parse(fs, args)
@@ -70,7 +70,7 @@ func Memberships(ctx context.Context, server string, args []string) error {
 		return err
 	}
 
-	client, err := cli.Client(ctx, server)
+	client, err := cli.Client(ctx, server, flow)
 	if err != nil {
 		return err
 	}
@@ -93,7 +93,7 @@ func Memberships(ctx context.Context, server string, args []string) error {
 }
 
 // History prints every grant ever made of one membership.
-func History(ctx context.Context, server string, args []string) error {
+func History(ctx context.Context, server string, flow cli.AuthFlow, args []string) error {
 	fs := flag.NewFlagSet("history", flag.ContinueOnError)
 	at := fs.String("at", "", "answer for one instant instead: was this member in this group then")
 	pos, err := parse(fs, args)
@@ -108,7 +108,7 @@ func History(ctx context.Context, server string, args []string) error {
 		return err
 	}
 
-	client, err := cli.Client(ctx, server)
+	client, err := cli.Client(ctx, server, flow)
 	if err != nil {
 		return err
 	}

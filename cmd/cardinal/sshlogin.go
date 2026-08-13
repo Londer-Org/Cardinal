@@ -56,9 +56,16 @@ func runSSH(ctx context.Context, args []string) error {
 	serverFlag := fs.String("server", "", "base URL of the Cardinal server")
 	account := fs.String("l", "", "log in as this local account (default: your own login)")
 	printOnly := fs.Bool("print", false, "print the certificate and exit, without connecting")
+	// Declared here rather than stripped by the dispatcher, because this
+	// command has its own FlagSet and never goes through it.
+	authFlow := fs.String("auth", "", "sign-in handoff: `loopback` or `device` (default: work it out)")
 	pos, err := cli.Parse(fs, args)
 	if err != nil {
 		return errUsage
+	}
+	flow, err := cli.ParseAuthFlow(*authFlow)
+	if err != nil {
+		return err
 	}
 	if len(pos) != 1 {
 		return fmt.Errorf("%w: cardinal ssh [user@]<host> [-server <url>]", errUsage)
@@ -81,7 +88,7 @@ func runSSH(ctx context.Context, args []string) error {
 	// The shared flow, which chooses between the loopback handoff and the
 	// device code. `cardinal ssh` is the command most often run on a machine
 	// somebody is SSH'd into, so it is the one that most needed the second.
-	session, err := cli.SignIn(ctx, base)
+	session, err := cli.SignIn(ctx, base, flow)
 	if err != nil {
 		return err
 	}

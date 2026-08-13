@@ -3,7 +3,10 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
+
+	"go.londer.be/cardinal/internal/cli"
 )
 
 // client runs a command that reaches Cardinal's API.
@@ -17,10 +20,18 @@ import (
 // anyway — measured, and what it prints instead is the word "usage". The check
 // turns that into a sentence naming the six commands that do take `-dsn`, which
 // is the difference between a person learning the rule and guessing at it.
-func client(ctx context.Context, args []string, run func(context.Context, string, []string) error) error {
-	// -server is read here and removed, so each command's own FlagSet does not
-	// have to declare it and cannot disagree about its name.
+func client(ctx context.Context, args []string, run func(context.Context, string, cli.AuthFlow, []string) error) error {
+	// -server and -auth are read here and removed, so each command's own
+	// FlagSet does not have to declare them and cannot disagree about a name.
 	server, rest, err := serverFlag(args)
+	if err != nil {
+		return err
+	}
+	flowName, rest, err := valueFlag(rest, "auth")
+	if err != nil {
+		return err
+	}
+	flow, err := cli.ParseAuthFlow(flowName)
 	if err != nil {
 		return err
 	}
@@ -29,7 +40,28 @@ func client(ctx context.Context, args []string, run func(context.Context, string
 	if err != nil {
 		return err
 	}
-	return run(ctx, base, rest)
+	return run(ctx, base, flow, rest)
+}
+
+// valueFlag pulls `-name value` out of the arguments wherever it appears.
+func valueFlag(args []string, name string) (value string, rest []string, err error) {
+	for i := range args {
+		switch {
+		case args[i] == "-"+name || args[i] == "--"+name:
+			if i+1 >= len(args) {
+				return "", nil, fmt.Errorf("%w: -%s needs a value", cli.ErrUsage, name)
+			}
+			rest = append(rest, args[:i]...)
+			rest = append(rest, args[i+2:]...)
+			return args[i+1], rest, nil
+		case strings.HasPrefix(args[i], "-"+name+"="),
+			strings.HasPrefix(args[i], "--"+name+"="):
+			rest = append(rest, args[:i]...)
+			rest = append(rest, args[i+1:]...)
+			return args[i][strings.Index(args[i], "=")+1:], rest, nil
+		}
+	}
+	return "", args, nil
 }
 
 // serverFlag pulls -server out of the arguments wherever it appears.

@@ -122,9 +122,11 @@ $ cardinal grant engineers alonfils -for 72h
 
 **Which one runs is chosen, and said out loud.** The CLI prefers loopback when it
 can open a browser here and is not in an SSH session, and device code otherwise.
-`--auth loopback|device` forces either. The heuristic is allowed to be a
-heuristic because it is not a security decision — both flows end in the same
-session, and getting it wrong costs a fallback, not a credential.
+`-auth loopback|device` forces either, for the cases a heuristic cannot see: a
+multiplexer outliving the SSH session it was started from, a remote desktop
+where the browser really is here. The heuristic is allowed to be a heuristic
+because it is not a security decision — both flows end in the same session, and
+getting it wrong costs a fallback, not a credential.
 
 They fail differently, which is the reason for keeping both rather than
 standardising on the one that always works:
@@ -134,11 +136,26 @@ standardising on the one that always works:
   redirect would not reach them.
 - **Device code is phishable**, and this is the known weakness of the pattern:
   an attacker starts a flow, sends you the code, and you approve their session.
-  Two things blunt it. The ninety-second window already chosen for CLI
-  authorizations means a phishing attempt has to land inside a minute and a
-  half. And the approval screen must show what is being approved — the
-  requesting host and address, and a plain sentence that approving a code
-  somebody sent you hands them your session.
+  Three things blunt it: a short window, an approval that still requires a
+  device-bound session, and a screen showing what is being approved with a
+  plain sentence that approving a code somebody sent you hands them your
+  session.
+
+> **Two corrections after building it.**
+>
+> The window is five minutes, not the ninety seconds this argued for. Ninety is
+> generous when the browser is already open on the same machine; this flow may
+> need somebody to find a phone and sign in first, and a window that routinely
+> expires teaches people to re-run the command and approve faster without
+> reading — which is worse for the attack above than a window long enough to
+> think in. The loopback flow keeps ninety seconds, where the original
+> reasoning still holds.
+>
+> The approval screen shows the address the request came from **as the server
+> saw it**, and deliberately not the "requesting host" this asked for. A
+> hostname the terminal reports about itself is chosen by whoever ran it, so
+> showing one would help exactly the attack it was meant to blunt: "approve the
+> code from web-01" reads as reassuring and is unverifiable.
 
 So: loopback where it works, device code where it must, and never a silent
 switch between them.
