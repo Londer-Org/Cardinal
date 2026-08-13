@@ -40,7 +40,7 @@ func TestRenamingMovesNothingElse(t *testing.T) {
 	seedSQL(t, `DELETE FROM entities WHERE type = 'user' AND name IN ('`+before+`', '`+after+`')`)
 	tryCardinalCLI(t, "user", "create", before)
 	tryCardinalCLI(t, "group", "create", "e2e-rename-group")
-	tryCardinalCLI(t, "grant", "e2e-rename-group", before)
+	grantFixture(t, "e2e-rename-group", before)
 
 	id := seedQuery(t, `SELECT id FROM entities WHERE type = 'user' AND name = '`+before+`'`)
 	if id == "" {

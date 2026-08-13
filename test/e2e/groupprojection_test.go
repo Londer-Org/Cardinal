@@ -68,7 +68,7 @@ func TestAnAllowedGroupReachesTheApplicationAgain(t *testing.T) {
 
 	// The group the seeded user is actually in, so the claim has something to
 	// carry. Granted here rather than assumed: the suite reseeds.
-	tryCardinalCLI(t, "grant", "engineers", tokenOwnerLogin, "-reason", "projection e2e")
+	grantFixture(t, "engineers", tokenOwnerLogin, "projection e2e")
 	cardinalCLI(t, "app", "groups", "mode", "protected-app", "owned")
 
 	before := tokenIdentityAtProtectedApp(t)
@@ -156,7 +156,7 @@ func TestEveryTokenCarriesOnlyWhatTheApplicationMayBeTold(t *testing.T) {
 	// e2e-user is who establishSession signs in as, and the seed leaves them in
 	// no groups at all — so without this the wide case and the narrow case are
 	// both empty and the test passes while proving nothing.
-	tryCardinalCLI(t, "grant", "engineers", "e2e-user", "-reason", "projection e2e")
+	grantFixture(t, "engineers", "e2e-user", "projection e2e")
 
 	cardinalCLI(t, "app", "groups", "mode", "e2e-client", "all")
 	wideAccess, wideID := tokenGroups(t)

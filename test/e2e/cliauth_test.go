@@ -100,7 +100,7 @@ func TestATerminalCanSignInAndGetACertificate(t *testing.T) {
 	// Asking for somebody else's account is a different test, and it is the one
 	// the rule exists to refuse.
 	tryCardinalCLI(t, "posix", "assign", "user", "e2e-user")
-	tryCardinalCLI(t, "grant", "e2e-linux-users", "e2e-user")
+	grantFixture(t, "e2e-linux-users", "e2e-user")
 
 	c := client(t)
 	withSession(t, c)

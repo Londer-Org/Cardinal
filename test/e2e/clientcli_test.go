@@ -34,8 +34,8 @@ func TestTheCLIReadsMembershipThroughTheAPI(t *testing.T) {
 	const group = "e2e-client-cli"
 
 	tryCardinalCLI(t, "group", "create", group)
-	t.Cleanup(func() { cliBackground("revoke", group, "e2e-user") })
-	tryCardinalCLI(t, "grant", group, "e2e-user", "-reason", "client cli e2e")
+	t.Cleanup(func() { revokeAfterwards(group, "e2e-user") })
+	grantFixture(t, group, "e2e-user", "client cli e2e")
 
 	// adminClient seeds the account and its membership of directory-admins.
 	// Called for that rather than for the client it returns: signInAs mints a
@@ -61,12 +61,12 @@ func TestTheCLIAnswersForAnInstantThatIsNotNow(t *testing.T) {
 	const group = "e2e-client-cli-at"
 
 	tryCardinalCLI(t, "group", "create", group)
-	t.Cleanup(func() { cliBackground("revoke", group, "e2e-user") })
-	tryCardinalCLI(t, "grant", group, "e2e-user", "-reason", "before the revocation")
+	t.Cleanup(func() { revokeAfterwards(group, "e2e-user") })
+	grantFixture(t, group, "e2e-user", "before the revocation")
 
 	time.Sleep(time.Second)
 	during := time.Now().UTC().Format(time.RFC3339)
-	cardinalCLI(t, "revoke", group, "e2e-user")
+	revokeFixture(t, group, "e2e-user")
 
 	// adminClient seeds the account and its membership of directory-admins.
 	// Called for that rather than for the client it returns: signInAs mints a

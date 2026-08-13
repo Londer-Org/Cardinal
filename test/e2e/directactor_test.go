@@ -22,7 +22,10 @@ func TestADirectGrantIsNotRecordedAsASelfGrant(t *testing.T) {
 	const group = "e2e-direct-actor"
 
 	tryCardinalCLI(t, "group", "create", group)
-	t.Cleanup(func() { cliBackground("revoke", group, "e2e-user") })
+	t.Cleanup(func() { revokeAfterwards(group, "e2e-user") })
+	// Deliberately the CLI, and deliberately not grantFixture: what this
+	// asserts is what the database path records, so a fixture that went
+	// through the API would be testing the other path entirely.
 	tryCardinalCLI(t, "grant", group, "e2e-user", "-reason", "direct actor e2e")
 
 	granter := seedQuery(t, `

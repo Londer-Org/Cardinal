@@ -427,10 +427,17 @@ e2e-seed: ## Create the end-to-end user and activate the policy set
 	@# Into staff-apps, which is what the shipped staff-web-access rule permits.
 	@# Empty on a fresh install on purpose: registering an application makes it
 	@# findable, and this is the deliberate act that makes it reachable.
-	@$(COMPOSE_E2E) exec -T cardinal \
-		cardinal grant staff-apps protected-app 2>&1 \
-		| grep -qE 'granted|already' \
-		|| { echo 'ERROR: could not put protected-app in staff-apps'; exit 1; }
+	@#
+	@# Through the API as an administrator, not through `cardinal grant`, which
+	@# is moving off the database (ADR 0033). Granting will then need a
+	@# device-bound credential used minutes ago, so no unattended process can
+	@# ever do it — the intended answer to "our pipeline needs to grant
+	@# memberships", and it applies to this file.
+	@#
+	@# What makes it possible here is the database credential, and minting a
+	@# session with it is the honest form of that: the grant still goes through
+	@# policy, and the journal names the account rather than the path.
+	@$(MAKE) --no-print-directory e2e-grant GROUP=staff-apps MEMBER=protected-app
 	@# The Shared Signals receiver, which is deliberately not Cardinal: it
 	@# fetches the JWKS like any receiver would and verifies what arrives. The
 	@# stream is configured here because stream management over the API is not
@@ -544,7 +551,7 @@ e2e-reset: ## Drop the end-to-end database and rebuild it from migrations and se
 	@# Restarted because it holds a connection pool to a database that no longer
 	@# exists, and because the policy set is loaded at startup.
 	@$(COMPOSE_E2E) up -d --force-recreate cardinal >/dev/null 2>&1
-	@$(COMPOSE_E2E) exec -T cardinal /bin/sh -c 'exit 0' 2>/dev/null || sleep 8
+	@$(MAKE) --no-print-directory e2e-wait
 	@$(MAKE) --no-print-directory e2e-seed
 	@$(MAKE) --no-print-directory e2e-seed-oidc
 	@echo "==> the end-to-end database is new"
@@ -603,3 +610,69 @@ restore-drill: build ## Back up, restore to a scratch DB, and verify the audit c
 # an incident: a plain pg_restore proves the data came back, but verifying the
 # hash chain proves it came back *unaltered* — which is the question that
 # actually matters after a compromise.
+.PHONY: e2e-grant
+e2e-grant: ## Grant over the API, as a seeded administrator (seeding only)
+	@$(MAKE) --no-print-directory e2e-wait
+	@# The administrator this acts as, and a session for it. Both by SQL,
+	@# because there is nobody to authenticate as until there is.
+	@$(COMPOSE_E2E) exec -T postgres psql -U cardinal -d cardinal -q \
+		-c "INSERT INTO entities (type, name, display_name) \
+		    VALUES ('user', 'e2e-seeder', 'End-to-end seeding') \
+		    ON CONFLICT (type, name) DO NOTHING" \
+		-c "INSERT INTO group_members (group_id, member_id, granted_by, valid_period) \
+		    SELECT '00000000-0000-7000-8000-00000000ad11', e.id, e.id, \
+		           tstzrange(now(), 'infinity') \
+		      FROM entities e WHERE e.name = 'e2e-seeder' \
+		    ON CONFLICT DO NOTHING" >/dev/null
+	@# Called from here rather than from inside the container, which is
+	@# distroless and has no wget, no curl and no shell to run one with. The
+	@# host already trusts this stack's certificate — `make e2e-up` refuses to
+	@# start otherwise — so this is the same request a browser would make.
+	@#
+	@# Retried while the answer is 503, which is Cardinal saying it has no
+	@# policy set loaded yet. The seed publishes one to the database and the
+	@# running server picks it up on its watcher interval, so for a few seconds
+	@# after a restart there is a server that answers and cannot decide
+	@# anything. Reaching the database directly never had to know that; this is
+	@# what going through the API costs, and it is worth the cost.
+	@token=$$(head -c 32 /dev/urandom | base64 | tr -dc 'A-Za-z0-9' | head -c 43); \
+	$(COMPOSE_E2E) exec -T postgres psql -U cardinal -d cardinal -q \
+		-c "INSERT INTO sessions (subject_id, token_hash, valid_period, auth_method, \
+		                          auth_at, device_bound, absolute_expiry) \
+		    SELECT e.id, sha256('$$token'::bytea), \
+		           tstzrange(now(), now() + interval '5 minutes'), 'passkey', now(), \
+		           true, now() + interval '5 minutes' \
+		      FROM entities e WHERE e.name = 'e2e-seeder'" >/dev/null; \
+	for i in $$(seq 1 30); do \
+		code=$$(curl -sS -o /dev/null -w '%{http_code}' \
+			--resolve "id.cardinal.test:$(CARDINAL_PORT):127.0.0.1" \
+			-H "Authorization: Bearer $$token" \
+			-H 'Content-Type: application/json' \
+			-d "{\"member\":\"$(MEMBER)\"}" \
+			"https://id.cardinal.test:$(CARDINAL_PORT)/api/directory/groups/$(GROUP)/members"); \
+		case "$$code" in \
+			2*|409) exit 0;; \
+			503) sleep 1;; \
+			*) echo "ERROR: granting $(MEMBER) to $(GROUP) returned $$code"; exit 1;; \
+		esac; \
+	done; \
+	echo "ERROR: authorization was still unavailable after 30s"; exit 1
+
+.PHONY: e2e-wait
+e2e-wait: ## Wait until the server answers
+	@# Asked over HTTP rather than by exec'ing into the container, which was the
+	@# previous shape: `exec /bin/sh -c 'exit 0'` cannot work against a
+	@# distroless image — there is no shell in it — so it failed every time and
+	@# the fixed sleep beside it was doing all the waiting.
+	@#
+	@# It matters more than it did. The seed used to reach the database
+	@# directly, which is up as soon as the container is; it now calls the API,
+	@# which is up when the server says so.
+	@for i in $$(seq 1 60); do \
+		code=$$(curl -sS -o /dev/null -w '%{http_code}' \
+			--resolve "id.cardinal.test:$(CARDINAL_PORT):127.0.0.1" \
+			"https://id.cardinal.test:$(CARDINAL_PORT)/api/health" 2>/dev/null || true); \
+		[ "$$code" = 200 ] && exit 0; \
+		sleep 1; \
+	done; \
+	echo "ERROR: the server did not answer within a minute"; exit 1

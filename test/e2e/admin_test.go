@@ -159,7 +159,7 @@ func TestUnauthenticatedAdminAPIIsUnauthorized(t *testing.T) {
 func adminClient(t *testing.T) (*http.Client, string) {
 	t.Helper()
 
-	const token = "e2e-admin-session-token-with-plenty-of-entropy-0123456789"
+	const token = adminSessionToken
 	const login = "e2e-admin"
 
 	seedSQL(t, `INSERT INTO entities (type, name, display_name)
