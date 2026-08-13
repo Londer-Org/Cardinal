@@ -25,6 +25,10 @@ import (
 // adminClient, which seeds the row it refers to.
 const adminSessionToken = "e2e-admin-session-token-with-plenty-of-entropy-0123456789"
 
+// adminLogin is that administrator's name, which the journal records for every
+// change a fixture makes.
+const adminLogin = "e2e-admin"
+
 // grantFixture puts a member in a group, tolerating one that is already there.
 //
 // Re-running a fixture is ordinary — the suite reseeds, and several tests grant

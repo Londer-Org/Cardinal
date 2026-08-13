@@ -13,7 +13,6 @@ import (
 	"go.londer.be/cardinal/internal/cli"
 	"go.londer.be/cardinal/internal/cli/direct"
 	"go.londer.be/cardinal/internal/directory"
-	"go.londer.be/cardinal/internal/directory/temporal"
 	"go.londer.be/cardinal/internal/store"
 )
 
@@ -108,124 +107,6 @@ func runEntityCommand(ctx context.Context, typeWord string, args []string) error
 		fmt.Println("  told about every group — narrow it with `cardinal app groups " +
 			"mode " + e.Name + " owned`")
 	}
-	return nil
-}
-
-func runGrant(ctx context.Context, args []string) error {
-	fs := flag.NewFlagSet("grant", flag.ContinueOnError)
-	forDur := fs.Duration("for", 0, "grant duration, e.g. 72h")
-	until := fs.String("until", "", "end instant, RFC3339")
-	reason := fs.String("reason", "", "why this access was granted")
-	dsnFlag := fs.String("dsn", "", "PostgreSQL connection string")
-	pos, err := cli.Parse(fs, args)
-	if err != nil {
-		return errUsage
-	}
-	if len(pos) != 2 {
-		return fmt.Errorf("%w: cardinal grant <group> <member>", errUsage)
-	}
-	if *forDur != 0 && *until != "" {
-		return fmt.Errorf("%w: -for and -until are mutually exclusive", errUsage)
-	}
-
-	period := temporal.Forever()
-	switch {
-	case *forDur != 0:
-		period = temporal.For(*forDur)
-	case *until != "":
-		t, parseErr := time.Parse(time.RFC3339, *until)
-		if parseErr != nil {
-			return fmt.Errorf("parsing -until: %w", parseErr)
-		}
-		period = temporal.Between(time.Now(), t)
-	}
-	if validateErr := period.Validate(); validateErr != nil {
-		return validateErr
-	}
-
-	s, err := direct.Open(ctx, *dsnFlag)
-	if err != nil {
-		return err
-	}
-	defer s.Close()
-
-	group, err := s.LookupEntity(ctx, directory.TypeGroup, pos[0])
-	if err != nil {
-		return err
-	}
-	member, err := resolveMember(ctx, s, pos[1])
-	if err != nil {
-		return err
-	}
-
-	// Granted by the direct path, which is what happened. This used to record
-	// the member as their own granter — a self-grant no query could tell from a
-	// real one (migration 0035).
-	if err := s.Grant(ctx, temporal.Grant{
-		GroupID:   group.ID,
-		MemberID:  member.ID,
-		Period:    period,
-		GrantedBy: direct.Actor,
-		Reason:    *reason,
-	}, nil); err != nil {
-		return err
-	}
-
-	fmt.Printf("granted %s %s membership of %s %s\n",
-		member.Type, member.Name, group.Type, group.Name)
-	if period.Until == nil {
-		fmt.Printf("  period  from %s, no end\n", period.From.Format(time.RFC3339))
-		fmt.Printf("  note    consider -for or -until; unbounded grants are the ones that get forgotten\n")
-	} else {
-		fmt.Printf("  period  %s\n", period)
-	}
-	return nil
-}
-
-func runRevoke(ctx context.Context, args []string) error {
-	fs := flag.NewFlagSet("revoke", flag.ContinueOnError)
-	at := fs.String("at", "", "revocation instant, RFC3339 (default: now)")
-	dsnFlag := fs.String("dsn", "", "PostgreSQL connection string")
-	pos, err := cli.Parse(fs, args)
-	if err != nil {
-		return errUsage
-	}
-	if len(pos) != 2 {
-		return fmt.Errorf("%w: cardinal revoke <group> <member>", errUsage)
-	}
-
-	when := time.Now().UTC()
-	if *at != "" {
-		t, parseErr := time.Parse(time.RFC3339, *at)
-		if parseErr != nil {
-			return fmt.Errorf("parsing -at: %w", parseErr)
-		}
-		when = t
-	}
-
-	s, err := direct.Open(ctx, *dsnFlag)
-	if err != nil {
-		return err
-	}
-	defer s.Close()
-
-	group, err := s.LookupEntity(ctx, directory.TypeGroup, pos[0])
-	if err != nil {
-		return err
-	}
-	member, err := resolveMember(ctx, s, pos[1])
-	if err != nil {
-		return err
-	}
-
-	if err := s.Revoke(ctx, group.ID, member.ID, when, direct.ActorID()); err != nil {
-		return err
-	}
-
-	fmt.Printf("revoked %s %s from %s at %s\n",
-		member.Type, member.Name, group.Name, when.Format(time.RFC3339))
-	fmt.Printf("  the grant's history is preserved — see `cardinal history %s %s`\n",
-		group.Name, member.Name)
 	return nil
 }
 

@@ -121,7 +121,7 @@ func TestExpiredGrantIsNotMembership(t *testing.T) {
 
 	// Already over. No sleeping, and nothing had a chance to clean up.
 	seedSQL(t, `INSERT INTO group_members (group_id, member_id, granted_by, valid_period, reason)
-	            SELECT g.id, u.id, u.id,
+	            SELECT g.id, u.id, '00000000-0000-7000-8000-0000000000d1',
 	                   tstzrange(now() - interval '2 hours', now() - interval '1 hour'),
 	                   'a fortnight that ended'
 	              FROM entities g, entities u
@@ -259,5 +259,94 @@ func TestReissuingSupersedesTheOldLink(t *testing.T) {
 	}
 	if code := resolves(second); code != http.StatusOK {
 		t.Errorf("the replacement link does not resolve (%d)", code)
+	}
+}
+
+// TestRevokingAtAnInstantTruncatesToThatInstant.
+//
+// `cardinal revoke -at` has always accepted an instant; until the command moved
+// onto the API the endpoint did not, so the flag only worked on the path that
+// opened the database. What it means is worth pinning down in both directions,
+// because the two are not symmetrical and the asymmetry is not obvious:
+//
+//   - An instant in the past shortens the membership to have ended then, which
+//     is the case it exists for — access actually stopped on Friday and somebody
+//     said so on Monday.
+//   - An instant in the future schedules the end rather than being refused. The
+//     revocation is `DELETE FOR PORTION OF valid_period FROM $at TO 'infinity'`,
+//     so the row keeps the portion before $at, and the person stays a member
+//     until then. Measured against this stack, not inferred.
+func TestRevokingAtAnInstantTruncatesToThatInstant(t *testing.T) {
+	c, csrf := adminClient(t)
+
+	const (
+		login = "e2e-revoke-at"
+		group = "e2e-revoke-at-squad"
+	)
+	seedSQL(t, `INSERT INTO entities (type, name) VALUES ('user', '`+login+`')
+	            ON CONFLICT (type, name) DO UPDATE SET disabled_at = NULL`)
+	seedSQL(t, `INSERT INTO entities (type, name) VALUES ('group', '`+group+`')
+	            ON CONFLICT (type, name) DO UPDATE SET disabled_at = NULL`)
+	seedSQL(t, `DELETE FROM group_members
+	             WHERE group_id = (SELECT id FROM entities WHERE name = '`+group+`')`)
+
+	// Starting in the past, so there is something for a past instant to land
+	// inside. A grant made now could only be revoked from now on.
+	seedSQL(t, `INSERT INTO group_members
+	              (group_id, member_id, granted_by, valid_period, reason)
+	            SELECT g.id, u.id, '00000000-0000-7000-8000-0000000000d1',
+	                   tstzrange(now() - interval '3 hours', 'infinity'),
+	                   'started three hours ago'
+	              FROM entities g, entities u
+	             WHERE g.name = '`+group+`' AND u.name = '`+login+`'`)
+
+	future := time.Now().Add(2 * time.Hour).UTC()
+	revoked := requestWithCSRF(t, c, http.MethodDelete,
+		"/api/directory/groups/"+group+"/members/"+login+
+			"?at="+url.QueryEscape(future.Format(time.RFC3339)), csrf)
+	drain(revoked)
+	if revoked.StatusCode != http.StatusNoContent {
+		t.Fatalf("revoking at a future instant returned %d, want 204", revoked.StatusCode)
+	}
+
+	// Still a member: the end was scheduled, not applied.
+	if now := groupMembers(t, c, group); len(now) != 1 {
+		t.Fatalf("revoking at a future instant ended the membership immediately; "+
+			"got %d current members, want 1", len(now))
+	}
+
+	// And gone once that instant passes.
+	upper := seedQuery(t, `
+		SELECT CASE WHEN upper(valid_period) < now() + interval '3 hours'
+		            THEN 'ends' ELSE 'open' END
+		  FROM group_members
+		 WHERE group_id = (SELECT id FROM entities WHERE name = '`+group+`')`)
+	if upper != "ends" {
+		t.Errorf("the period is %q; revoking at an instant should have closed it "+
+			"at that instant rather than leaving it open", upper)
+	}
+
+	// Now the case the flag exists for: an instant in the past.
+	past := time.Now().Add(-1 * time.Hour).UTC()
+	again := requestWithCSRF(t, c, http.MethodDelete,
+		"/api/directory/groups/"+group+"/members/"+login+
+			"?at="+url.QueryEscape(past.Format(time.RFC3339)), csrf)
+	drain(again)
+	if again.StatusCode != http.StatusNoContent {
+		t.Fatalf("revoking at a past instant returned %d, want 204", again.StatusCode)
+	}
+	if now := groupMembers(t, c, group); len(now) != 0 {
+		t.Errorf("still a member after being revoked as of an hour ago: %+v", now)
+	}
+
+	// The two hours they genuinely held it are still recorded.
+	held := seedQuery(t, `
+		SELECT CASE WHEN valid_period @> (now() - interval '2 hours')
+		            THEN 'recorded' ELSE 'lost' END
+		  FROM group_members
+		 WHERE group_id = (SELECT id FROM entities WHERE name = '`+group+`')`)
+	if held != "recorded" {
+		t.Errorf("the membership before the revocation instant is %q; back-dating "+
+			"a revocation must shorten the period, not erase it", held)
 	}
 }

@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
-	"os/exec"
 	"strings"
 	"testing"
 )
@@ -46,21 +45,11 @@ func scimToken(t *testing.T) string {
 
 // grantProvisioner puts the token owner in the group the shipped rule names.
 //
-// Tolerant of already being a member: an existing grant is an overlap, which is
-// the temporal model refusing to record two truths about one period rather than
-// an error worth failing a test over. Every test here needs the membership and
-// only the first one creates it.
+// Through the API, because that is where granting lives: the CLI signs in now,
+// and a fixture cannot produce the device-bound passkey it would ask for.
 func grantProvisioner(t *testing.T) {
 	t.Helper()
-
-	full := append([]string{
-		"compose", "-f", "../../examples/compose.yml",
-		"exec", "-T", "cardinal", "cardinal",
-	}, "grant", "provisioners", tokenOwnerLogin, "-reason", "e2e scim")
-	out, err := exec.CommandContext(t.Context(), "docker", full...).CombinedOutput()
-	if err != nil && !strings.Contains(string(out), "already exists") {
-		t.Fatalf("granting provisioners: %v\n%s", err, out)
-	}
+	grantFixture(t, "provisioners", tokenOwnerLogin, "e2e scim")
 }
 
 func scimRequest(

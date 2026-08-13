@@ -160,14 +160,15 @@ func adminClient(t *testing.T) (*http.Client, string) {
 	t.Helper()
 
 	const token = adminSessionToken
-	const login = "e2e-admin"
+	const login = adminLogin
 
 	seedSQL(t, `INSERT INTO entities (type, name, display_name)
 	            VALUES ('user', '`+login+`', 'End-to-end Administrator')
 	            ON CONFLICT (type, name) DO UPDATE SET disabled_at = NULL`)
 
 	seedSQL(t, `INSERT INTO group_members (group_id, member_id, granted_by, valid_period)
-	            SELECT '`+adminGroupID+`', e.id, e.id, tstzrange(now(), 'infinity')
+	            SELECT '`+adminGroupID+`', e.id,
+	                   '00000000-0000-7000-8000-0000000000d1', tstzrange(now(), 'infinity')
 	              FROM entities e WHERE e.name = '`+login+`'
 	            ON CONFLICT DO NOTHING`)
 

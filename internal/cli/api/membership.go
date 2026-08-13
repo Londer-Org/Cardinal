@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"net/http"
 	"net/url"
 	"time"
 )
@@ -83,4 +84,26 @@ func atQuery(at time.Time) string {
 		return ""
 	}
 	return "?" + url.Values{"at": {at.UTC().Format(time.RFC3339)}}.Encode()
+}
+
+// GrantRequest is a membership being made.
+//
+// Until is a pointer because absent and "no end" are the same thing to the
+// server, and a zero timestamp is not: sending one would ask for a grant that
+// expired in the year zero.
+type GrantRequest struct {
+	Member string     `json:"member"`
+	Until  *time.Time `json:"until,omitempty"`
+	Reason string     `json:"reason,omitempty"`
+}
+
+// Grant adds somebody to a group.
+func (c *Client) Grant(ctx context.Context, group string, req GrantRequest) error {
+	return c.post(ctx, "/api/directory/groups/"+escape(group)+"/members", req, nil)
+}
+
+// Revoke ends a membership, keeping its history. The zero time means now.
+func (c *Client) Revoke(ctx context.Context, group, member string, at time.Time) error {
+	return c.send(ctx, http.MethodDelete,
+		"/api/directory/groups/"+escape(group)+"/members/"+escape(member)+atQuery(at), nil)
 }

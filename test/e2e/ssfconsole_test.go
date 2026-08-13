@@ -45,7 +45,8 @@ func asAdministrator(t *testing.T) {
 	t.Helper()
 
 	seedSQL(t, `INSERT INTO group_members (group_id, member_id, granted_by, valid_period, reason)
-	            SELECT '00000000-0000-7000-8000-00000000ad11', e.id, e.id,
+	            SELECT '00000000-0000-7000-8000-00000000ad11', e.id,
+	                   '00000000-0000-7000-8000-0000000000d1',
 	                   tstzrange(now(), 'infinity'), 'configuring security event streams'
 	              FROM entities e WHERE e.name = 'e2e-user'
 	            ON CONFLICT DO NOTHING`)
