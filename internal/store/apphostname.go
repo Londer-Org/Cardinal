@@ -113,58 +113,11 @@ func (s *Store) RemoveApplicationHostname(
 	})
 }
 
-// ListApplicationHostnames returns the hostnames an application answers to.
-func (s *Store) ListApplicationHostnames(
-	ctx context.Context, entityID uuid.UUID,
-) ([]string, error) {
-	rows, err := s.pool.Query(ctx,
-		`SELECT hostname FROM application_hostnames
-		  WHERE entity_id = $1 ORDER BY hostname`, entityID)
-	if err != nil {
-		return nil, fmt.Errorf("store: listing application hostnames: %w", err)
-	}
-	defer rows.Close()
-
-	out := []string{}
-	for rows.Next() {
-		var name string
-		if err := rows.Scan(&name); err != nil {
-			return nil, fmt.Errorf("store: scanning application hostname: %w", err)
-		}
-		out = append(out, name)
-	}
-	return out, rows.Err()
-}
-
 // ApplicationHostname is one mapping, for a listing that spans applications.
 type ApplicationHostname struct {
 	Hostname        string
 	ApplicationID   uuid.UUID
 	ApplicationName string
-}
-
-// AllApplicationHostnames returns every mapping, for `cardinal app hostname
-// list` with no application named and for the console.
-func (s *Store) AllApplicationHostnames(ctx context.Context) ([]ApplicationHostname, error) {
-	rows, err := s.pool.Query(ctx, `
-		SELECT h.hostname, h.entity_id, e.name
-		  FROM application_hostnames h
-		  JOIN entities e ON e.id = h.entity_id
-		 ORDER BY e.name, h.hostname`)
-	if err != nil {
-		return nil, fmt.Errorf("store: listing application hostnames: %w", err)
-	}
-	defer rows.Close()
-
-	out := []ApplicationHostname{}
-	for rows.Next() {
-		var h ApplicationHostname
-		if err := rows.Scan(&h.Hostname, &h.ApplicationID, &h.ApplicationName); err != nil {
-			return nil, fmt.Errorf("store: scanning application hostname: %w", err)
-		}
-		out = append(out, h)
-	}
-	return out, rows.Err()
 }
 
 // ApplicationEntry is an application as the console lists them.

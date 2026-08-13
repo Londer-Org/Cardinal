@@ -2,7 +2,6 @@ package api
 
 import (
 	"context"
-	"net/http"
 	"net/url"
 	"time"
 )
@@ -104,6 +103,5 @@ func (c *Client) Grant(ctx context.Context, group string, req GrantRequest) erro
 
 // Revoke ends a membership, keeping its history. The zero time means now.
 func (c *Client) Revoke(ctx context.Context, group, member string, at time.Time) error {
-	return c.send(ctx, http.MethodDelete,
-		"/api/directory/groups/"+escape(group)+"/members/"+escape(member)+atQuery(at), nil)
+	return c.del(ctx, "/api/directory/groups/"+escape(group)+"/members/"+escape(member)+atQuery(at), nil)
 }

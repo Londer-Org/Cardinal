@@ -146,7 +146,31 @@ func (s *Server) handleAddApplicationHostname(w http.ResponseWriter, r *http.Req
 	s.log.InfoContext(ctx, "application hostname added",
 		"application", app.Name, "hostname", req.Hostname, "actor", session.SubjectID)
 
-	w.WriteHeader(http.StatusNoContent)
+	// Registering a hostname makes an application findable; it does not make it
+	// reachable. The shipped policy set admits people through group membership
+	// and ships with staff-apps empty on purpose, so an application in no group
+	// answers 403 to everybody — which looks exactly like a broken setup.
+	//
+	// Reported rather than left to the caller to go and check, because both
+	// callers would have to: the CLI said this in prose and the console said
+	// nothing at all.
+	admitted := true
+	memberships, err := s.store.ResolveMemberships(ctx, app.ID, time.Time{})
+	if err != nil {
+		// Not fatal. The hostname is registered either way, and refusing to
+		// answer because an advisory lookup failed would be worse than a
+		// missing note.
+		s.log.WarnContext(ctx, "could not tell whether the application is in any group",
+			"application", app.Name, "error", err)
+	} else {
+		admitted = len(memberships) > 0
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"application": app.Name,
+		"hostname":    req.Hostname,
+		"inAnyGroup":  admitted,
+	})
 }
 
 // handleSetApplicationEnabled retires an application, or brings one back.
@@ -303,7 +327,7 @@ func (s *Server) handleRegisterApplication(w http.ResponseWriter, r *http.Reques
 			return
 		}
 		if createErr := s.store.CreateEntity(ctx, entity, &actorID); createErr != nil {
-			writeError(w, http.StatusBadRequest, createErr.Error())
+			writeCreationError(w, createErr)
 			return
 		}
 
@@ -341,7 +365,7 @@ func (s *Server) handleRegisterApplication(w http.ResponseWriter, r *http.Reques
 		// Registration refusals are the operator's to fix — a bad redirect URI,
 		// a name already taken, a domain Cardinal must not be the IdP for — so
 		// the reason is passed through rather than flattened to "invalid".
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeCreationError(w, err)
 		return
 	}
 

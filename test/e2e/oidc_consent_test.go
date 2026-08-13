@@ -300,17 +300,14 @@ func registerConsentClient(t *testing.T) string {
 
 	const name = "consent-required-client"
 
-	if !strings.Contains(cardinalCLI(t, "app", "list"), name) {
-		out, err := exec.CommandContext(t.Context(), "docker", "compose", "-f", "../../examples/compose.yml",
-			"exec", "-T", "cardinal", "cardinal", "app", "register", name,
-			"-redirect", origin(hostRP)+"/callback",
-			"-dev-mode",
-			"-consent",
-			"-scopes", "openid,profile,email",
-			"-config", "/etc/cardinal/cardinal.toml").CombinedOutput()
-		if err != nil {
-			t.Fatalf("registering consent client: %v\n%s", err, out)
-		}
+	if !appExistsFixture(t, name) {
+		registerAppFixture(t, map[string]any{
+			"name":           name,
+			"redirectUris":   []string{origin(hostRP) + "/callback"},
+			"devMode":        true,
+			"requireConsent": true,
+			"scopes":         []string{"openid", "profile", "email"},
+		})
 	}
 
 	repointClient(t, name)

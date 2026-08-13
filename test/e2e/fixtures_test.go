@@ -2,8 +2,11 @@ package e2e
 
 import (
 	"context"
+	"encoding/json"
+	"io"
 	"net"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 )
@@ -117,6 +120,42 @@ func revokeAfterwards(group, member string) {
 	_ = resp.Body.Close() //nolint:errcheck // best effort cleanup
 }
 
+// projectionAfterwards restores an application's projection from a t.Cleanup,
+// for the same reason revokeAfterwards exists: a cleanup runs after t.Context()
+// has been cancelled.
+func projectionAfterwards(app, mode string) {
+	body := strings.NewReader(`{"mode":"` + mode + `"}`)
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodPut,
+		origin(hostCardinal)+"/api/applications/"+app+"/projection", body)
+	if err != nil {
+		return
+	}
+	req.Header.Set("Authorization", "Bearer "+adminSessionToken)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := cleanupClient.Do(req)
+	if err != nil {
+		return
+	}
+	_ = resp.Body.Close() //nolint:errcheck // best effort cleanup
+}
+
+// sightAfterwards withdraws an allowance from a t.Cleanup.
+func sightAfterwards(app, group string) {
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodDelete,
+		origin(hostCardinal)+"/api/applications/"+app+"/projection/groups/"+group, nil)
+	if err != nil {
+		return
+	}
+	req.Header.Set("Authorization", "Bearer "+adminSessionToken)
+
+	resp, err := cleanupClient.Do(req)
+	if err != nil {
+		return
+	}
+	_ = resp.Body.Close() //nolint:errcheck // best effort cleanup
+}
+
 // createFixture makes an entity, tolerating one that is already there.
 //
 // Through the API for the same reason grantFixture is: creating an entity signs
@@ -198,4 +237,97 @@ func plural(typeWord string) string {
 	default:
 		return typeWord + "s"
 	}
+}
+
+// registerAppFixture registers an application, returning its client id and
+// secret. Both are empty for an application with no redirect URIs, which is a
+// whole category rather than a failure.
+//
+// Unlike the others this does not tolerate an existing name: the secret is
+// shown exactly once, so a caller that needs one needs the registration to have
+// happened. Callers that only need the application to exist check first.
+func registerAppFixture(t *testing.T, body map[string]any) (clientID, secret string) {
+	t.Helper()
+
+	c, csrf := adminClient(t)
+	resp, err := c.Do(jsonRequest(t, http.MethodPost, "/api/applications", csrf, body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer drain(resp)
+
+	if resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusOK {
+		t.Fatalf("registering %v returned %d", body["name"], resp.StatusCode)
+	}
+
+	var out struct {
+		ClientID string `json:"clientId"`
+		Secret   string `json:"secret"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		t.Fatalf("reading the registration: %v", err)
+	}
+	return out.ClientID, out.Secret
+}
+
+// appExistsFixture reports whether an application is registered, so a caller
+// can skip a registration whose one-time secret it does not need.
+func appExistsFixture(t *testing.T, name string) bool {
+	t.Helper()
+
+	c, _ := adminClient(t)
+	resp := request(t, c, http.MethodGet, hostCardinal, "/api/applications", "application/json")
+	defer drain(resp)
+
+	var apps []struct {
+		Name string `json:"name"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&apps); err != nil {
+		t.Fatalf("listing applications: %v", err)
+	}
+	for _, a := range apps {
+		if a.Name == name {
+			return true
+		}
+	}
+	return false
+}
+
+// projectionModeFixture sets which groups an application is told about.
+func projectionModeFixture(t *testing.T, app, mode string) {
+	t.Helper()
+
+	c, csrf := adminClient(t)
+	resp, err := c.Do(jsonRequest(t, http.MethodPut,
+		"/api/applications/"+app+"/projection", csrf, map[string]string{"mode": mode}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer drain(resp)
+
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {
+		t.Fatalf("setting %s to %s mode returned %d", app, mode, resp.StatusCode)
+	}
+}
+
+// sightFixture grants or withdraws an application's sight of a group it does
+// not own, returning the status so a test asserting a refusal can read it.
+func sightFixture(t *testing.T, app, group string, allow bool) (int, string) {
+	t.Helper()
+
+	c, csrf := adminClient(t)
+	method := http.MethodPost
+	if !allow {
+		method = http.MethodDelete
+	}
+
+	resp, err := c.Do(jsonRequest(t, method,
+		"/api/applications/"+app+"/projection/groups/"+group, csrf, nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer drain(resp)
+
+	body, _ := io.ReadAll(resp.Body) //nolint:errcheck // the status is the assertion; the body is context for it
+	return resp.StatusCode, string(body)
 }

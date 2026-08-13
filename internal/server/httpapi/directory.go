@@ -251,18 +251,7 @@ func (s *Server) handleCreateUser(w http.ResponseWriter, r *http.Request) {
 
 	actorID := session.SubjectID
 	if err := s.store.CreateEntity(ctx, entity, &actorID); err != nil {
-		// Distinguished rather than flattened, and by status as well as by
-		// message: a name already taken is a conflict a caller can retry around
-		// or ignore, and a name that is not valid is one it must not. Every
-		// other type answers this way, and a users endpoint that did not would
-		// make "already exists" indistinguishable from a rejected name to
-		// anything reading the code alone.
-		switch {
-		case errors.Is(err, directory.ErrAlreadyExists):
-			writeError(w, http.StatusConflict, err.Error())
-		default:
-			writeError(w, http.StatusBadRequest, err.Error())
-		}
+		writeCreationError(w, err)
 		return
 	}
 

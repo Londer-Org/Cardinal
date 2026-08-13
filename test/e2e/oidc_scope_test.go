@@ -80,17 +80,14 @@ func registerNarrowClient(t *testing.T) string {
 
 	const name = "narrow-scope-client"
 
-	if !strings.Contains(cardinalCLI(t, "app", "list"), name) {
-		out, err := exec.CommandContext(t.Context(), "docker", "compose", "-f", "../../examples/compose.yml",
-			"exec", "-T", "cardinal", "cardinal", "app", "register", name,
-			"-redirect", origin(hostRP)+"/callback",
-			"-dev-mode",
+	if !appExistsFixture(t, name) {
+		registerAppFixture(t, map[string]any{
+			"name":         name,
+			"redirectUris": []string{origin(hostRP) + "/callback"},
+			"devMode":      true,
 			// Deliberately no offline_access.
-			"-scopes", "openid,profile",
-			"-config", "/etc/cardinal/cardinal.toml").CombinedOutput()
-		if err != nil {
-			t.Fatalf("registering narrow client: %v\n%s", err, out)
-		}
+			"scopes": []string{"openid", "profile"},
+		})
 	}
 
 	repointClient(t, name)

@@ -428,10 +428,9 @@ e2e-seed: ## Create the end-to-end user and activate the policy set
 	@# what the stack looked like before this existed.
 	@$(MAKE) --no-print-directory e2e-entity KIND=applications \
 		NAME=protected-app DISPLAY='Protected App'
-	@$(COMPOSE_E2E) exec -T cardinal \
-		cardinal app hostname add protected-app app.cardinal.test 2>&1 \
-		| grep -qE 'answers for|already holds' \
-		|| { echo 'ERROR: could not register app.cardinal.test'; exit 1; }
+	@$(MAKE) --no-print-directory e2e-api \
+		APIPATH=/api/applications/protected-app/hostnames \
+		BODY='{"hostname":"app.cardinal.test"}'
 	@# Into staff-apps, which is what the shipped staff-web-access rule permits.
 	@# Empty on a fresh install on purpose: registering an application makes it
 	@# findable, and this is the deliberate act that makes it reachable.
@@ -453,13 +452,8 @@ e2e-seed: ## Create the end-to-end user and activate the policy set
 	@# Registered as a relying party rather than created as a bare application:
 	@# a stream's audience is an OIDC client id, so the receiver needs one. Its
 	@# redirect URI is never used — nobody signs in to a receiver.
-	@$(COMPOSE_E2E) exec -T cardinal \
-		cardinal app register ssf-receiver \
-		-redirect https://events.cardinal.test/unused 2>&1 \
-		| grep -qE 'client_id|already exists' \
-		|| { echo 'ERROR: could not register the receiver'; \
-		     $(COMPOSE_E2E) exec -T cardinal cardinal app register ssf-receiver \
-		       -redirect https://events.cardinal.test/unused; exit 1; }
+	@$(MAKE) --no-print-directory e2e-api APIPATH=/api/applications \
+		BODY='{"name":"ssf-receiver","redirectUris":["https://events.cardinal.test/unused"]}'
 	@$(COMPOSE_E2E) exec -T cardinal \
 		cardinal ssf stream add ssf-receiver \
 		-endpoint https://events.cardinal.test:$(CARDINAL_PORT)/events >/dev/null 2>&1 \
@@ -507,12 +501,8 @@ e2e-seed-oidc: ## Register the relying party and start it with its client id
 		   FROM oidc_clients c JOIN entities e ON e.id = c.entity_id \
 		  WHERE e.name = 'e2e-client'" 2>/dev/null | tr -d ' \r\n'); \
 	if [ -z "$$have" ]; then \
-		$(COMPOSE_E2E) exec -T cardinal cardinal app register e2e-client \
-			-display 'End-to-end relying party' \
-			-redirect "$$want" \
-			-dev-mode \
-			-scopes 'openid,profile,email,groups,offline_access' \
-			-config /etc/cardinal/cardinal.toml >/dev/null; \
+		$(MAKE) --no-print-directory e2e-api APIPATH=/api/applications \
+			BODY="{\"name\":\"e2e-client\",\"displayName\":\"End-to-end relying party\",\"redirectUris\":[\"$$want\"],\"devMode\":true,\"scopes\":[\"openid\",\"profile\",\"email\",\"groups\",\"offline_access\"]}"; \
 	elif [ "$$have" != "$$want" ]; then \
 		echo "  redirect URI was $$have — pointing it at $(CARDINAL_PORT)"; \
 		$(COMPOSE_E2E) exec -T postgres psql -U cardinal -d cardinal -q -c \

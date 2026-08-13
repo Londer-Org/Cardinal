@@ -85,14 +85,7 @@ func (s *Server) handleCreateEntity(kind directory.Type) http.HandlerFunc {
 
 		actorID := session.SubjectID
 		if err := s.store.CreateEntity(ctx, entity, &actorID); err != nil {
-			// Distinguished rather than flattened: a name already taken and a
-			// name that is not valid send the operator to different places.
-			switch {
-			case errors.Is(err, directory.ErrAlreadyExists):
-				writeError(w, http.StatusConflict, err.Error())
-			default:
-				writeError(w, http.StatusBadRequest, err.Error())
-			}
+			writeCreationError(w, err)
 			return
 		}
 
@@ -205,4 +198,20 @@ func (s *Server) handleSetAvailability(kind directory.Type, enable bool) http.Ha
 			TokensRevoked:   tokens,
 		})
 	}
+}
+
+// writeCreationError answers a failed creation.
+//
+// One helper because the distinction kept being made in some places and not
+// others: a name already taken is a conflict, which a caller can retry around
+// or treat as the state it asked for, and a name that is not allowed is a bad
+// request it must not retry. Answering 400 for both makes them the same event
+// to anything that is not reading the sentence, which seeding scripts and the
+// console's error handling are not.
+func writeCreationError(w http.ResponseWriter, err error) {
+	if errors.Is(err, directory.ErrAlreadyExists) {
+		writeError(w, http.StatusConflict, err.Error())
+		return
+	}
+	writeError(w, http.StatusBadRequest, err.Error())
 }

@@ -298,3 +298,63 @@ func authorizationID(t *testing.T, c *http.Client, clientID, scope string) strin
 	}
 	return id
 }
+
+// TestRegisteringAHostnameSaysWhetherItAdmitsAnybody.
+//
+// Registering a hostname makes an application findable. It does not make it
+// reachable: the shipped policy set admits people through group membership and
+// ships with staff-apps empty on purpose, so an application in no group refuses
+// everybody — which looks exactly like a broken proxy.
+//
+// The CLI said so in prose by asking the database afterwards. The console said
+// nothing, and the same person would hit the same 403 from either. It is a
+// field on the response now, so both surfaces can say it and neither has to
+// know how to work it out.
+func TestRegisteringAHostnameSaysWhetherItAdmitsAnybody(t *testing.T) {
+	const app = "e2e-hostname-note"
+
+	seedSQL(t, `DELETE FROM application_hostnames
+	             WHERE entity_id IN (SELECT id FROM entities
+	                                       WHERE type = 'application' AND name = '`+app+`')`)
+	seedSQL(t, `DELETE FROM group_members
+	             WHERE member_id IN (SELECT id FROM entities
+	                                  WHERE type = 'application' AND name = '`+app+`')`)
+	createFixture(t, "application", app)
+
+	c, csrf := adminClient(t)
+
+	added := func(hostname string) bool {
+		t.Helper()
+		resp, err := c.Do(jsonRequest(t, http.MethodPost,
+			"/api/applications/"+app+"/hostnames", csrf,
+			map[string]string{"hostname": hostname}))
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer drain(resp)
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("registering %s returned %d", hostname, resp.StatusCode)
+		}
+		var body struct {
+			InAnyGroup bool `json:"inAnyGroup"`
+		}
+		if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+			t.Fatal(err)
+		}
+		return body.InAnyGroup
+	}
+
+	if added("e2e-note-first.cardinal.test") {
+		t.Error("an application in no group was reported as admitting somebody, " +
+			"so nothing warns the person who registered it that every request " +
+			"there will be refused")
+	}
+
+	grantFixture(t, "staff-apps", app, "e2e hostname note")
+
+	if !added("e2e-note-second.cardinal.test") {
+		t.Error("an application in staff-apps was reported as admitting nobody, " +
+			"so the warning fires on a setup that is correct — which is how a " +
+			"warning stops being read")
+	}
+}
