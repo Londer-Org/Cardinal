@@ -29,7 +29,9 @@ old image.
   the request came from, and approves it.
 
   The CLI picks a flow and says which: loopback where the browser can reach this
-  machine, the code otherwise.
+  machine, the code otherwise. `-auth loopback|device` forces either, for the
+  cases a heuristic cannot see — a multiplexer outliving the SSH session it was
+  started from, a remote desktop where the browser really is here.
 
   **What the new flow gives up, stated because it matters.** Loopback approval
   is delivered to the machine that asked, so nobody can talk you into approving

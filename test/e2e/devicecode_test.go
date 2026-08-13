@@ -356,3 +356,44 @@ func clientCLIBriefly(t *testing.T, within time.Duration, args ...string) string
 	out, _ := exec.CommandContext(ctx, "docker", full...).CombinedOutput() //nolint:errcheck // stopped on purpose
 	return string(out)
 }
+
+// TestTheSignInFlowCanBeForced.
+//
+// The heuristic is right often enough that most people never set this, and it
+// cannot see everything: a multiplexer outliving the SSH session it was started
+// from, a remote desktop where the browser really is here.
+//
+// Both directions are asserted, because a flag that only ever agrees with the
+// default is a flag that proves nothing.
+func TestTheSignInFlowCanBeForced(t *testing.T) {
+	forgetCachedSession(t)
+
+	// The container has no browser, so the default is the device code.
+	if out := clientCLIBriefly(t, 6*time.Second, "members", "engineers"); !strings.Contains(out, "code:") {
+		t.Errorf("the default did not choose the device code here:\n%s", out)
+	}
+
+	// Forced the other way it tries loopback regardless, which is the point:
+	// the heuristic is a default and not a decision.
+	out := clientCLIBriefly(t, 6*time.Second, "members", "engineers", "-auth", "loopback")
+	if !strings.Contains(out, "approve this terminal at") {
+		t.Errorf("-auth loopback did not use the loopback handoff:\n%s", out)
+	}
+	if strings.Contains(out, "code:") {
+		t.Errorf("-auth loopback fell back to the device code anyway:\n%s", out)
+	}
+}
+
+// TestAnUnknownFlowIsRefused.
+//
+// Rather than falling back to the default, which would make a typo look like it
+// worked and leave somebody believing they had forced something.
+func TestAnUnknownFlowIsRefused(t *testing.T) {
+	out, err := clientCLIRaw(t, "members", "engineers", "-auth", "sideways")
+	if err == nil {
+		t.Fatalf("an unknown flow was accepted:\n%s", out)
+	}
+	if !strings.Contains(out, "loopback") || !strings.Contains(out, "device") {
+		t.Errorf("the refusal does not say what the choices are:\n%s", out)
+	}
+}
