@@ -331,3 +331,28 @@ func sightFixture(t *testing.T, app, group string, allow bool) (int, string) {
 	body, _ := io.ReadAll(resp.Body) //nolint:errcheck // the status is the assertion; the body is context for it
 	return resp.StatusCode, string(body)
 }
+
+// posixFixture gives a user or group a number, tolerating one that has it.
+//
+// Idempotent on both sides: a number cannot change once allocated, so the
+// endpoints answer with the existing one rather than refusing.
+func posixFixture(t *testing.T, kind, name string) {
+	t.Helper()
+
+	c, csrf := adminClient(t)
+
+	path := "/api/directory/users/" + name + "/posix"
+	if kind == "group" {
+		path = "/api/directory/groups/" + name + "/posix"
+	}
+
+	resp, err := c.Do(jsonRequest(t, http.MethodPut, path, csrf, map[string]any{}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer drain(resp)
+
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
+		t.Fatalf("assigning a number to %s %s returned %d", kind, name, resp.StatusCode)
+	}
+}

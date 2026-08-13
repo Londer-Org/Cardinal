@@ -56,13 +56,12 @@ func TestUserGetsHomeAndShellAndAGroupDoesNot(t *testing.T) {
 	assert.Equal(t, "/home/alice", aliceID.HomeDirectory)
 	assert.Equal(t, store.DefaultLoginShell, aliceID.LoginShell)
 
-	// A user's primary group is their own number — user-private groups, which
-	// is what useradd has done on every mainstream distribution for twenty
-	// years. The alternative, one shared primary group, makes every file
-	// group-readable by the whole company by default.
-	name, gid := aliceID.PrimaryGroup()
-	assert.Equal(t, "alice", name)
-	assert.Equal(t, aliceID.Number, gid)
+	// The user-private group — same name, same number — is asserted where it is
+	// synthesised rather than here. This package used to carry a PrimaryGroup
+	// helper returning the two fields it was handed, and a test of it compared
+	// a number to itself. What decides the primary gid on a machine is
+	// internal/host/agent and the assignment endpoint, and both have tests
+	// that check it against a real `id`.
 
 	sreID, err := s.AssignPOSIXIdentity(ctx, sre.ID, testRange, nil)
 	require.NoError(t, err)

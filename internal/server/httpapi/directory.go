@@ -389,6 +389,18 @@ func (s *Server) handleGetGroup(w http.ResponseWriter, r *http.Request) {
 		"owner":       owner,
 		"members":     describeGrants(members),
 	}
+
+	// The gid, when it has one. Absent for most groups: a group needs a number
+	// only if a host has to resolve it, so having none is the ordinary case
+	// rather than something missing. Nothing could read it here before, which
+	// left a group with a gid looking exactly like a group without one.
+	if identity, posixErr := s.store.POSIXIdentityFor(ctx, entity.ID); posixErr == nil {
+		body["posix"] = map[string]any{
+			"gid":           identity.Number,
+			"firstServedAt": identity.FirstServedAt,
+			"adoptable":     identity.Adoptable(),
+		}
+	}
 	// Echoed so a caller can tell an answer about March from an answer about
 	// now, which otherwise look identical.
 	if !at.IsZero() {

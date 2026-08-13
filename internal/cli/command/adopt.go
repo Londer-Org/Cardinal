@@ -1,4 +1,4 @@
-package main
+package command
 
 import (
 	"context"
@@ -7,6 +7,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"slices"
 	"sort"
@@ -14,10 +15,9 @@ import (
 	"strings"
 
 	"go.londer.be/cardinal/internal/cli"
-	"go.londer.be/cardinal/internal/cli/direct"
-	"go.londer.be/cardinal/internal/directory"
+	"go.londer.be/cardinal/internal/cli/api"
+	"go.londer.be/cardinal/internal/cli/auth"
 	"go.londer.be/cardinal/internal/host/shadow"
-	"go.londer.be/cardinal/internal/store"
 )
 
 // Adopting the numbers a fleet already uses.
@@ -65,16 +65,17 @@ func (c *claim) describe() string {
 	return strings.Join(parts, "; ")
 }
 
-func runAdopt(ctx context.Context, args []string) error {
+// Adopt takes the numbers a fleet already uses, one person or a pile of shadow
+// reports at a time.
+func Adopt(ctx context.Context, server string, flow cli.AuthFlow, args []string) error {
 	fs := flag.NewFlagSet("posix adopt", flag.ContinueOnError)
 	from := fs.String("from", "",
 		"shadow report(s) to read, comma-separated; - for standard input")
 	yes := fs.Bool("yes", false, "apply the changes rather than only showing them")
-	dsnFlag := fs.String("dsn", "", "PostgreSQL connection string")
 
-	pos, err := cli.Parse(fs, args)
+	pos, err := parse(fs, args)
 	if err != nil {
-		return errUsage
+		return cli.ErrUsage
 	}
 
 	// Two shapes: one person by hand, or a pile of reports collected from the
@@ -98,7 +99,7 @@ func runAdopt(ctx context.Context, args []string) error {
 		claims[pos[0]] = c
 	default:
 		return fmt.Errorf("%w: cardinal posix adopt <user> <number>\n"+
-			"       cardinal posix adopt -from report.json[,report.json...]", errUsage)
+			"       cardinal posix adopt -from report.json[,report.json...]", cli.ErrUsage)
 	}
 
 	if len(claims) == 0 {
@@ -112,13 +113,12 @@ func runAdopt(ctx context.Context, args []string) error {
 		return refuseContradictionsErr
 	}
 
-	s, err := direct.Open(ctx, *dsnFlag)
+	client, err := cli.Client(ctx, server, flow)
 	if err != nil {
 		return err
 	}
-	defer s.Close()
 
-	return applyClaims(ctx, s, claims, *yes)
+	return applyClaims(ctx, client, claims, *yes)
 }
 
 // readReports collects the blocking uid findings from shadow reports.
@@ -201,7 +201,7 @@ func refuseContradictions(claims map[string]*claim) error {
 }
 
 // applyClaims shows the changes, and makes them only when asked.
-func applyClaims(ctx context.Context, s *store.Store, claims map[string]*claim, apply bool) error {
+func applyClaims(ctx context.Context, client *api.Client, claims map[string]*claim, apply bool) error {
 	names := make([]string, 0, len(claims))
 	for name := range claims {
 		names = append(names, name)
@@ -220,33 +220,45 @@ func applyClaims(ctx context.Context, s *store.Store, claims map[string]*claim, 
 	for _, name := range names {
 		number, hosts := claims[name].only()
 
-		entity, err := s.LookupEntity(ctx, directory.TypeUser, name)
+		// One request per person rather than a listing filtered afterwards,
+		// because the two ways this can come to nothing need different things
+		// done about them: a name absent from the directory is an account to
+		// create, and one present without a number is an assign away.
+		current, has, err := client.UserPOSIX(ctx, name)
 		if err != nil {
-			fmt.Printf("  %-20s no such user in the directory\n", name)
-			missing++
-			continue
-		}
-
-		current, err := s.POSIXIdentityFor(ctx, entity.ID)
-		if err != nil {
-			if errors.Is(err, store.ErrNoPOSIXIdentity) {
-				fmt.Printf("  %-20s has no POSIX identity yet — run "+
-					"`cardinal posix assign user %s` first\n", name, name)
+			var refused *auth.Refused
+			if errors.As(err, &refused) && refused.Status == http.StatusNotFound {
+				fmt.Printf("  %-20s no such user in the directory\n", name)
 				missing++
 				continue
 			}
 			return err
+		}
+		if !has {
+			fmt.Printf("  %-20s has no POSIX identity yet — run "+
+				"`cardinal posix assign user %s` first\n", name, name)
+			missing++
+			continue
 		}
 
 		if current.Number == number {
 			continue
 		}
 
-		if !current.Adoptable() {
+		if !current.Adoptable {
+			served++
+			if current.FirstServedAt == nil {
+				// Not adoptable and no date to give for it. Nothing produces
+				// this today — the two travel together — so it is reported
+				// rather than formatted around, which would print 1 January
+				// year one and read like a real answer.
+				fmt.Printf("  %-20s %d → %d  REFUSED: already served to a host\n",
+					name, current.Number, number)
+				continue
+			}
 			fmt.Printf("  %-20s %d → %d  REFUSED: served to a host on %s\n",
 				name, current.Number, number,
 				current.FirstServedAt.UTC().Format("2006-01-02"))
-			served++
 			continue
 		}
 
@@ -255,7 +267,7 @@ func applyClaims(ctx context.Context, s *store.Store, claims map[string]*claim, 
 		changes++
 
 		if apply {
-			if err := s.AdoptPOSIXNumber(ctx, entity.ID, number, direct.ActorID()); err != nil {
+			if _, err := client.AdoptPOSIX(ctx, name, number); err != nil {
 				return fmt.Errorf("adopting %s: %w", name, err)
 			}
 		}

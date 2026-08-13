@@ -184,9 +184,16 @@ func (s *Server) handleUpdateUserProfile(w http.ResponseWriter, r *http.Request)
 	})
 }
 
+// posixRequest carries the two settings that are not the number.
+//
+// Pointers, so an absent field can be told from an empty one. Absent means
+// unchanged: a request that set only the home directory used to reach a store
+// call requiring both, which refused, which arrived as a 500 — an operator
+// error reported as a fault in Cardinal. An empty string is still refused,
+// because clearing a login shell is not something to do by omission.
 type posixRequest struct {
-	HomeDirectory string `json:"homeDirectory"`
-	LoginShell    string `json:"loginShell"`
+	HomeDirectory *string `json:"homeDirectory"`
+	LoginShell    *string `json:"loginShell"`
 }
 
 // handleAssignPOSIX gives somebody a uid, or edits what comes with it.
@@ -213,14 +220,23 @@ func (s *Server) handleAssignPOSIX(w http.ResponseWriter, r *http.Request) {
 	}
 
 	actorID := session.SubjectID
-	_, err = s.store.POSIXIdentityFor(ctx, entity.ID)
+	current, err := s.store.POSIXIdentityFor(ctx, entity.ID)
 	switch {
 	case err == nil:
-		// Already has a number: this is an edit of what comes with it.
+		// Already has a number: this is an edit of what comes with it, and
+		// what the request does not mention keeps the value it has.
+		home, shell := current.HomeDirectory, current.LoginShell
+		if req.HomeDirectory != nil {
+			home = *req.HomeDirectory
+		}
+		if req.LoginShell != nil {
+			shell = *req.LoginShell
+		}
 		if setPOSIXAttributesErr := s.store.SetPOSIXAttributes(ctx, entity.ID,
-			req.HomeDirectory, req.LoginShell, &actorID); setPOSIXAttributesErr != nil {
-			s.log.ErrorContext(ctx, "updating POSIX attributes failed", "error", setPOSIXAttributesErr)
-			writeError(w, http.StatusInternalServerError, "could not update it")
+			home, shell, &actorID); setPOSIXAttributesErr != nil {
+			// The store's refusals here are all about the values given — empty,
+			// or not absolute — so they are the caller's to fix.
+			writeError(w, http.StatusBadRequest, setPOSIXAttributesErr.Error())
 			return
 		}
 	case errors.Is(err, store.ErrNoPOSIXIdentity):
@@ -233,9 +249,26 @@ func (s *Server) handleAssignPOSIX(w http.ResponseWriter, r *http.Request) {
 		// The number comes from the allocator; home and shell come from the
 		// request. Two calls because they are two decisions: one is permanent
 		// and the other is not.
-		if req.HomeDirectory != "" || req.LoginShell != "" {
+		//
+		// Read back rather than assumed, because assigning derives both from
+		// the login and a request naming only one of them must not blank the
+		// other.
+		if req.HomeDirectory != nil || req.LoginShell != nil {
+			assigned, readErr := s.store.POSIXIdentityFor(ctx, entity.ID)
+			if readErr != nil {
+				s.log.ErrorContext(ctx, "reading a new POSIX identity failed", "error", readErr)
+				writeError(w, http.StatusInternalServerError, "could not read it back")
+				return
+			}
+			home, shell := assigned.HomeDirectory, assigned.LoginShell
+			if req.HomeDirectory != nil {
+				home = *req.HomeDirectory
+			}
+			if req.LoginShell != nil {
+				shell = *req.LoginShell
+			}
 			if setPOSIXAttributesErr := s.store.SetPOSIXAttributes(ctx, entity.ID,
-				req.HomeDirectory, req.LoginShell, &actorID); setPOSIXAttributesErr != nil {
+				home, shell, &actorID); setPOSIXAttributesErr != nil {
 				writeError(w, http.StatusBadRequest, setPOSIXAttributesErr.Error())
 				return
 			}
@@ -265,5 +298,9 @@ func posixResponse(p *store.POSIXIdentity) map[string]any {
 		// filesystem somewhere and changing it would move files rather than
 		// edit a row, so the console stops offering to.
 		"adoptable": p.Adoptable(),
+		// And when that happened, which is what a refusal has to say to be
+		// actionable: "served on 3 March" tells an operator which machines to
+		// look at, where "cannot be adopted" tells them nothing.
+		"firstServedAt": p.FirstServedAt,
 	}
 }

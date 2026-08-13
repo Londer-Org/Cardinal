@@ -132,11 +132,16 @@ func TestANumberAMachineAlreadyUsesCanBeAdopted(t *testing.T) {
 	}
 
 	// Read back independently: a handler that echoes its input without writing
-	// would satisfy everything above.
-	out := cardinalCLI(t, "posix", "show", "user", login)
-	if !strings.Contains(out, strconv.Itoa(theirs)) {
-		t.Errorf("the directory does not report %d for %s after adoption:\n%s",
-			theirs, login, out)
+	// would satisfy everything above. Straight from the database, which is what
+	// the CLI read here before it started signing in — going back through the
+	// API would be asking the same code whether it had done its job.
+	stored := seedQuery(t, `
+		SELECT id_number::text FROM posix_identities p
+		  JOIN entities e ON e.id = p.entity_id
+		 WHERE e.name = '`+login+`'`)
+	if stored != strconv.Itoa(theirs) {
+		t.Errorf("the directory reports %q for %s after adopting %d",
+			stored, login, theirs)
 	}
 }
 
@@ -230,4 +235,123 @@ func sendJSON(t *testing.T, c *http.Client, method, path, csrf string, body, out
 		}
 	}
 	return resp.StatusCode
+}
+
+// TestSettingOneOfHomeAndShellLeavesTheOther.
+//
+// Two settings behind one request, and a request naming one of them must not
+// blank the other. The CLI has always had that rule and the endpoint did not:
+// it passed whatever arrived to a store call requiring both, so a partial
+// update was refused — and refused as a 500, an operator error reported as a
+// fault in Cardinal.
+func TestSettingOneOfHomeAndShellLeavesTheOther(t *testing.T) {
+	c, csrf := adminClient(t)
+	login := "e2e-partial-" + strconv.FormatInt(time.Now().UnixNano()%100000, 10)
+
+	createFixture(t, "user", login)
+
+	var assigned posixBody
+	if status := putJSON(t, c, "/api/directory/users/"+login+"/posix", csrf,
+		map[string]any{"homeDirectory": "/home/first", "loginShell": "/bin/zsh"},
+		&assigned); status != http.StatusOK && status != http.StatusCreated {
+		t.Fatalf("assigning returned %d", status)
+	}
+
+	// Only the home directory.
+	var moved posixBody
+	if status := putJSON(t, c, "/api/directory/users/"+login+"/posix", csrf,
+		map[string]any{"homeDirectory": "/home/second"}, &moved); status != http.StatusOK {
+		t.Fatalf("setting only the home directory returned %d, want 200", status)
+	}
+	if moved.HomeDirectory != "/home/second" {
+		t.Errorf("home is %q, want /home/second", moved.HomeDirectory)
+	}
+	if moved.LoginShell != "/bin/zsh" {
+		t.Errorf("login shell is %q; a request that did not mention it changed it, "+
+			"which is how somebody ends up with a shell of \"\"", moved.LoginShell)
+	}
+
+	// And only the shell.
+	var reshelled posixBody
+	if status := putJSON(t, c, "/api/directory/users/"+login+"/posix", csrf,
+		map[string]any{"loginShell": "/bin/sh"}, &reshelled); status != http.StatusOK {
+		t.Fatalf("setting only the login shell returned %d, want 200", status)
+	}
+	if reshelled.HomeDirectory != "/home/second" {
+		t.Errorf("home is %q; setting the shell moved it", reshelled.HomeDirectory)
+	}
+	if reshelled.LoginShell != "/bin/sh" {
+		t.Errorf("login shell is %q, want /bin/sh", reshelled.LoginShell)
+	}
+
+	// An empty string is still refused. Omitting a field means "leave it";
+	// sending "" means "make it empty", and a login shell of "" is not a thing
+	// to arrive at by accident.
+	var blanked posixBody
+	if status := putJSON(t, c, "/api/directory/users/"+login+"/posix", csrf,
+		map[string]any{"loginShell": ""}, &blanked); status != http.StatusBadRequest {
+		t.Errorf("blanking the login shell returned %d, want 400", status)
+	}
+}
+
+// TestAGroupsGidIsReadableFromTheGroupItself.
+//
+// A gid was writable and not readable: the assign endpoint answered with it and
+// nothing else ever mentioned it again, so a group with a number looked exactly
+// like a group without one from every view of that group. `cardinal posix show
+// group` reads it here, and the console's group page can.
+func TestAGroupsGidIsReadableFromTheGroupItself(t *testing.T) {
+	c, csrf := adminClient(t)
+	group := "e2e-gid-read-" + strconv.FormatInt(time.Now().UnixNano()%100000, 10)
+
+	createFixture(t, "group", group)
+
+	// Before: no number, and the field is absent rather than zero. A gid of 0
+	// is root's group, so a shape that reported "0" for "none" would be
+	// reporting something dangerous as if it were true.
+	var before struct {
+		POSIX *struct {
+			GID int `json:"gid"`
+		} `json:"posix"`
+	}
+	resp := request(t, c, http.MethodGet, hostCardinal,
+		"/api/directory/groups/"+group, "application/json")
+	if err := json.NewDecoder(resp.Body).Decode(&before); err != nil {
+		t.Fatal(err)
+	}
+	drain(resp)
+	if before.POSIX != nil {
+		t.Errorf("a group with no number reports %+v", before.POSIX)
+	}
+
+	var assigned posixBody
+	if status := putJSON(t, c, "/api/directory/groups/"+group+"/posix", csrf,
+		map[string]any{}, &assigned); status != http.StatusOK && status != http.StatusCreated {
+		t.Fatalf("assigning a gid returned %d", status)
+	}
+
+	var after struct {
+		POSIX *struct {
+			GID       int  `json:"gid"`
+			Adoptable bool `json:"adoptable"`
+		} `json:"posix"`
+	}
+	resp = request(t, c, http.MethodGet, hostCardinal,
+		"/api/directory/groups/"+group, "application/json")
+	if err := json.NewDecoder(resp.Body).Decode(&after); err != nil {
+		t.Fatal(err)
+	}
+	drain(resp)
+
+	if after.POSIX == nil {
+		t.Fatal("the group has a gid and reports none, so nothing but the call " +
+			"that assigned it can ever see the number")
+	}
+	if after.POSIX.GID != assigned.Number {
+		t.Errorf("assigned %d and the group reports %d", assigned.Number, after.POSIX.GID)
+	}
+	if !after.POSIX.Adoptable {
+		t.Error("a number no host has been told is reported as fixed, which would " +
+			"stop a migration adopting it for no reason")
+	}
 }
