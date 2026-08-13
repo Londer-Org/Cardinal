@@ -44,7 +44,7 @@ func New(base string, session *auth.Session, reauth func(context.Context) (*auth
 // Login is who the client is acting as.
 func (c *Client) Login() string { return c.session.Login }
 
-// get, post and send are the whole surface.
+// get, post, put and del are the whole surface.
 //
 // Each retries once after signing in again, and only for a 401: a session that
 // expired between two commands is ordinary, and making somebody re-run the
@@ -62,9 +62,17 @@ func (c *Client) post(ctx context.Context, path string, body, out any) error {
 	})
 }
 
-func (c *Client) send(ctx context.Context, method, path string, out any) error {
+func (c *Client) put(ctx context.Context, path string, body, out any) error {
 	return c.retrying(ctx, func(token string) error {
-		req, err := http.NewRequestWithContext(ctx, method, c.base+path, nil)
+		return auth.SendJSON(ctx, c.http, http.MethodPut, c.base+path, token, body, out)
+	})
+}
+
+// del has no body, which is what makes it a separate helper rather than send
+// with a method argument: every verb that carries one goes through post or put.
+func (c *Client) del(ctx context.Context, path string, out any) error {
+	return c.retrying(ctx, func(token string) error {
+		req, err := http.NewRequestWithContext(ctx, http.MethodDelete, c.base+path, nil)
 		if err != nil {
 			return err
 		}

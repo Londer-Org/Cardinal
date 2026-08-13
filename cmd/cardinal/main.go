@@ -101,7 +101,7 @@ func run(ctx context.Context, args []string) error {
 	case "invite":
 		return runInvite(ctx, args[1:])
 	case "app":
-		return runApp(ctx, rest)
+		return client(ctx, rest, command.App)
 	case "token":
 		return runToken(ctx, rest)
 	case "mail":
@@ -190,8 +190,13 @@ PRIVACY
                                            chain survive; attribution does not.
 
 APPLICATIONS
-  app register <name> -redirect <uri>       Register an OIDC relying party
-  app list                                  Registered relying parties
+  app register <name> [-redirect <uri>]     Register an application. With
+                                            redirect URIs it is also an OIDC
+                                            relying party; without, it is an
+                                            entity to write policy about and a
+                                            name a hostname can belong to
+  app list                                  Every application, relying party
+                                            or not
 
   app hostname add <app> <hostname>         Which address this application
                                             answers to, so forwardAuth can find
@@ -411,8 +416,8 @@ GLOBAL
                 which is right unless a multiplexer or a remote desktop makes
                 the guess wrong
 
-  Membership, creating an entity and taking one out of service — grant, revoke,
-  members, memberships, history, <type> create, disable and enable — sign in
+  Membership, entities and applications — grant, revoke, members, memberships,
+  history, <type> create, disable, enable and every app subcommand — sign in
   and ask the API, as do ssh and host join. Policy governs them and the journal
   names who ran them. The rest still open the database, where it does not:
   passing -dsn to one that has moved prints that rather than a connection.

@@ -31,7 +31,7 @@ import (
 func TestNarrowingWhatAnApplicationSeesDoesNotChangeWhoMayReachIt(t *testing.T) {
 	t.Cleanup(restoreProjection)
 
-	cardinalCLI(t, "app", "groups", "mode", "protected-app", "all")
+	projectionModeFixture(t, "protected-app", "all")
 	wide := tokenIdentityAtProtectedApp(t)
 	if len(wide.Groups) == 0 {
 		t.Fatal("the fixture is not telling the application about any groups, so " +
@@ -40,7 +40,7 @@ func TestNarrowingWhatAnApplicationSeesDoesNotChangeWhoMayReachIt(t *testing.T) 
 
 	// protected-app owns no groups, so owned mode is the sharpest version of
 	// the question: everything the application was told, withdrawn at once.
-	cardinalCLI(t, "app", "groups", "mode", "protected-app", "owned")
+	projectionModeFixture(t, "protected-app", "owned")
 	narrow := tokenIdentityAtProtectedApp(t)
 
 	// Admitted either way. tokenIdentityAtProtectedApp fails the test on any
@@ -62,14 +62,14 @@ func TestNarrowingWhatAnApplicationSeesDoesNotChangeWhoMayReachIt(t *testing.T) 
 // application by years.
 func TestAnAllowedGroupReachesTheApplicationAgain(t *testing.T) {
 	t.Cleanup(func() {
-		cliBackground("app", "groups", "disallow", "protected-app", "engineers")
+		sightAfterwards("protected-app", "engineers")
 		restoreProjection()
 	})
 
 	// The group the seeded user is actually in, so the claim has something to
 	// carry. Granted here rather than assumed: the suite reseeds.
 	grantFixture(t, "engineers", tokenOwnerLogin, "projection e2e")
-	cardinalCLI(t, "app", "groups", "mode", "protected-app", "owned")
+	projectionModeFixture(t, "protected-app", "owned")
 
 	before := tokenIdentityAtProtectedApp(t)
 	for _, g := range before.Groups {
@@ -79,7 +79,7 @@ func TestAnAllowedGroupReachesTheApplicationAgain(t *testing.T) {
 		}
 	}
 
-	cardinalCLI(t, "app", "groups", "allow", "protected-app", "engineers")
+	sightFixture(t, "protected-app", "engineers", true)
 	after := tokenIdentityAtProtectedApp(t)
 
 	found := false
@@ -103,39 +103,28 @@ func TestAnAllowedGroupReachesTheApplicationAgain(t *testing.T) {
 func TestASystemGroupIsNeverTold(t *testing.T) {
 	t.Cleanup(restoreProjection)
 
-	cardinalCLI(t, "app", "groups", "mode", "protected-app", "owned")
+	projectionModeFixture(t, "protected-app", "owned")
 
-	// Run directly rather than through cardinalCLI, which fails the test on a
-	// non-zero exit — and a refusal is the result being asserted.
-	full := append([]string{
-		"compose", "-f", "../../examples/compose.yml",
-		"exec", "-T", "cardinal", "cardinal",
-	}, "app", "groups", "allow", "protected-app", "directory-admins")
-	out, err := exec.CommandContext(t.Context(), "docker", full...).CombinedOutput()
-	if err == nil {
-		t.Fatal("allowing a system group succeeded")
+	// The status is the assertion, so the fixture returns it rather than
+	// failing on it: a refusal is the result being tested.
+	status, body := sightFixture(t, "protected-app", "directory-admins", true)
+	if status < 400 {
+		t.Fatalf("allowing a system group succeeded: %d", status)
 	}
-	if !strings.Contains(string(out), "authority inside Cardinal") {
-		t.Errorf("refused without saying why: %s", out)
+	if !strings.Contains(body, "authority inside Cardinal") {
+		t.Errorf("refused without saying why: %s", body)
 	}
 }
 
 // restoreProjection puts the fixture back for whatever runs next.
 //
-// Not through cardinalCLI: a t.Cleanup runs after t.Context() is cancelled, so
-// every command issued from one dies with "context canceled". The tests do not
-// depend on this — each sets the mode it needs — but leaving the stack narrowed
-// would make the next run of an unrelated header test fail confusingly.
+// Not through projectionModeFixture: a t.Cleanup runs after t.Context() is
+// cancelled, so anything built on it dies with "context canceled". The tests do
+// not depend on this — each sets the mode it needs — but leaving the stack
+// narrowed would make the next run of an unrelated header test fail
+// confusingly.
 func restoreProjection() {
-	cliBackground("app", "groups", "mode", "protected-app", "all")
-}
-
-func cliBackground(args ...string) {
-	full := append([]string{
-		"compose", "-f", "../../examples/compose.yml",
-		"exec", "-T", "cardinal", "cardinal",
-	}, args...)
-	_ = exec.Command("docker", full...).Run() //nolint:errcheck,noctx // best effort cleanup
+	projectionAfterwards("protected-app", "all")
 }
 
 // TestEveryTokenCarriesOnlyWhatTheApplicationMayBeTold.
@@ -151,14 +140,14 @@ func cliBackground(args ...string) {
 // Both are asserted here because the pair is the point: a projection that
 // holds for one token and not the other is not a projection.
 func TestEveryTokenCarriesOnlyWhatTheApplicationMayBeTold(t *testing.T) {
-	t.Cleanup(func() { cliBackground("app", "groups", "mode", "e2e-client", "all") })
+	t.Cleanup(func() { projectionAfterwards("e2e-client", "all") })
 
 	// e2e-user is who establishSession signs in as, and the seed leaves them in
 	// no groups at all — so without this the wide case and the narrow case are
 	// both empty and the test passes while proving nothing.
 	grantFixture(t, "engineers", "e2e-user", "projection e2e")
 
-	cardinalCLI(t, "app", "groups", "mode", "e2e-client", "all")
+	projectionModeFixture(t, "e2e-client", "all")
 	wideAccess, wideID := tokenGroups(t)
 	if len(wideAccess) == 0 || len(wideID) == 0 {
 		t.Fatalf("a token carried no groups before anything was narrowed "+
@@ -167,7 +156,7 @@ func TestEveryTokenCarriesOnlyWhatTheApplicationMayBeTold(t *testing.T) {
 	}
 
 	// e2e-client owns no groups, so `owned` withdraws all of them at once.
-	cardinalCLI(t, "app", "groups", "mode", "e2e-client", "owned")
+	projectionModeFixture(t, "e2e-client", "owned")
 	narrowAccess, narrowID := tokenGroups(t)
 	if len(narrowAccess) != 0 {
 		t.Errorf("the access token still carried %v after the application was "+

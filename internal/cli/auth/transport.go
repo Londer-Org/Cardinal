@@ -44,11 +44,18 @@ type jsonError struct {
 
 // PostJSON sends a body and decodes the reply.
 func PostJSON(ctx context.Context, c *http.Client, endpoint, token string, body, out any) error {
+	return SendJSON(ctx, c, http.MethodPost, endpoint, token, body, out)
+}
+
+// SendJSON writes with a method of the caller's choosing. PUT replaces a whole
+// setting where POST adds to a collection, and an API that means the difference
+// needs a client that can say it.
+func SendJSON(ctx context.Context, c *http.Client, method, endpoint, token string, body, out any) error {
 	encoded, err := json.Marshal(body)
 	if err != nil {
 		return err
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(encoded))
+	req, err := http.NewRequestWithContext(ctx, method, endpoint, bytes.NewReader(encoded))
 	if err != nil {
 		return err
 	}

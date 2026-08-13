@@ -301,26 +301,14 @@ func registerConfidentialClient(t *testing.T, name string) (clientID, secret str
 	                                  WHERE type = 'application' AND name = '`+name+`')`)
 	seedSQL(t, `DELETE FROM entities WHERE type = 'application' AND name = '`+name+`'`)
 
-	out := cardinalCLI(t, "app", "register", name,
-		"-display", name,
-		"-redirect", "https://"+name+".example.com/callback",
-		"-confidential",
-		"-config", "/etc/cardinal/cardinal.toml")
-
-	for _, line := range strings.Split(out, "\n") {
-		fields := strings.Fields(line)
-		if len(fields) != 2 {
-			continue
-		}
-		switch fields[0] {
-		case "client_id":
-			clientID = fields[1]
-		case "client_secret":
-			secret = fields[1]
-		}
-	}
+	clientID, secret = registerAppFixture(t, map[string]any{
+		"name":         name,
+		"displayName":  name,
+		"redirectUris": []string{"https://" + name + ".example.com/callback"},
+		"confidential": true,
+	})
 	if clientID == "" || secret == "" {
-		t.Fatalf("no client id or secret in:\n%s", out)
+		t.Fatal("registering a confidential client returned no client id or secret")
 	}
 	return clientID, secret
 }

@@ -2,7 +2,6 @@ package api
 
 import (
 	"context"
-	"net/http"
 
 	"go.londer.be/cardinal/internal/directory"
 )
@@ -70,8 +69,7 @@ type CreatedUser struct {
 // Disable takes an entity out of service, ending its sessions and tokens.
 func (c *Client) Disable(ctx context.Context, kind directory.Type, name string) (Availability, error) {
 	var out Availability
-	err := c.send(ctx, http.MethodDelete,
-		"/api/directory/"+kind.Plural()+"/"+escape(name), &out)
+	err := c.del(ctx, "/api/directory/"+kind.Plural()+"/"+escape(name), &out)
 	return out, err
 }
 
