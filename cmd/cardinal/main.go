@@ -142,20 +142,22 @@ func usage() {
 USAGE
   cardinal <command> [arguments]
 
-SERVER
-  migrate [-status]                         Apply the embedded schema
-  init <login> [-display <text>]            First-run setup: policy, the first
-                                            administrator, and an enrollment link
-      -policy <file>                          publish this instead of the set
-                                              built into the binary
-      -no-policy                              publish nothing, leaving the
-                                              deployment default-deny
-  serve [-config <file>] [-dev]             Run the API and admin UI
+RUNNING IT
+  Running the server, applying the schema and first-run setup are
+  cardinal-server, which is a separate binary and the one a deployment
+  carries. This one administers a Cardinal that is already running, and is
+  deliberately not in the container image — a shell there should not come with
+  an administrative tool attached.
 
 ENTITIES
   user create <name> [-display <text>]     Create a user
   group create <name> [-display <text>]    Create a group
   host create <name> [-display <text>]     Create a host
+  application create <name>                Create an application, for one behind
+                                           a proxy: no OIDC registration needed
+  service-account create <name>            Create a machine identity
+  device create <name>                     Types the model allows and little
+  role create <name>                       uses; here because they dispatch
   <type> disable <name>                    Cut an account off. Sessions and
                                            access tokens are revoked with it.
   <type> enable <name>                     Undo that. History is kept either
@@ -251,13 +253,15 @@ NOTIFICATION EMAIL
   (ADR 0009). Recovery email is never a way in.
 
 HOST ACCESS (SSH certificates)
-  ssh [user@]<host> [-server <url>]        Log into a machine. Opens a browser
-                                           for the passkey, fetches a
+  ssh [user@]<host> [-server <url>]        Log into a machine. Borrows a passkey
+                                           ceremony from a browser, fetches a
                                            short-lived certificate, hands it to
                                            ssh-agent, and connects. Nothing is
                                            written to disk.
       -l <account>                           the local account, if not your own
       -print                                 print the certificate, do not connect
+      -auth loopback|device                  which sign-in handoff; omitting it
+                                             works out which can work here
 
   ssh ca init [-activate]                  Create an authority key, print its
                                            public half for TrustedUserCAKeys
@@ -345,12 +349,6 @@ AUTHORIZATION
       -limit <n>                             default 20
 
 DIAGNOSIS
-  config [-config <file>] [-all]           The effective configuration and where
-                                           each value came from. Settings that
-                                           are accepted but read by nothing are
-                                           always listed: those are the ones
-                                           somebody tunes without effect.
-
   policy rule list                         The live set, rule by rule, in words
   policy rule remove <id>                  Drop one and publish the result
   policy rule add <kind> <id> [flags]      Compose a rule without writing Cedar
@@ -403,8 +401,18 @@ AUDIT
   audit verify                             Verify the event log's hash chain
 
 GLOBAL
-  -dsn <url>    PostgreSQL connection string
+  -dsn <url>    PostgreSQL connection string, for the commands that open it
                 (or set CARDINAL_DSN; defaults to the local dev database)
+  -server <url> Where Cardinal is, for the commands that sign in
+                (or set CARDINAL_SERVER)
+  -auth <flow>  loopback or device. Omitting it works out which can work here,
+                which is right unless a multiplexer or a remote desktop makes
+                the guess wrong
+
+  Reading membership — members, memberships, history — and ssh sign in and ask
+  the API, so policy governs them and the journal names who ran them. The rest
+  still open the database, where it does not: passing -dsn to one that has
+  moved prints that rather than a connection.
 
 Grants should normally be bounded. Whoever asks for access almost always knows
 when they will stop needing it, and a bounded grant cannot be forgotten.
