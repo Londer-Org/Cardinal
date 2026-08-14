@@ -122,3 +122,40 @@ non-human identity is a different thing and the plan already says it should use
 `private_key_jwt` with no shared secret. Blurring the two would make a token the
 way around the passkey requirement, which is precisely what the device-bound
 rule exists to prevent.
+
+## Amendment, 2026-08-14: a service account may hold a token
+
+The section above says a token is a human automating their own access, that a
+non-human identity is a different thing which should use `private_key_jwt`, and
+that blurring the two would make a token the way around the passkey
+requirement. An administrator may now issue a token for a service account, so
+that position has changed and this records why rather than leaving the two to
+disagree.
+
+**What the objection was worth.** The passkey requirement it protects is a
+requirement on people. A service account has no passkey and cannot acquire one,
+so a token issued for it is not a route around anything — there is no stricter
+credential it is avoiding. What the objection does still buy is real and is
+kept: the token is not device-bound, so the shipped policy refuses it
+administrative actions and SSH certificates exactly as it refuses a person's.
+
+**What actually happened in the absence of a decision.** `private_key_jwt` was
+not built. The documented way to give a pipeline a credential was to create a
+*user* for it and issue that user a token — a machine wearing a person's type,
+in a directory whose whole argument is that types mean something, and with a
+name in the people listing that no passkey would ever be registered against.
+Deferring the question did not prevent service accounts from holding bearer
+credentials; it made them hold credentials under the wrong type.
+
+**The rule that comes with it.** An administrator may issue a token for a
+service account and never for a person, because a token authenticates as its
+owner: one issued for somebody by somebody else is a way to act as them with
+their name on the audit trail, and an auditor reading the journal has nothing
+to tell it from that person working. A person issues their own, where the
+subject comes from their session and the request body has no say. Listing and
+revoking are permitted for both, because neither hands out a credential.
+
+**What is still owed.** `private_key_jwt` remains the better answer for a
+machine — a bearer token can be replayed by whoever reads it, and a signed
+assertion cannot. This does not close that; it stops the gap being filled by
+mislabelling machines as people while it is open.
