@@ -235,14 +235,7 @@ func TestPollingRefusesWhatItShould(t *testing.T) {
 		// unless the access token tests have already run in this stack.
 		adminClient(t)
 
-		wrong := cardinalCLI(t, "token", "create", tokenOwnerLogin,
-			"-name", "e2e-poll-wrong-scope", "-for", "1h", "-scope", "identity")
-		var bearer string
-		for _, field := range strings.Fields(wrong) {
-			if strings.HasPrefix(field, "crd_pat_") {
-				bearer = field
-			}
-		}
+		bearer := issueTokenFixture(t, "e2e-poll-wrong-scope", []string{"identity"}, 1)
 
 		resp, _ := poll(t, bearer, map[string]any{})
 		defer drain(resp)

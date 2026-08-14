@@ -3,6 +3,7 @@ package e2e
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -354,5 +355,106 @@ func posixFixture(t *testing.T, kind, name string) {
 
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
 		t.Fatalf("assigning a number to %s %s returned %d", kind, name, resp.StatusCode)
+	}
+}
+
+// tokenSubject is the service account these tests issue tokens for.
+//
+// A service account rather than the seeded administrator, because that is now
+// the only subject an administrator may issue for: a token minted for a person
+// by somebody else acts as that person, with their name on the audit trail. It
+// is put in directory-admins on purpose — a token that cannot administer while
+// owned by something that can is the only version of these tests that proves
+// anything.
+const tokenSubject = "e2e-token-service"
+
+// tokenSubjectFixture seeds that account and its administrator membership.
+func tokenSubjectFixture(t *testing.T) {
+	t.Helper()
+
+	createFixture(t, "service-account", tokenSubject)
+	grantFixture(t, "directory-admins", tokenSubject, "e2e token subject")
+}
+
+// issueTokenFixture mints a token for a service account and returns its value,
+// which the API discloses exactly once.
+func issueTokenFixture(t *testing.T, name string, scopes []string, days int) string {
+	t.Helper()
+
+	tokenSubjectFixture(t)
+
+	c, csrf := adminClient(t)
+	body := map[string]any{"name": name, "scopes": scopes}
+	if days > 0 {
+		body["days"] = days
+	}
+
+	resp, err := c.Do(jsonRequest(t, http.MethodPost,
+		"/api/directory/service-accounts/"+tokenSubject+"/tokens", csrf, body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer drain(resp)
+
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("issuing a token for %s returned %d", tokenSubject, resp.StatusCode)
+	}
+	var out struct {
+		Token string `json:"token"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		t.Fatal(err)
+	}
+	if out.Token == "" {
+		t.Fatal("the response carried no token value, which is the one thing " +
+			"only this response can carry")
+	}
+	return out.Token
+}
+
+// listSubjectTokens renders a subject's tokens as the id and name of each, one
+// per line — the shape the tests that grep this output already expect.
+func listSubjectTokens(t *testing.T, subject string) string {
+	t.Helper()
+
+	c, _ := adminClient(t)
+	resp := request(t, c, http.MethodGet, hostCardinal,
+		"/api/directory/service-accounts/"+subject+"/tokens", "application/json")
+	defer drain(resp)
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("listing %s's tokens returned %d", subject, resp.StatusCode)
+	}
+	var body struct {
+		Tokens []struct {
+			ID   string `json:"id"`
+			Name string `json:"name"`
+		} `json:"tokens"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatal(err)
+	}
+
+	var out strings.Builder
+	for _, tok := range body.Tokens {
+		fmt.Fprintf(&out, "%s %s\n", tok.ID, tok.Name)
+	}
+	return out.String()
+}
+
+// revokeSubjectToken ends one of a subject's tokens.
+func revokeSubjectToken(t *testing.T, subject, id string) {
+	t.Helper()
+
+	c, csrf := adminClient(t)
+	resp, err := c.Do(jsonRequest(t, http.MethodDelete,
+		"/api/directory/service-accounts/"+subject+"/tokens/"+id, csrf, nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer drain(resp)
+
+	if resp.StatusCode != http.StatusNoContent && resp.StatusCode != http.StatusOK {
+		t.Fatalf("revoking %s returned %d", id, resp.StatusCode)
 	}
 }

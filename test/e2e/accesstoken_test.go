@@ -21,9 +21,12 @@ import (
 // second kind of principal — so these tests are mostly about what it *cannot*
 // do.
 
-// tokenOwnerLogin is the seeded administrator. Deliberately the *most*
-// privileged account in the stack: a token that cannot administer while owned
-// by someone who can is the only version of this test that proves anything.
+// tokenOwnerLogin is the seeded administrator, and is who *creates* tokens
+// here rather than who owns them. The account a token belongs to is
+// tokenSubject, a service account, because an administrator may no longer issue
+// one for a person: that would be a credential acting as them, with their name
+// on the audit trail. Both are in directory-admins, which is what makes the
+// refusals below mean something.
 const tokenOwnerLogin = "e2e-admin"
 
 // tokenFor issues an access token through the CLI, which is how an operator
@@ -39,15 +42,8 @@ func tokenFor(t *testing.T) string {
 	// token — administration, SSH certificates, credential self-service — and a
 	// narrow scope would refuse them first, for a different reason, and the
 	// assertions would pass while proving nothing.
-	out := cardinalCLI(t, "token", "create", tokenOwnerLogin, "-name", "e2e",
-		"-for", "1h", "-scope", "identity,applications,profile,decisions,policy")
-	for _, field := range strings.Fields(out) {
-		if strings.HasPrefix(field, "crd_pat_") {
-			return field
-		}
-	}
-	t.Fatalf("no token in output: %s", out)
-	return ""
+	return issueTokenFixture(t, "e2e",
+		[]string{"identity", "applications", "profile", "decisions", "policy"}, 1)
 }
 
 func bearerRequest(t *testing.T, method, path, token string, headers map[string]string) *http.Response {
@@ -93,8 +89,8 @@ func TestAccessTokenAuthenticatesItsOwner(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if me.Login != tokenOwnerLogin {
-		t.Errorf("token authenticated as %q, want %q", me.Login, tokenOwnerLogin)
+	if me.Login != tokenSubject {
+		t.Errorf("token authenticated as %q, want %q", me.Login, tokenSubject)
 	}
 	if me.AuthMethod != "access_token" {
 		t.Errorf("authMethod is %q — the decision log needs this to answer "+
@@ -239,9 +235,9 @@ func tokenIdentityAtProtectedApp(t *testing.T) protectedIdentity {
 func TestAccessTokenReachesAProtectedApplication(t *testing.T) {
 	identity := tokenIdentityAtProtectedApp(t)
 
-	if identity.Login != tokenOwnerLogin {
+	if identity.Login != tokenSubject {
 		t.Errorf("login = %q, want %q — the application behind the proxy reads "+
-			"this and nothing else", identity.Login, tokenOwnerLogin)
+			"this and nothing else", identity.Login, tokenSubject)
 	}
 	if identity.AuthMethod != "access_token" {
 		t.Errorf("authMethod = %q; an application that wants to treat automation "+
@@ -269,7 +265,7 @@ func TestRevokedAccessTokenStopsWorking(t *testing.T) {
 	}
 
 	// Find its id, then withdraw it.
-	listing := cardinalCLI(t, "token", "list", tokenOwnerLogin)
+	listing := listSubjectTokens(t, tokenSubject)
 	var id string
 	for _, line := range strings.Split(listing, "\n") {
 		if strings.Contains(line, "e2e") {
@@ -280,7 +276,7 @@ func TestRevokedAccessTokenStopsWorking(t *testing.T) {
 	if id == "" {
 		t.Fatalf("could not find the token in: %s", listing)
 	}
-	cardinalCLI(t, "token", "revoke", tokenOwnerLogin, id)
+	revokeSubjectToken(t, tokenSubject, id)
 
 	after := bearerRequest(t, http.MethodGet, "/api/auth/me", token, nil)
 	defer drain(after)
@@ -343,17 +339,7 @@ func TestIdentityHeadersCarryStableGroupIdentifiers(t *testing.T) {
 func TestAScopeNarrowsWhatATokenMayAttempt(t *testing.T) {
 	adminClient(t)
 
-	out := cardinalCLI(t, "token", "create", tokenOwnerLogin, "-name", "e2e-narrow",
-		"-for", "1h", "-scope", "identity")
-	var narrow string
-	for _, field := range strings.Fields(out) {
-		if strings.HasPrefix(field, "crd_pat_") {
-			narrow = field
-		}
-	}
-	if narrow == "" {
-		t.Fatalf("no token in output: %s", out)
-	}
+	narrow := issueTokenFixture(t, "e2e-narrow", []string{"identity"}, 1)
 
 	// The scope it has.
 	resp := bearerRequest(t, http.MethodGet, "/api/auth/me", narrow, nil)
@@ -405,5 +391,69 @@ func TestATokenWithNoScopeIsRefusedAtIssue(t *testing.T) {
 		map[string]any{"name": "typo", "days": 30, "scopes": []string{"identty"}})
 	if status != http.StatusBadRequest {
 		t.Fatalf("a misspelled scope returned %d, want 400", status)
+	}
+}
+
+// TestAnAdministratorCannotIssueATokenForAPerson.
+//
+// The rule the rest of this design rests on. A token authenticates as its
+// owner, so one issued for a person by somebody else is a way to act as them
+// with their name on the audit trail — and an auditor reading the journal has
+// nothing to distinguish it from that person working.
+//
+// A service account is the exception because it is not an exception: it has no
+// passkeys and cannot ask for its own, and a token acting as one is acting as
+// exactly what it says.
+func TestAnAdministratorCannotIssueATokenForAPerson(t *testing.T) {
+	const victim = "e2e-token-not-for-people"
+
+	createFixture(t, "user", victim)
+	tokenSubjectFixture(t)
+
+	c, csrf := adminClient(t)
+	body := map[string]any{"name": "e2e-should-not-exist", "scopes": []string{"identity"}}
+
+	resp, err := c.Do(jsonRequest(t, http.MethodPost,
+		"/api/directory/users/"+victim+"/tokens", csrf, body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer drain(resp)
+
+	if resp.StatusCode == http.StatusCreated || resp.StatusCode == http.StatusOK {
+		t.Fatal("an administrator issued a token for somebody else; every action " +
+			"it takes is recorded as that person")
+	}
+	if resp.StatusCode != http.StatusForbidden {
+		t.Errorf("refused with %d, want 403 — a 404 or a 400 reads like a mistake "+
+			"in the request rather than a rule", resp.StatusCode)
+	}
+	refusal, _ := io.ReadAll(resp.Body) //nolint:errcheck // the status is the assertion; the body is context for it
+	if !strings.Contains(string(refusal), "Access → Tokens") {
+		t.Errorf("the refusal does not say where they can make their own: %s", refusal)
+	}
+
+	// And nothing was written. A refusal that creates the row anyway is the
+	// version of this that would pass every check above.
+	rows := seedQuery(t, `
+		SELECT count(*)::text FROM access_tokens a
+		  JOIN entities e ON e.id = a.subject_id
+		 WHERE e.name = '`+victim+`'`)
+	if rows != "0" {
+		t.Errorf("%s has %s token(s) after the refusal", victim, rows)
+	}
+
+	// The same request for a service account is permitted, or this test would
+	// pass with the whole endpoint removed.
+	allowed, err := c.Do(jsonRequest(t, http.MethodPost,
+		"/api/directory/service-accounts/"+tokenSubject+"/tokens", csrf,
+		map[string]any{"name": "e2e-permitted", "scopes": []string{"identity"}}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer drain(allowed)
+	if allowed.StatusCode != http.StatusCreated {
+		t.Errorf("issuing for a service account returned %d, want 201",
+			allowed.StatusCode)
 	}
 }

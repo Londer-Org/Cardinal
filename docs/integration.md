@@ -218,6 +218,7 @@ credential living in a CI variable is a grant nobody would write down. So a
 token is issued for something:
 
 ```sh
+cardinal service-account create ci
 cardinal token create ci -name "nightly export" -scope applications
 ```
 
@@ -243,10 +244,15 @@ in step with who exists. The base URL is `https://cardinal.example/scim/v2`, and
 it authenticates with an ordinary access token:
 
 ```sh
-cardinal user create entra-provisioning
+cardinal service-account create entra-provisioning
 cardinal grant provisioners entra-provisioning -reason "Entra SCIM"
 cardinal token create entra-provisioning -name "Entra SCIM" -scope scim -for 8760h
 ```
+
+A service account rather than a user, and not merely by convention: an
+administrator may issue a token for one and not for a person, because a token
+issued for somebody by somebody else acts as them with their name on the audit
+trail. Nobody signs in as a provisioner, so nothing is lost by it.
 
 Two things must be true and neither implies the other: the token carries the
 `scim` scope, and policy permits its owner to `Provision`. A provisioner's other
@@ -370,7 +376,8 @@ Cardinal accepts `Authorization: Bearer crd_pat_…` wherever it accepts a sessi
 cookie, so there is nothing to route around:
 
 ```bash
-cardinal token create alonfils -name "nightly export" -for 90d
+# alonfils makes their own from Access → Tokens; an administrator issues one
+# only for a service account.
 curl -H "Authorization: Bearer crd_pat_…" https://app.example/api/reports
 ```
 

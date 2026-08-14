@@ -66,9 +66,12 @@ func TestAnAllowedGroupReachesTheApplicationAgain(t *testing.T) {
 		restoreProjection()
 	})
 
-	// The group the seeded user is actually in, so the claim has something to
-	// carry. Granted here rather than assumed: the suite reseeds.
-	grantFixture(t, "engineers", tokenOwnerLogin, "projection e2e")
+	// The group the token's own subject is in, so the claim has something to
+	// carry. Granted here rather than assumed: the suite reseeds. It follows
+	// the token rather than the administrator who issued it — what an
+	// application is told is about whose credential arrived.
+	tokenSubjectFixture(t)
+	grantFixture(t, "engineers", tokenSubject, "projection e2e")
 	projectionModeFixture(t, "protected-app", "owned")
 
 	before := tokenIdentityAtProtectedApp(t)

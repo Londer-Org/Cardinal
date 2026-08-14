@@ -499,6 +499,19 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("PUT /api/directory/groups/{name}/posix", people(s.handleAssignGroupPOSIX))
 	mux.Handle("GET /api/posix", people(s.handleListPOSIX))
 
+	// Somebody else's access tokens. Behind the applications tier rather than
+	// the people one: issuing a credential for a service account is closer to
+	// registering a relying party than to correcting a display name, and both
+	// hand something a machine authenticates with.
+	for _, kind := range subjectTokenTypes {
+		mux.Handle("POST /api/directory/"+kind.Plural()+"/{name}/tokens",
+			apps(s.handleIssueSubjectToken(kind)))
+		mux.Handle("GET /api/directory/"+kind.Plural()+"/{name}/tokens",
+			apps(s.handleListSubjectTokens(kind)))
+		mux.Handle("DELETE /api/directory/"+kind.Plural()+"/{name}/tokens/{id}",
+			apps(s.handleRevokeSubjectToken(kind)))
+	}
+
 	mux.Handle("GET /api/directory/groups", people(s.handleListGroups))
 	// The same tier as people and groups: a host is a directory entity, and
 	// whoever manages who may reach a machine needs to see which machines exist.

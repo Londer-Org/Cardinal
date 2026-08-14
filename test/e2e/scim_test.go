@@ -32,24 +32,18 @@ func scimToken(t *testing.T) string {
 
 	grantProvisioner(t)
 
-	out := cardinalCLI(t, "token", "create", tokenOwnerLogin,
-		"-name", "e2e-scim", "-for", "1h", "-scope", "scim")
-	for _, field := range strings.Fields(out) {
-		if strings.HasPrefix(field, "crd_pat_") {
-			return field
-		}
-	}
-	t.Fatalf("no token in output: %s", out)
-	return ""
+	return issueTokenFixture(t, "e2e-scim", []string{"scim"}, 1)
 }
 
-// grantProvisioner puts the token owner in the group the shipped rule names.
+// grantProvisioner puts the account the token belongs to in the group the
+// shipped rule names.
 //
 // Through the API, because that is where granting lives: the CLI signs in now,
 // and a fixture cannot produce the device-bound passkey it would ask for.
 func grantProvisioner(t *testing.T) {
 	t.Helper()
-	grantFixture(t, "provisioners", tokenOwnerLogin, "e2e scim")
+	tokenSubjectFixture(t)
+	grantFixture(t, "provisioners", tokenSubject, "e2e scim")
 }
 
 func scimRequest(
@@ -244,17 +238,7 @@ func TestAScopelessTokenCannotProvision(t *testing.T) {
 	adminClient(t)
 	grantProvisioner(t)
 
-	out := cardinalCLI(t, "token", "create", tokenOwnerLogin,
-		"-name", "e2e-not-scim", "-for", "1h", "-scope", "identity")
-	var wrong string
-	for _, field := range strings.Fields(out) {
-		if strings.HasPrefix(field, "crd_pat_") {
-			wrong = field
-		}
-	}
-	if wrong == "" {
-		t.Fatalf("no token in output: %s", out)
-	}
+	wrong := issueTokenFixture(t, "e2e-not-scim", []string{"identity"}, 1)
 
 	//nolint:bodyclose // scimRequest drains it before returning
 	resp, body := scimRequest(t, wrong, http.MethodGet, scimBase+"/Users", nil)

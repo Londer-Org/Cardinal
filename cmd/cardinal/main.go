@@ -103,7 +103,7 @@ func run(ctx context.Context, args []string) error {
 	case "app":
 		return client(ctx, rest, command.App)
 	case "token":
-		return runToken(ctx, rest)
+		return client(ctx, rest, command.Token)
 	case "mail":
 		return runMail(ctx, rest)
 	case "ssh":
@@ -227,7 +227,7 @@ APPLICATIONS
   cardinal grant staff-apps <app>.
 
 ACCESS TOKENS (scripts and automation)
-  token create <login> -name <text> -scope <a>,<b>
+  token create <service-account> -name <text> -scope <a>,<b>
                                             Issue a bearer token, shown once
       -scope                                  required: identity, applications,
                                               profile, decisions, policy
@@ -237,6 +237,12 @@ ACCESS TOKENS (scripts and automation)
 
   A token authenticates its owner but is never device-bound, so existing policy
   refuses it administrative actions and SSH certificates.
+
+  Issued only for a service account, which has no passkeys and so cannot ask
+  for its own. A person makes their own from Access → Tokens: a token issued
+  for somebody by somebody else acts as them, with their name on the audit
+  trail. Listing and revoking work for either, because neither hands out a
+  credential and ending one mid-incident is the job.
 
   A scope narrows further, and can never widen: policy still decides, and a
   token still cannot exceed its owner. It answers what Cedar cannot ask, because
@@ -397,8 +403,10 @@ SECURITY EVENTS (SSF / CAEP)
 PROVISIONING (SCIM 2.0)
   Base URL: <public-url>/scim/v2 — point Entra, Okta or anything else at it.
 
-  cardinal grant provisioners <login>        Who may provision
-  cardinal token create <login> -scope scim  The credential it authenticates with
+  cardinal grant provisioners <account>       Who may provision
+  cardinal token create <account> -scope scim The credential it authenticates
+                                              with — a service account, since
+                                              nobody signs in as a provisioner
 
   Both are needed: the token must carry the scim scope and policy must permit
   its owner to Provision. A system group is never provisionable, so an identity
@@ -416,12 +424,12 @@ GLOBAL
                 which is right unless a multiplexer or a remote desktop makes
                 the guess wrong
 
-  Membership, entities, applications and POSIX identity — grant, revoke,
-  members, memberships, history, <type> create, disable, enable, and every app
-  and posix subcommand — sign in and ask the API, as do ssh and host join.
-  Policy governs them and the journal names who ran them. The rest still open
-  the database, where it does not: passing -dsn to one that has moved prints
-  that rather than a connection.
+  Membership, entities, applications, POSIX identity and access tokens — grant,
+  revoke, members, memberships, history, <type> create, disable, enable, and
+  every app, posix and token subcommand — sign in and ask the API, as do ssh
+  and host join. Policy governs them and the journal names who ran them. The
+  rest still open the database, where it does not: passing -dsn to one that has
+  moved prints that rather than a connection.
 
 Grants should normally be bounded. Whoever asks for access almost always knows
 when they will stop needing it, and a bounded grant cannot be forgotten.
