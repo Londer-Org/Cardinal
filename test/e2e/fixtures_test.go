@@ -1,6 +1,7 @@
 package e2e
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -457,4 +458,27 @@ func revokeSubjectToken(t *testing.T, subject, id string) {
 	if resp.StatusCode != http.StatusNoContent && resp.StatusCode != http.StatusOK {
 		t.Fatalf("revoking %s returned %d", id, resp.StatusCode)
 	}
+}
+
+// saveMailAfterwards restores the mail settings from a t.Cleanup, which runs
+// after t.Context() has been cancelled — the same reason revokeAfterwards
+// exists.
+func saveMailAfterwards(settings map[string]any) {
+	encoded, err := json.Marshal(settings)
+	if err != nil {
+		return
+	}
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodPut,
+		origin(hostCardinal)+"/api/mail/settings", bytes.NewReader(encoded))
+	if err != nil {
+		return
+	}
+	req.Header.Set("Authorization", "Bearer "+adminSessionToken)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := cleanupClient.Do(req)
+	if err != nil {
+		return
+	}
+	_ = resp.Body.Close() //nolint:errcheck // best effort cleanup
 }

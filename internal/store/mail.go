@@ -39,6 +39,14 @@ type MailSettings struct {
 	// show it back and a log line cannot carry it.
 	Password string
 
+	// HasPassword is whether one is stored, which is a different question from
+	// what it is and the only one a settings view should ask. Reported always,
+	// including when Password is withheld: both surfaces used to answer it by
+	// looking at Username instead, so a relay configured with a username and no
+	// password read as "set" — sending whoever was debugging a failed
+	// authentication to look anywhere but at the missing secret.
+	HasPassword bool
+
 	FromAddress string
 	FromName    string
 	ReplyTo     string
@@ -96,6 +104,7 @@ func (s *Store) mailSettings(ctx context.Context, withSecret bool) (*MailSetting
 	if err != nil {
 		return nil, fmt.Errorf("store: reading mail settings: %w", err)
 	}
+	m.HasPassword = len(sealed) > 0
 	if withSecret {
 		m.Password = string(sealed)
 	}

@@ -80,6 +80,13 @@ origins = ["https://id.cardinal.test:8443"]
 # The section used to set email_enabled = false, which enabled nothing and is
 # now refused outright rather than ignored.
 
+# The relay password is sealed with this before it is stored, so a key has to
+# exist before mail settings carrying one can be saved at all. Present here so
+# the end-to-end suite can exercise that path rather than only the half of it
+# that needs no secret.
+[mail]
+encryption_key = "e2e-fixture-mail-encryption-key-not-for-real-use"
+
 [oidc]
 enabled = true
 

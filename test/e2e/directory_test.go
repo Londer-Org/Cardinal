@@ -491,3 +491,128 @@ func TestShowResolvesMembershipThroughNestedGroups(t *testing.T) {
 			"every policy decision made about the account")
 	}
 }
+
+// TestMailSettingsReportWhetherAPasswordIsStored.
+//
+// `passwordSet` was computed from the *username*, which is a different field
+// answering a different question. A relay configured with a username and no
+// password reported that a password was set — sending whoever was debugging a
+// refused authentication to look anywhere but at the missing secret.
+func TestMailSettingsReportWhetherAPasswordIsStored(t *testing.T) {
+	c, csrf := adminClient(t)
+
+	settings := func() (username string, passwordSet bool) {
+		t.Helper()
+		resp := request(t, c, http.MethodGet, hostCardinal,
+			"/api/mail/settings", "application/json")
+		defer drain(resp)
+		var body struct {
+			Username    string `json:"username"`
+			PasswordSet bool   `json:"passwordSet"`
+		}
+		if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+			t.Fatal(err)
+		}
+		return body.Username, body.PasswordSet
+	}
+
+	save := func(body map[string]any) {
+		t.Helper()
+		resp, err := c.Do(jsonRequest(t, http.MethodPut, "/api/mail/settings", csrf, body))
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer drain(resp)
+		if resp.StatusCode != http.StatusNoContent && resp.StatusCode != http.StatusOK {
+			t.Fatalf("saving mail settings returned %d", resp.StatusCode)
+		}
+	}
+
+	// Put it back afterwards, so an unrelated run does not inherit a relay.
+	t.Cleanup(func() {
+		saveMailAfterwards(map[string]any{
+			"enabled": false, "host": "", "port": 587, "username": "",
+			"fromAddress": "", "fromName": "", "replyTo": "", "tlsMode": "starttls",
+		})
+	})
+
+	// A username and no password. Empty means "leave the stored one alone", and
+	// nothing was ever stored, so this is the misreported case.
+	save(map[string]any{
+		"enabled": false, "host": "relay.invalid", "port": 587,
+		"username": "e2e-relay-user", "password": "",
+		"fromAddress": "cardinal@cardinal.test", "tlsMode": "starttls",
+	})
+	if username, set := settings(); set {
+		t.Errorf("a relay with username %q and no stored password reports one is "+
+			"set; the field answers about the username instead", username)
+	}
+
+	// And with one. This is why the stack configures mail.encryption_key: a
+	// password cannot be stored at all without it.
+	save(map[string]any{
+		"enabled": false, "host": "relay.invalid", "port": 587,
+		"username": "e2e-relay-user", "password": "e2e-relay-secret",
+		"fromAddress": "cardinal@cardinal.test", "tlsMode": "starttls",
+	})
+	if _, set := settings(); !set {
+		t.Error("a stored password is reported as absent, which is the same " +
+			"failure in the other direction: it sends somebody to set one that " +
+			"is already there")
+	}
+}
+
+// TestARefusedTestSendIsNotReportedAsSuccess.
+//
+// The send happens during the request rather than through the outbox, because
+// the point is to see the answer — and a relay's refusal comes back as a *200*
+// carrying `sent: false` and the relay's own words. A caller reading only the
+// status code prints "sent" for a message nobody received.
+func TestARefusedTestSendIsNotReportedAsSuccess(t *testing.T) {
+	c, csrf := adminClient(t)
+
+	t.Cleanup(func() {
+		saveMailAfterwards(map[string]any{
+			"enabled": false, "host": "", "port": 587, "username": "",
+			"fromAddress": "", "fromName": "", "replyTo": "", "tlsMode": "starttls",
+		})
+	})
+
+	// A relay that cannot be reached. Nothing in this stack runs one, which is
+	// what makes the refusal reliable rather than a race with a real server.
+	resp, err := c.Do(jsonRequest(t, http.MethodPut, "/api/mail/settings", csrf,
+		map[string]any{
+			"enabled": true, "host": "127.0.0.1", "port": 2,
+			"fromAddress": "cardinal@cardinal.test", "tlsMode": "none",
+		}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	drain(resp)
+
+	sent, err := c.Do(jsonRequest(t, http.MethodPost, "/api/mail/test", csrf,
+		map[string]string{"to": "nobody@cardinal.test"}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer drain(sent)
+
+	if sent.StatusCode != http.StatusOK {
+		t.Fatalf("a refused send returned %d; it answers 200 and reports the "+
+			"refusal in the body, which is the whole trap", sent.StatusCode)
+	}
+	var body struct {
+		Sent  bool   `json:"sent"`
+		Error string `json:"error"`
+	}
+	if err := json.NewDecoder(sent.Body).Decode(&body); err != nil {
+		t.Fatal(err)
+	}
+	if body.Sent {
+		t.Fatal("a relay that cannot be connected to reported a successful send")
+	}
+	if body.Error == "" {
+		t.Error("no reason given, so whoever ran this knows only that it failed — " +
+			"and \"550 user unknown\" and a TLS failure want different responses")
+	}
+}
