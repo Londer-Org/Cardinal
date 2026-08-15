@@ -105,7 +105,7 @@ func run(ctx context.Context, args []string) error {
 	case "token":
 		return client(ctx, rest, command.Token)
 	case "mail":
-		return runMail(ctx, rest)
+		return client(ctx, rest, command.Mail)
 	case "ssh":
 		return runSSH(ctx, rest)
 	case "ssf":
@@ -425,11 +425,11 @@ GLOBAL
                 the guess wrong
 
   Most of it signs in and asks the API — membership, entities, applications,
-  POSIX identity, access tokens, list and show, ssh and host join. Policy
+  POSIX identity, access tokens, mail, list and show, ssh and host join. Policy
   governs those and the journal names who ran them.
 
   What still opens the database is what has to work when nobody can sign in:
-  invite, policy activate, decisions and redact, plus mail, ssf, oidc and the
+  invite, policy activate, decisions and redact, plus ssf, oidc and the
   certificate authorities, which have not moved yet. Passing -dsn to one that
   has moved prints that rather than a connection.
 

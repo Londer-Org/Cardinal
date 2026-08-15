@@ -55,8 +55,10 @@ func (s *Server) handleGetMailSettings(w http.ResponseWriter, r *http.Request) {
 		"replyTo":     settings.ReplyTo,
 		"tlsMode":     settings.TLSMode,
 
-		// Whether, never what.
-		"passwordSet": settings.Username != "",
+		// Whether, never what. Read from the stored secret rather than inferred
+		// from the username, which is a different field answering a different
+		// question.
+		"passwordSet": settings.HasPassword,
 
 		// So the page can say "twelve waiting, four failing" rather than
 		// leaving somebody to discover from a colleague that nothing arrived.
