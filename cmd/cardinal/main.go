@@ -72,9 +72,9 @@ func run(ctx context.Context, args []string) error {
 	case "user", "group", "service-account", "application", "device", "role":
 		return client(ctx, rest, command.Entity(cmd))
 	case "list":
-		return runList(ctx, rest)
+		return client(ctx, rest, command.List)
 	case "show":
-		return runShow(ctx, rest)
+		return client(ctx, rest, command.Show)
 	// Membership goes through the API (ADR 0033): these sign in rather than
 	// opening the database, so policy governs both what they may see and what
 	// they may change, and the journal names the person rather than the path.
@@ -424,12 +424,14 @@ GLOBAL
                 which is right unless a multiplexer or a remote desktop makes
                 the guess wrong
 
-  Membership, entities, applications, POSIX identity and access tokens — grant,
-  revoke, members, memberships, history, <type> create, disable, enable, and
-  every app, posix and token subcommand — sign in and ask the API, as do ssh
-  and host join. Policy governs them and the journal names who ran them. The
-  rest still open the database, where it does not: passing -dsn to one that has
-  moved prints that rather than a connection.
+  Most of it signs in and asks the API — membership, entities, applications,
+  POSIX identity, access tokens, list and show, ssh and host join. Policy
+  governs those and the journal names who ran them.
+
+  What still opens the database is what has to work when nobody can sign in:
+  invite, policy activate, decisions and redact, plus mail, ssf, oidc and the
+  certificate authorities, which have not moved yet. Passing -dsn to one that
+  has moved prints that rather than a connection.
 
 Grants should normally be bounded. Whoever asks for access almost always knows
 when they will stop needing it, and a bounded grant cannot be forgotten.

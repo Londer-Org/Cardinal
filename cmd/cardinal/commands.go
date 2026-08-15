@@ -7,8 +7,6 @@ import (
 	"fmt"
 	"os"
 	"strings"
-	"text/tabwriter"
-	"time"
 
 	"go.londer.be/cardinal/internal/cli"
 	"go.londer.be/cardinal/internal/cli/direct"
@@ -23,99 +21,6 @@ import (
 // The CLI spells service_account with a hyphen, because a command line does.
 func cliType(word string) directory.Type {
 	return directory.Type(strings.ReplaceAll(word, "-", "_"))
-}
-
-func runList(ctx context.Context, args []string) error {
-	fs := flag.NewFlagSet("list", flag.ContinueOnError)
-	all := fs.Bool("all", false, "include disabled entities")
-	dsnFlag := fs.String("dsn", "", "PostgreSQL connection string")
-	pos, err := cli.Parse(fs, args)
-	if err != nil {
-		return errUsage
-	}
-
-	var typ directory.Type
-	if len(pos) > 0 {
-		typ = cliType(pos[0])
-		if !typ.Valid() {
-			return fmt.Errorf("%w: %q", directory.ErrInvalidType, pos[0])
-		}
-	}
-
-	s, err := direct.Open(ctx, *dsnFlag)
-	if err != nil {
-		return err
-	}
-	defer s.Close()
-
-	entities, err := s.ListEntities(ctx, typ, *all)
-	if err != nil {
-		return err
-	}
-	if len(entities) == 0 {
-		fmt.Println("no entities")
-		return nil
-	}
-
-	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "TYPE\tNAME\tID\tSTATUS") //nolint:errcheck // the header is already written, so the status cannot be changed
-	for _, e := range entities {
-		status := "active"
-		if !e.Active() {
-			status = "disabled " + e.DisabledAt.Format(time.DateOnly)
-		}
-		fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", e.Type, e.Name, e.ID, status) //nolint:errcheck // the header is already written, so the status cannot be changed
-	}
-	return w.Flush()
-}
-
-func runShow(ctx context.Context, args []string) error {
-	fs := flag.NewFlagSet("show", flag.ContinueOnError)
-	dsnFlag := fs.String("dsn", "", "PostgreSQL connection string")
-	pos, err := cli.Parse(fs, args)
-	if err != nil {
-		return errUsage
-	}
-	if len(pos) != 2 {
-		return fmt.Errorf("%w: cardinal show <type> <name>", errUsage)
-	}
-
-	s, err := direct.Open(ctx, *dsnFlag)
-	if err != nil {
-		return err
-	}
-	defer s.Close()
-
-	e, err := s.LookupEntity(ctx, cliType(pos[0]), pos[1])
-	if err != nil {
-		return err
-	}
-
-	fmt.Printf("%s %s\n", e.Type, e.Name)
-	fmt.Printf("  id           %s\n", e.ID)
-	if e.DisplayName != "" {
-		fmt.Printf("  display      %s\n", e.DisplayName)
-	}
-	fmt.Printf("  created      %s\n", e.CreatedAt.Format(time.RFC3339))
-	if !e.Active() {
-		fmt.Printf("  disabled     %s\n", e.DisabledAt.Format(time.RFC3339))
-	}
-
-	memberships, err := s.ResolveMemberships(ctx, e.ID, time.Time{})
-	if err != nil {
-		return err
-	}
-	if len(memberships) > 0 {
-		fmt.Printf("  memberships\n")
-		for _, m := range memberships {
-			via := fmt.Sprintf("inherited, depth %d", m.Depth)
-			if m.Direct() {
-				via = "direct"
-			}
-			fmt.Printf("    %-24s %s\n", m.GroupName, via)
-		}
-	}
-	return nil
 }
 
 // runRedact erases an entity's personal data for a GDPR Article 17 request.

@@ -350,3 +350,144 @@ func TestRevokingAtAnInstantTruncatesToThatInstant(t *testing.T) {
 			"a revocation must shorten the period, not erase it", held)
 	}
 }
+
+// TestTheDirectoryListsEveryTypeAndNotOnlyThoseWithAPage.
+//
+// `cardinal list` and `show` were the last reading commands to open the
+// database, and moving them found the gap this covers: the per-type
+// collections exist for the types with a console page, so a service account, a
+// device or a role could be created and then listed by nothing. The listing
+// answers a different question from those collections — what is in the
+// directory, one row each — and it is the only one that can answer it.
+func TestTheDirectoryListsEveryTypeAndNotOnlyThoseWithAPage(t *testing.T) {
+	c, _ := adminClient(t)
+
+	const role = "e2e-list-role"
+	const device = "e2e-list-device"
+	createFixture(t, "role", role)
+	createFixture(t, "device", device)
+
+	entities := func(query string) map[string]string {
+		t.Helper()
+		resp := request(t, c, http.MethodGet, hostCardinal,
+			"/api/directory/entities"+query, "application/json")
+		defer drain(resp)
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("listing%s returned %d", query, resp.StatusCode)
+		}
+		var body struct {
+			Entities []struct {
+				Name string `json:"name"`
+				Type string `json:"type"`
+			} `json:"entities"`
+		}
+		if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+			t.Fatal(err)
+		}
+		byName := map[string]string{}
+		for _, e := range body.Entities {
+			byName[e.Name] = e.Type
+		}
+		return byName
+	}
+
+	all := entities("")
+	if all[role] != "role" {
+		t.Errorf("a role is absent from the directory listing; it was created and "+
+			"nothing but a database client can see it (%q)", all[role])
+	}
+	if all[device] != "device" {
+		t.Errorf("a device is absent from the directory listing (%q)", all[device])
+	}
+
+	// Filtering by type narrows rather than being ignored, which would read as
+	// an answer about roles that happened to contain everything.
+	roles := entities("?type=role")
+	if roles[role] != "role" {
+		t.Error("filtering by role did not return the role")
+	}
+	if _, ok := roles[device]; ok {
+		t.Error("filtering by role returned a device, so the filter is ignored " +
+			"and every answer it gives is about the wrong question")
+	}
+
+	// An unknown type is refused, for the same reason: silently returning
+	// everything would read as "there are none of those".
+	resp := request(t, c, http.MethodGet, hostCardinal,
+		"/api/directory/entities?type=wombat", "application/json")
+	drain(resp)
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Errorf("an unknown type returned %d, want 400", resp.StatusCode)
+	}
+}
+
+// TestShowResolvesMembershipThroughNestedGroups.
+//
+// The transitive answer is the one that decides anything — policy reads the
+// resolved set — so a view that listed only direct grants would disagree with
+// every decision made about the account it described.
+func TestShowResolvesMembershipThroughNestedGroups(t *testing.T) {
+	c, _ := adminClient(t)
+
+	const (
+		member = "e2e-nested-member"
+		inner  = "e2e-nested-inner"
+		outer  = "e2e-nested-outer"
+	)
+	createFixture(t, "user", member)
+	createFixture(t, "group", inner)
+	createFixture(t, "group", outer)
+	grantFixture(t, inner, member, "nested e2e")
+	grantFixture(t, outer, inner, "nested e2e")
+	t.Cleanup(func() {
+		revokeAfterwards(inner, member)
+		revokeAfterwards(outer, inner)
+	})
+
+	resp := request(t, c, http.MethodGet, hostCardinal,
+		"/api/directory/entities/user/"+member, "application/json")
+	defer drain(resp)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("reading the entity returned %d", resp.StatusCode)
+	}
+
+	var body struct {
+		Memberships []struct {
+			Group  string `json:"group"`
+			Direct bool   `json:"direct"`
+			Depth  int    `json:"depth"`
+		} `json:"memberships"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatal(err)
+	}
+
+	var sawInner, sawOuter bool
+	for _, m := range body.Memberships {
+		switch m.Group {
+		case inner:
+			sawInner = true
+			if !m.Direct || m.Depth != 1 {
+				t.Errorf("%s is direct=%v depth=%d, want direct at depth 1",
+					inner, m.Direct, m.Depth)
+			}
+		case outer:
+			sawOuter = true
+			if m.Direct {
+				t.Errorf("%s is reported as a direct grant; nobody granted it, it "+
+					"arrives through %s, and saying otherwise sends whoever is "+
+					"removing this access to the wrong group", outer, inner)
+			}
+			if m.Depth != 2 {
+				t.Errorf("%s is at depth %d, want 2", outer, m.Depth)
+			}
+		}
+	}
+	if !sawInner {
+		t.Error("the direct membership is missing")
+	}
+	if !sawOuter {
+		t.Error("the inherited membership is missing, so this view disagrees with " +
+			"every policy decision made about the account")
+	}
+}
