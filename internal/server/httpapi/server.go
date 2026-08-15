@@ -512,6 +512,13 @@ func (s *Server) Handler() http.Handler {
 			apps(s.handleRevokeSubjectToken(kind)))
 	}
 
+	// The directory as a table, across every type. Registered with a {type}
+	// wildcard rather than per type, because the whole point is that it does
+	// not vary by one — and an unknown one is refused in the handler rather
+	// than 404ing as a missing entity.
+	mux.Handle("GET /api/directory/entities", people(s.handleListEntities))
+	mux.Handle("GET /api/directory/entities/{type}/{name}", people(s.handleGetEntity))
+
 	mux.Handle("GET /api/directory/groups", people(s.handleListGroups))
 	// The same tier as people and groups: a host is a directory entity, and
 	// whoever manages who may reach a machine needs to see which machines exist.
